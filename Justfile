@@ -45,6 +45,14 @@ benchmark-fixture path directories="100" files_per_directory="100" logical_bytes
 benchmark-scan path iterations="5" backend="jwalk":
     {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_benchmark -- "{{path}}" "{{iterations}}" "{{backend}}"
 
+# Compare backend accounting on a quiescent directory tree.
+validate-scan path left="jwalk" right="auto":
+    {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_parity -- "{{path}}" "{{left}}" "{{right}}"
+
+# Measure asynchronous cancellation latency after a progress boundary.
+benchmark-cancellation path backend="jwalk" iterations="9" after_entries="2048":
+    {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_cancellation -- "{{path}}" "{{backend}}" "{{iterations}}" "{{after_entries}}"
+
 # Build the frontend and native executable without packaging it.
 build:
     {{ cargo_env }} bun run tauri build --no-bundle

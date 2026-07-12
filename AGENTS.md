@@ -30,8 +30,8 @@ The intended scanning architecture is:
 
 - `jwalk` as the implemented portable fallback and behavioral reference.
 - `getattrlistbulk` as the implemented macOS backend. Its first parity fixture
-  and synthetic comparative benchmark exist, but broader filesystem and
-  real-tree validation remain.
+  plus synthetic and local real-tree validation exist, but broader filesystem
+  coverage and cold-cache measurements remain.
 - Master File Table (MFT) traversal for an optimized Windows implementation.
 - `statx`-based traversal for an optimized Linux implementation.
 

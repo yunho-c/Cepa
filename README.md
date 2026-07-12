@@ -66,6 +66,14 @@ just benchmark-scan /tmp/cepa-fixture 9 jwalk
 
 The optional third argument selects `jwalk`, `getattrlistbulk`, or `auto`.
 
+Validate aggregate parity on a quiescent tree and measure asynchronous
+cancellation latency with:
+
+```sh
+just validate-scan /path/to/tree jwalk getattrlistbulk
+just benchmark-cancellation /tmp/cepa-fixture getattrlistbulk 9 2048
+```
+
 See [`docs/performance.md`](docs/performance.md) for the measurement contract,
 current baseline, raw evidence, and interpretation limits.
 

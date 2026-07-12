@@ -32,7 +32,28 @@ baselines stay directly reproducible.
 
 The harness performs one unmeasured warmup followed by the requested measured
 runs. Progress is written to stderr and schema-versioned JSON to stdout. It
-verifies that counts and byte totals stay identical across runs.
+verifies that counts, byte totals, skipped work, hard-link deduplication, and
+reported accounting semantics stay identical across runs.
+
+Compare two backends on a quiescent tree:
+
+```sh
+just validate-scan /path/to/tree jwalk getattrlistbulk
+```
+
+The parity command compares every correctness-relevant `ScanResult` field,
+prints a JSON report, and exits nonzero on a mismatch. Filesystem mutations
+between its sequential scans can produce a legitimate mismatch and should be
+eliminated before treating a failure as a backend bug.
+
+Measure cancellation initiated by a separate thread after a progress boundary:
+
+```sh
+just benchmark-cancellation /tmp/cepa-fixture getattrlistbulk 9 2048
+```
+
+This performs one complete warmup, then reports scan elapsed time and the time
+from cancellation request to scanner return for each cancelled run.
 
 Each run measures:
 
@@ -91,7 +112,45 @@ run in this sample.
 The raw runs are preserved in
 [`performance-results/2026-07-11-m4-pro-native-comparison.csv`](performance-results/2026-07-11-m4-pro-native-comparison.csv).
 
-### Snapshot memory
+## Real-tree parity and retained memory
+
+A quiescent Cepa development checkout provided a non-synthetic APFS workload:
+7.7 GiB containing `node_modules`, Rust build outputs, source, Git metadata,
+generated frontend assets, and 29,929 duplicate hard links. The parity harness
+reported exact agreement on 66,031 files, 2,888 directories, logical and
+allocated bytes, skipped entries and filesystems, duplicate hard links, and all
+three accounting-semantics flags.
+
+One warmed measured scan per backend was also run under macOS
+`/usr/bin/time -l`. These are memory observations, not a statistically robust
+throughput comparison.
+
+| Backend | Wall time | Peak RSS | Peak memory footprint |
+| --- | ---: | ---: | ---: |
+| `jwalk` | 210.48 ms | 59.19 MiB | 35.33 MiB |
+| `getattrlistbulk` | 32.81 ms | 37.31 MiB | 27.67 MiB |
+
+Native peak RSS was 37.0% lower in this observation. The exact workload and
+measurements are preserved in
+[`performance-results/2026-07-11-m4-pro-real-tree.csv`](performance-results/2026-07-11-m4-pro-real-tree.csv).
+
+## Cancellation latency
+
+Cancellation was requested from a separate thread at the first progress update
+at or beyond 2,048 entries. Each backend received one complete warmup followed
+by nine cancellation runs on both 100k-entry fixtures.
+
+| Workload | Backend | Median latency | Maximum latency |
+| --- | --- | ---: | ---: |
+| Directory-rich | `jwalk` | 414 us | 859 us |
+| Directory-rich | `getattrlistbulk` | 103 us | 232 us |
+| Wide | `jwalk` | 998 us | 5,980 us |
+| Wide | `getattrlistbulk` | 698 us | 813 us |
+
+The raw measurements are preserved in
+[`performance-results/2026-07-11-m4-pro-cancellation.csv`](performance-results/2026-07-11-m4-pro-cancellation.csv).
+
+## Snapshot memory baseline
 
 Peak resident memory was measured by running one warmup plus one measured scan
 under macOS `/usr/bin/time -l`. The current arena retains one basename per node,
@@ -169,18 +228,19 @@ ceiling, while the measured regression is small and explicit.
 
 ## Interpretation and next measurements
 
-These are warm-cache, synthetic metadata results on one machine. They do not
-measure cold storage, network volumes, antivirus interference, Tauri
-serialization, frontend rendering, cancellation latency, or other operating
-systems. The RSS measurements include the benchmark process and allocator, not
-just snapshot-owned bytes. These results are a regression baseline, not a
-universal speed claim.
+Most results are warm-cache, synthetic metadata measurements on one machine;
+the one real-tree observation is still a single local APFS checkout. They do
+not measure cold storage, network volumes, antivirus interference, Tauri
+serialization, frontend rendering, or other operating systems. The RSS
+measurements include the benchmark process and allocator, not just
+snapshot-owned bytes. These results are a regression baseline, not a universal
+speed claim.
 
 Before generalizing these results beyond the measured workloads, add:
 
-- representative real directory trees and cold-cache runs;
+- additional representative real directory trees and cold-cache runs;
 - snapshot-owned bytes per entry and scaling beyond 100,000 entries;
-- cancellation latency under traversal and aggregation load;
+- cancellation latency during deliberately long aggregation work;
 - IPC serialization and first-render timing;
 - portable-versus-native parity and throughput on Windows and Linux once their
   native backends exist.

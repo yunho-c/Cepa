@@ -1,4 +1,4 @@
-use cepa_lib::{ScanBackend, ScanResult, benchmark_scan_with_backend};
+use cepa_lib::{ScanBackend, benchmark_scan_with_backend};
 use serde::Serialize;
 use std::env;
 use std::ffi::OsString;
@@ -39,6 +39,11 @@ struct Workload {
     logical_bytes: u64,
     allocated_bytes: u64,
     skipped_entries: u64,
+    skipped_filesystems: u64,
+    duplicate_hard_links: u64,
+    allocated_size_is_estimate: bool,
+    hard_link_deduplication_supported: bool,
+    same_filesystem_enforced: bool,
 }
 
 #[derive(Serialize)]
@@ -82,11 +87,11 @@ fn run() -> Result<(), String> {
     eprintln!(
         "warming filesystem cache with {} using {}",
         path.display(),
-        backend_name(backend)
+        backend
     );
     let warmup_scan = benchmark_scan_with_backend(&path, backend)?;
     let warmup = warmup_scan.result.clone();
-    let expected = ResultIdentity::from(&warmup);
+    let expected = warmup.clone();
     drop(warmup_scan);
 
     let mut runs = Vec::with_capacity(iterations);
@@ -95,7 +100,13 @@ fn run() -> Result<(), String> {
         let scan = benchmark_scan_with_backend(&path, backend)?;
         let wall = started_at.elapsed();
         let result = &scan.result;
-        expected.verify(result)?;
+        let mismatches = expected.accounting_mismatches(result);
+        if !mismatches.is_empty() {
+            return Err(format!(
+                "the scanned workload changed between benchmark runs: {}",
+                mismatches.join(", ")
+            ));
+        }
 
         let entries = result.file_count.saturating_add(result.directory_count);
         let entries_per_second = if wall.is_zero() {
@@ -122,7 +133,7 @@ fn run() -> Result<(), String> {
     }
 
     let report = BenchmarkReport {
-        schema_version: 3,
+        schema_version: 4,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -145,6 +156,11 @@ fn run() -> Result<(), String> {
             logical_bytes: warmup.logical_bytes,
             allocated_bytes: warmup.allocated_bytes,
             skipped_entries: warmup.skipped_entries,
+            skipped_filesystems: warmup.skipped_filesystems,
+            duplicate_hard_links: warmup.duplicate_hard_links,
+            allocated_size_is_estimate: warmup.allocated_size_is_estimate,
+            hard_link_deduplication_supported: warmup.hard_link_deduplication_supported,
+            same_filesystem_enforced: warmup.same_filesystem_enforced,
         },
         warmup_runs: 1,
         summary: summarize(&runs),
@@ -184,26 +200,10 @@ fn parse_args() -> Result<(PathBuf, usize, ScanBackend), String> {
 }
 
 fn parse_backend(value: OsString) -> Result<ScanBackend, String> {
-    match value
+    value
         .into_string()
         .map_err(|_| "backend must be valid UTF-8".to_string())?
-        .as_str()
-    {
-        "auto" => Ok(ScanBackend::Auto),
-        "jwalk" => Ok(ScanBackend::Jwalk),
-        "getattrlistbulk" => Ok(ScanBackend::Getattrlistbulk),
-        value => Err(format!(
-            "unknown backend {value:?}; expected auto, jwalk, or getattrlistbulk"
-        )),
-    }
-}
-
-fn backend_name(backend: ScanBackend) -> &'static str {
-    match backend {
-        ScanBackend::Auto => "auto",
-        ScanBackend::Jwalk => "jwalk",
-        ScanBackend::Getattrlistbulk => "getattrlistbulk",
-    }
+        .parse()
 }
 
 fn parse_positive_usize(value: OsString, name: &str) -> Result<usize, String> {
@@ -266,42 +266,6 @@ fn median(values: impl Iterator<Item = f64>) -> f64 {
         (values[middle - 1] + values[middle]) / 2.0
     } else {
         values[middle]
-    }
-}
-
-struct ResultIdentity {
-    root: String,
-    files: u64,
-    directories: u64,
-    logical_bytes: u64,
-    allocated_bytes: u64,
-}
-
-impl From<&ScanResult> for ResultIdentity {
-    fn from(result: &ScanResult) -> Self {
-        Self {
-            root: result.root.clone(),
-            files: result.file_count,
-            directories: result.directory_count,
-            logical_bytes: result.logical_bytes,
-            allocated_bytes: result.allocated_bytes,
-        }
-    }
-}
-
-impl ResultIdentity {
-    fn verify(&self, result: &ScanResult) -> Result<(), String> {
-        let observed = Self::from(result);
-        if self.root == observed.root
-            && self.files == observed.files
-            && self.directories == observed.directories
-            && self.logical_bytes == observed.logical_bytes
-            && self.allocated_bytes == observed.allocated_bytes
-        {
-            Ok(())
-        } else {
-            Err("the scanned workload changed between benchmark runs".to_string())
-        }
     }
 }
 

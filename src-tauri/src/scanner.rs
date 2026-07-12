@@ -2,8 +2,10 @@ use jwalk::{Parallelism, WalkDirGeneric};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -108,11 +110,71 @@ pub struct ScanResult {
     pub same_filesystem_enforced: bool,
 }
 
+impl ScanResult {
+    /// Returns the correctness-relevant fields that differ, excluding backend
+    /// identity and timing measurements.
+    pub fn accounting_mismatches(&self, other: &Self) -> Vec<&'static str> {
+        let mut mismatches = Vec::new();
+        macro_rules! compare {
+            ($field:ident) => {
+                if self.$field != other.$field {
+                    mismatches.push(stringify!($field));
+                }
+            };
+        }
+
+        compare!(root);
+        compare!(display_name);
+        compare!(logical_bytes);
+        compare!(allocated_bytes);
+        compare!(file_count);
+        compare!(directory_count);
+        compare!(skipped_entries);
+        compare!(skipped_filesystems);
+        compare!(duplicate_hard_links);
+        compare!(allocated_size_is_estimate);
+        compare!(hard_link_deduplication_supported);
+        compare!(same_filesystem_enforced);
+        mismatches
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanBackend {
     Auto,
     Jwalk,
     Getattrlistbulk,
+}
+
+impl ScanBackend {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Jwalk => "jwalk",
+            Self::Getattrlistbulk => "getattrlistbulk",
+        }
+    }
+}
+
+impl fmt::Display for ScanBackend {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for ScanBackend {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "auto" => Ok(Self::Auto),
+            "jwalk" => Ok(Self::Jwalk),
+            "getattrlistbulk" => Ok(Self::Getattrlistbulk),
+            value => Err(format!(
+                "unknown backend {value:?}; expected auto, jwalk, or getattrlistbulk"
+            )),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -991,6 +1053,24 @@ mod tests {
         let error = scan_path(temp.path(), cancel, |_| {}).expect_err("scan must cancel");
 
         assert_eq!(error, "Scan cancelled.");
+    }
+
+    #[test]
+    fn accounting_identity_excludes_backend_and_timings() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("file.bin"), [1_u8]).expect("write fixture file");
+        let result = scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan fixture")
+            .result;
+        let mut observed = result.clone();
+
+        observed.backend = "different-backend";
+        observed.traversal_us = observed.traversal_us.saturating_add(1);
+        observed.elapsed_ms = observed.elapsed_ms.saturating_add(1);
+        assert!(result.accounting_mismatches(&observed).is_empty());
+
+        observed.skipped_entries = observed.skipped_entries.saturating_add(1);
+        assert_eq!(result.accounting_mismatches(&observed), ["skipped_entries"]);
     }
 
     #[cfg(unix)]

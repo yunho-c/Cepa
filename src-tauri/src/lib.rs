@@ -5,7 +5,9 @@ use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Instant;
 use tauri::ipc::Channel;
 
@@ -18,6 +20,14 @@ pub struct BenchmarkScan {
     pub initial_view_ms: f64,
     _snapshot: ScanSnapshot,
     _initial_view: DirectoryView,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancellationMeasurement {
+    pub entries_at_request: u64,
+    pub scan_elapsed_us: u64,
+    pub cancellation_latency_us: u64,
 }
 
 /// Runs the same portable scan and snapshot construction used by the desktop
@@ -41,6 +51,73 @@ pub fn benchmark_scan_with_backend(
         _snapshot: output.snapshot,
         _initial_view: initial_view,
     })
+}
+
+/// Measures how long a scan takes to return after cancellation is requested
+/// from a separate thread at a progress boundary.
+pub fn benchmark_cancellation(
+    path: &Path,
+    backend: ScanBackend,
+    cancel_after_entries: u64,
+) -> Result<CancellationMeasurement, String> {
+    if cancel_after_entries == 0 {
+        return Err("cancel-after entries must be greater than zero".to_string());
+    }
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_from_thread = cancel.clone();
+    let (trigger_sender, trigger_receiver) = mpsc::sync_channel::<u64>(1);
+    let canceller = thread::spawn(move || {
+        trigger_receiver.recv().ok().map(|entries| {
+            let requested_at = Instant::now();
+            cancel_from_thread.store(true, Ordering::Relaxed);
+            (entries, requested_at)
+        })
+    });
+
+    let scan_started_at = Instant::now();
+    let scan_result = scanner::scan_path_with_backend(path, cancel, backend, |progress| {
+        if progress.entries_scanned >= cancel_after_entries {
+            let _ = trigger_sender.try_send(progress.entries_scanned);
+        }
+    });
+    let scan_finished_at = Instant::now();
+    drop(trigger_sender);
+
+    let request = canceller
+        .join()
+        .map_err(|_| "the cancellation benchmark thread panicked".to_string())?;
+    let Some((entries_at_request, requested_at)) = request else {
+        return match scan_result {
+            Ok(_) => Err(format!(
+                "scan completed before reaching {cancel_after_entries} entries"
+            )),
+            Err(error) => Err(error),
+        };
+    };
+
+    match scan_result {
+        Err(error) if error == "Scan cancelled." => {}
+        Err(error) => return Err(error),
+        Ok(_) => {
+            return Err(
+                "scan completed before the asynchronous cancellation was observed".to_string(),
+            );
+        }
+    }
+
+    let cancellation_latency = scan_finished_at
+        .checked_duration_since(requested_at)
+        .ok_or_else(|| "cancellation was requested after the scan returned".to_string())?;
+    Ok(CancellationMeasurement {
+        entries_at_request,
+        scan_elapsed_us: saturating_duration_us(scan_finished_at.duration_since(scan_started_at)),
+        cancellation_latency_us: saturating_duration_us(cancellation_latency),
+    })
+}
+
+fn saturating_duration_us(duration: std::time::Duration) -> u64 {
+    duration.as_micros().min(u128::from(u64::MAX)) as u64
 }
 
 #[derive(Default)]
@@ -222,7 +299,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::ScanState;
+    use super::{ScanBackend, ScanState, benchmark_cancellation};
+    use std::fs;
     use std::sync::atomic::Ordering;
 
     #[test]
@@ -235,5 +313,19 @@ mod tests {
         assert!(!second_cancel.load(Ordering::Relaxed));
         assert!(state.cancel(second_id));
         assert!(second_cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn measures_asynchronous_cancellation() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        for index in 0..2_500 {
+            fs::write(temp.path().join(format!("file-{index}")), []).expect("write fixture file");
+        }
+
+        let measurement = benchmark_cancellation(temp.path(), ScanBackend::Jwalk, 2_048)
+            .expect("measure cancellation");
+
+        assert!(measurement.entries_at_request >= 2_048);
+        assert!(measurement.scan_elapsed_us >= measurement.cancellation_latency_us);
     }
 }

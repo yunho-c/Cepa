@@ -1,0 +1,3 @@
+backend,files,directories,logical_bytes,allocated_bytes,skipped_entries,skipped_filesystems,duplicate_hard_links,traversal_us,aggregation_us,scanner_elapsed_ms,wall_ms,maximum_resident_set_bytes,peak_memory_footprint_bytes
+jwalk,66031,2888,8349426225,8458514432,0,0,29929,209736,609,210,210.475500,62062592,37044920
+getattrlistbulk,66031,2888,8349426225,8458514432,0,0,29929,32170,584,32,32.810542,39124992,29016688
