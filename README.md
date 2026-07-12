@@ -44,7 +44,9 @@ error, and concurrent-mutation semantics.
 
 MFT traversal on Windows, `statx` traversal on Linux, broader native-filesystem
 and cold-cache validation, and transparent filesystem compression remain roadmap
-work.
+work. The compression safety and backend contract is specified in
+[`docs/compression.md`](docs/compression.md); it is a design, not a shipped
+mutation feature.
 
 ## Prerequisites
 

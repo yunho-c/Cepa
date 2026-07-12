@@ -13,9 +13,10 @@ The two primary product requirements are:
 2. Deliver an exquisite, minimal interface with the restraint, hierarchy, and
    polish of shadcn/ui.
 
-Transparent filesystem compression is a future product capability. Do not
-assume its semantics, platform coverage, safety model, or user experience until
-those have been designed and documented.
+Transparent filesystem compression is a future product capability. Its proposed
+semantics, platform coverage, safety model, and rollout gates are documented in
+`docs/compression.md`; no mutation backend is implemented. Preserve its evidence
+boundaries instead of presenting design or capability probing as shipped support.
 
 ## Current state and roadmap
 
@@ -137,6 +138,7 @@ Start with these files:
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `docs/accounting.md`: shared filesystem accounting and traversal semantics.
+- `docs/compression.md`: proposed transparent-compression contract and rollout gates.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
 - `.github/workflows/ci.yml`: native Linux, macOS, and Windows check/build matrix.
