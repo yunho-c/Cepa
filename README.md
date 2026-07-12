@@ -22,6 +22,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+- Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
+  and completed states with visible backend/accounting semantics
 
 Symlinks are reported but never followed. Mounted filesystems are not traversed
 when the portable backend can identify filesystem boundaries. The result view
@@ -50,7 +52,17 @@ just dev
 
 `just web` runs only the Vite frontend. Folder selection and scanning require
 the native Tauri application, so the web-only mode is intended for frontend
-layout work.
+layout work. During development, append one of the following mock scenarios to
+exercise the complete workflow without a native process:
+
+```text
+http://localhost:1420/?mock=complete
+http://localhost:1420/?mock=scanning
+http://localhost:1420/?mock=error
+http://localhost:1420/?mock=navigation-error
+```
+
+These mocks are removed from production builds.
 
 Run `just` to list every available recipe.
 
@@ -84,10 +96,12 @@ just check
 just build
 ```
 
-`just check` runs Svelte diagnostics, Rust formatting checks, `cargo check`, and
-the Rust tests. The scanner tests use real temporary filesystem fixtures for
-aggregation, cancellation, invalid roots, nested directory views, and hard-link
-accounting, plus symlink and result-bound behavior.
+`just check` runs Svelte diagnostics, frontend unit tests, Rust formatting
+checks, `cargo check`, and the Rust tests. Frontend coverage includes formatting,
+backend labels, cancellation detection, entry semantics, and sunburst geometry.
+The scanner tests use real temporary filesystem fixtures for aggregation,
+cancellation, invalid roots, nested directory views, and hard-link accounting,
+plus symlink and result-bound behavior.
 
 Native recipes clear the machine's configured `sccache` wrapper so it cannot
 block Cargo.

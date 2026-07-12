@@ -1,0 +1,49 @@
+import { describe, expect, test } from "bun:test";
+import {
+  describeEntry,
+  formatBackend,
+  formatBytes,
+  formatDuration,
+  formatPercent,
+  isCancellationError,
+} from "./scanner";
+
+describe("scanner presentation helpers", () => {
+  test("formats byte and duration boundaries", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(1_536)).toBe("1.50 KB");
+    expect(formatDuration(999)).toBe("999 ms");
+    expect(formatDuration(1_500)).toBe("1.5 s");
+    expect(formatDuration(119_600)).toBe("2m 0s");
+  });
+
+  test("bounds percentages and handles empty totals", () => {
+    expect(formatPercent(1, 4)).toBe("25.0%");
+    expect(formatPercent(8, 4)).toBe("100.0%");
+    expect(formatPercent(-1, 4)).toBe("0.0%");
+    expect(formatPercent(1, 0)).toBe("0.0%");
+  });
+
+  test("labels native and portable backends accurately", () => {
+    expect(formatBackend("jwalk")).toBe("Portable");
+    expect(formatBackend("getattrlistbulk")).toBe("macOS native");
+  });
+
+  test("recognizes cancellation errors without matching case", () => {
+    expect(isCancellationError("Scan cancelled.")).toBe(true);
+    expect(isCancellationError(new Error("CANCELLED by user"))).toBe(true);
+    expect(isCancellationError("Permission denied")).toBe(false);
+  });
+
+  test("describes entries according to filesystem semantics", () => {
+    expect(
+      describeEntry({ kind: "directory", fileCount: 12, directoryCount: 3 }),
+    ).toContain("files");
+    expect(describeEntry({ kind: "file", fileCount: 1, directoryCount: 0 })).toBe(
+      "File",
+    );
+    expect(
+      describeEntry({ kind: "symlink", fileCount: 0, directoryCount: 0 }),
+    ).toBe("Symbolic link · not followed");
+  });
+});

@@ -1,4 +1,5 @@
 export type EntryKind = "directory" | "file" | "symlink" | "other";
+export type ScanBackend = "jwalk" | "getattrlistbulk";
 
 export interface ScanProgress {
   entriesScanned: number;
@@ -53,7 +54,7 @@ export interface DirectoryView {
 export interface ScanResult {
   root: string;
   displayName: string;
-  backend: "jwalk";
+  backend: ScanBackend;
   logicalBytes: number;
   allocatedBytes: number;
   fileCount: number;
@@ -102,7 +103,36 @@ export function formatDuration(milliseconds: number): string {
   if (milliseconds < 1_000) return `${Math.max(milliseconds, 0)} ms`;
   if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`;
 
-  const minutes = Math.floor(milliseconds / 60_000);
-  const seconds = Math.round((milliseconds % 60_000) / 1_000);
+  const totalSeconds = Math.round(milliseconds / 1_000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   return `${minutes}m ${seconds}s`;
+}
+
+export function formatPercent(part: number, total: number): string {
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) {
+    return "0.0%";
+  }
+  return `${Math.max(0, Math.min(100, (part / total) * 100)).toFixed(1)}%`;
+}
+
+export function formatBackend(backend: ScanBackend): string {
+  return backend === "getattrlistbulk" ? "macOS native" : "Portable";
+}
+
+export function isCancellationError(error: unknown): boolean {
+  return String(error).toLowerCase().includes("cancelled");
+}
+
+export function describeEntry(entry: Pick<ScanItem, "kind" | "fileCount" | "directoryCount">): string {
+  switch (entry.kind) {
+    case "directory":
+      return `${formatCount(entry.fileCount)} files · ${formatCount(entry.directoryCount)} folders`;
+    case "file":
+      return "File";
+    case "symlink":
+      return "Symbolic link · not followed";
+    case "other":
+      return "Other filesystem entry";
+  }
 }

@@ -4,6 +4,8 @@ node_modules
 /dist
 /.svelte-kit
 /package
+/.playwright-cli
+/output
 .env
 .env.*
 !.env.example

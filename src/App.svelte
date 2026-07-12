@@ -1,10 +1,12 @@
 <script lang="ts">
   import { Channel, invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { tick } from "svelte";
   import {
     AlertCircle,
     ArrowLeft,
     ChevronRight,
+    CircleStop,
     Clock3,
     Database,
     File,
@@ -13,6 +15,7 @@
     FolderOpen,
     Gauge,
     HardDrive,
+    Link2,
     RotateCcw,
     ScanSearch,
     X,
@@ -21,8 +24,12 @@
   import { Input } from "$lib/components/ui/input";
   import {
     formatBytes,
+    formatBackend,
     formatCount,
     formatDuration,
+    formatPercent,
+    describeEntry,
+    isCancellationError,
     type ChartItem,
     type DirectoryView,
     type ScanEvent,
@@ -33,7 +40,7 @@
   } from "$lib/scanner";
   import { createSunburst } from "$lib/sunburst";
 
-  type Status = "idle" | "scanning" | "cancelling" | "complete" | "error";
+  type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
 
   let path = $state("");
   let status = $state<Status>("idle");
@@ -44,6 +51,11 @@
   let selectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
   let errorMessage = $state("");
+  let navigationError = $state("");
+  let resultHeading: HTMLHeadingElement | undefined = $state();
+  let viewHeading: HTMLHeadingElement | undefined = $state();
+  let stateNotice: HTMLDivElement | undefined = $state();
+  let navigationNotice: HTMLDivElement | undefined = $state();
 
   const isBusy = $derived(status === "scanning" || status === "cancelling");
   const displayProgress = $derived(
@@ -60,6 +72,27 @@
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? []));
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
+  const headerLabel = $derived(
+    status === "scanning"
+      ? "Scan active"
+      : status === "cancelling"
+        ? "Stopping scan"
+        : status === "complete"
+          ? "Scan complete"
+          : status === "cancelled"
+            ? "Scan stopped"
+            : status === "error"
+              ? "Needs attention"
+              : "Ready",
+  );
+  const headerDetail = $derived(
+    status === "complete" && result ? formatBackend(result.backend) : "Local only",
+  );
+  const scanAnnouncement = $derived(
+    status === "cancelling"
+      ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
+      : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
+  );
 
   async function chooseDirectory() {
     errorMessage = "";
@@ -77,6 +110,8 @@
     } catch (error) {
       errorMessage = `Could not open the folder picker: ${String(error)}`;
       status = "error";
+      await tick();
+      stateNotice?.focus();
     }
   }
 
@@ -86,7 +121,9 @@
     if (!requestedPath || isBusy) return;
 
     status = "scanning";
+    path = requestedPath;
     errorMessage = "";
+    navigationError = "";
     progress = null;
     result = null;
     view = null;
@@ -113,15 +150,21 @@
       view = response.view;
       path = response.result.root;
       status = "complete";
+      await tick();
+      resultHeading?.focus();
     } catch (error) {
       const message = String(error);
-      if (message.toLowerCase().includes("cancelled")) {
-        status = "idle";
+      if (isCancellationError(message)) {
+        status = "cancelled";
+        scanId = null;
         errorMessage = "";
       } else {
         status = "error";
+        scanId = null;
         errorMessage = message;
       }
+      await tick();
+      stateNotice?.focus();
     }
   }
 
@@ -133,6 +176,8 @@
     } catch (error) {
       status = "error";
       errorMessage = `Could not cancel the scan: ${String(error)}`;
+      await tick();
+      stateNotice?.focus();
     }
   }
 
@@ -144,31 +189,41 @@
     view = null;
     selectedEntry = null;
     errorMessage = "";
+    navigationError = "";
   }
 
   function itemPercent(bytes: number): number {
-    if (!view || view.allocatedBytes <= 0) return 0;
+    if (!view || bytes <= 0 || view.allocatedBytes <= 0) return 0;
     return Math.max(0.8, Math.min(100, (bytes / view.allocatedBytes) * 100));
   }
 
   async function openDirectory(nodeId: number | null) {
     if (scanId === null || nodeId === null || isNavigating) return;
     isNavigating = true;
+    navigationError = "";
     try {
       view = await invoke<DirectoryView>("open_scan_directory", {
         scanId,
         nodeId,
       });
       selectedEntry = null;
+      await tick();
+      viewHeading?.focus();
     } catch (error) {
-      errorMessage = `Could not open that folder: ${String(error)}`;
+      navigationError = `Could not open that folder: ${String(error)}`;
+      await tick();
+      navigationNotice?.focus();
     } finally {
       isNavigating = false;
     }
   }
 
   function activateEntry(entry: ChartItem | ScanItem) {
-    if (entry.kind === "directory") void openDirectory(entry.id);
+    if (entry.kind === "directory") {
+      void openDirectory(entry.id);
+    } else {
+      selectedEntry = entry;
+    }
   }
 
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
@@ -197,14 +252,17 @@
     </button>
 
     <div class="header-meta">
-      <span class="status-dot" data-active={isBusy}></span>
-      <span>{isBusy ? "Portable scan active" : "Portable scanner"}</span>
+      <span class="status-dot" data-state={status}></span>
+      <span>{headerLabel}</span>
       <span class="header-separator"></span>
-      <span>jwalk</span>
+      <span class="header-detail">
+        {headerDetail}
+        {#if status === "complete" && result}<span class="header-technical"> · {result.backend}</span>{/if}
+      </span>
     </div>
   </header>
 
-  {#if status === "idle" || status === "error"}
+  {#if status === "idle" || status === "error" || status === "cancelled"}
     <main class="landing">
       <section class="landing-copy" aria-labelledby="landing-title">
         <p class="eyebrow">Storage, without the archaeology.</p>
@@ -239,11 +297,32 @@
           </form>
 
           {#if status === "error" && errorMessage}
-            <div class="error-callout" role="alert">
+            <div
+              class="error-callout"
+              role="alert"
+              tabindex="-1"
+              bind:this={stateNotice}
+            >
               <AlertCircle />
               <div>
                 <strong>That scan didn’t start.</strong>
                 <span>{errorMessage}</span>
+              </div>
+            </div>
+          {:else if status === "cancelled"}
+            <div
+              class="cancelled-callout"
+              role="status"
+              tabindex="-1"
+              bind:this={stateNotice}
+            >
+              <CircleStop />
+              <div>
+                <strong>Scan stopped.</strong>
+                <span>
+                  Kept your path after {formatCount(displayProgress.entriesScanned)} entries ·
+                  {formatBytes(displayProgress.allocatedBytes)} observed
+                </span>
               </div>
             </div>
           {/if}
@@ -264,7 +343,8 @@
       </aside>
     </main>
   {:else if status === "scanning" || status === "cancelling"}
-    <main class="scan-view" aria-live="polite">
+    <main class="scan-view" aria-busy="true">
+      <p class="sr-only" aria-live="polite">{scanAnnouncement}</p>
       <section class="scan-heading">
         <div>
           <p class="eyebrow">{status === "cancelling" ? "Stopping safely" : "Reading the map"}</p>
@@ -273,7 +353,11 @@
             {displayProgress.currentPath || path}
           </p>
         </div>
-        <Button variant="outline" onclick={cancelScan} disabled={status === "cancelling"}>
+        <Button
+          variant="outline"
+          onclick={cancelScan}
+          disabled={scanId === null || status === "cancelling"}
+        >
           <X data-icon="inline-start" />
           {status === "cancelling" ? "Stopping…" : "Cancel"}
         </Button>
@@ -312,15 +396,18 @@
       </div>
 
       <p class="scan-footnote">
-        Following no links · Staying on this filesystem · Counting hard links once
+        Symlinks stay closed · Mount boundaries are respected where available · Nothing leaves this device
       </p>
     </main>
   {:else if result && view}
     <main class="results-view">
       <section class="results-heading">
         <div>
-          <p class="eyebrow">Scan complete</p>
-          <h1>{result.displayName}</h1>
+          <div class="eyebrow-row">
+            <p class="eyebrow">Scan complete</p>
+            <span class="backend-badge" title={result.backend}>{formatBackend(result.backend)}</span>
+          </div>
+          <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>
           <p class="result-path" title={result.root}>{result.root}</p>
         </div>
         <div class="result-actions">
@@ -367,23 +454,44 @@
           {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
           <button
             type="button"
+            disabled={isNavigating}
             aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
             onclick={() => openDirectory(breadcrumb.id)}
           >{breadcrumb.name}</button>
         {/each}
       </nav>
 
-      <section class="explorer" aria-label="Storage map and folder contents">
+      {#if navigationError}
+        <div
+          class="error-callout navigation-error"
+          role="alert"
+          tabindex="-1"
+          bind:this={navigationNotice}
+        >
+          <AlertCircle />
+          <div>
+            <strong>That folder could not be opened.</strong>
+            <span>{navigationError}</span>
+          </div>
+        </div>
+      {/if}
+
+      <section
+        class="explorer"
+        aria-label="Storage map and folder contents"
+        aria-busy={isNavigating}
+      >
         <div class="chart-pane">
           <div class="chart-heading">
             <div>
               <p class="eyebrow">Storage map</p>
-              <h2>{view.displayName}</h2>
+              <h2 tabindex="-1" bind:this={viewHeading}>{view.displayName}</h2>
             </div>
             {#if view.path !== view.root}
               <Button
                 variant="ghost"
                 size="sm"
+                disabled={isNavigating}
                 onclick={() => openDirectory(parentId)}
               >
                 <ArrowLeft data-icon="inline-start" /> Up
@@ -455,6 +563,7 @@
                 <button
                   type="button"
                   class="storage-item"
+                  disabled={isNavigating}
                   data-selected={selectedEntry?.id === item.id}
                   onclick={() => activateEntry(item)}
                   onmouseenter={() => (selectedEntry = item)}
@@ -465,12 +574,18 @@
                 >
                   <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
                   <span class="item-icon" data-kind={item.kind}>
-                    {#if item.kind === "directory"}<Folder />{:else}<File />{/if}
+                    {#if item.kind === "directory"}
+                      <Folder />
+                    {:else if item.kind === "symlink"}
+                      <Link2 />
+                    {:else}
+                      <File />
+                    {/if}
                   </span>
                   <span class="item-copy">
                     <strong title={item.name}>{item.name}</strong>
                     <span>
-                      {formatCount(item.fileCount)} files · {formatCount(item.directoryCount)} folders
+                      {describeEntry(item)}
                     </span>
                     <span class="item-bar" aria-hidden="true">
                       <span style:width={`${itemPercent(item.allocatedBytes)}%`}></span>
@@ -478,7 +593,7 @@
                   </span>
                   <span class="item-size">
                     <strong>{formatBytes(item.allocatedBytes)}</strong>
-                    <span>{((item.allocatedBytes / Math.max(view.allocatedBytes, 1)) * 100).toFixed(1)}%</span>
+                    <span>{formatPercent(item.allocatedBytes, view.allocatedBytes)}</span>
                   </span>
                   {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
                 </button>
@@ -494,14 +609,24 @@
         </div>
       </section>
 
-      {#if result.skippedEntries > 0 || result.skippedFilesystems > 0 || result.duplicateHardLinks > 0}
-        <footer class="result-notes">
-          <span>Accounting notes</span>
-          {#if result.skippedEntries > 0}<p>{result.skippedEntries} unreadable entries skipped</p>{/if}
-          {#if result.skippedFilesystems > 0}<p>{result.skippedFilesystems} mounted filesystems not traversed</p>{/if}
-          {#if result.duplicateHardLinks > 0}<p>{result.duplicateHardLinks} duplicate hard links counted once</p>{/if}
-        </footer>
-      {/if}
+      <footer class="result-notes">
+        <span>Accounting</span>
+        <p>{formatBackend(result.backend)} ({result.backend})</p>
+        <p>Allocated size {result.allocatedSizeIsEstimate ? "estimated" : "exact"}</p>
+        <p>
+          {result.hardLinkDeduplicationSupported
+            ? "Hard links deduplicated"
+            : "Hard-link deduplication unavailable"}
+        </p>
+        <p>
+          {result.sameFilesystemEnforced
+            ? "Filesystem boundary enforced"
+            : "Filesystem boundary unavailable"}
+        </p>
+        {#if result.skippedEntries > 0}<p>{formatCount(result.skippedEntries)} unreadable entries skipped</p>{/if}
+        {#if result.skippedFilesystems > 0}<p>{formatCount(result.skippedFilesystems)} mounted filesystems not traversed</p>{/if}
+        {#if result.duplicateHardLinks > 0}<p>{formatCount(result.duplicateHardLinks)} duplicate hard links counted once</p>{/if}
+      </footer>
     </main>
   {/if}
 </div>

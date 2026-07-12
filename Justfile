@@ -19,11 +19,15 @@ web:
     bun run dev
 
 # Run all static checks and tests.
-check: frontend-check rust-fmt rust-check test
+check: frontend-check frontend-test rust-fmt rust-check test
 
 # Check the Svelte and TypeScript frontend.
 frontend-check:
     bun run check
+
+# Run deterministic frontend unit tests.
+frontend-test:
+    bun run test:frontend
 
 # Check Rust formatting without changing files.
 rust-fmt:

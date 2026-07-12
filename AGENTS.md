@@ -25,6 +25,8 @@ cancel active work, retain an in-memory result snapshot for drill-down, and
 render coordinated radial and list views in Svelte. macOS uses an initial
 `getattrlistbulk` traversal and falls back to `jwalk` when the native API is
 unavailable for the selected filesystem; other platforms use `jwalk`.
+The UI reports the backend and accounting semantics returned by each completed
+scan and has explicit cancellation and navigation-error states.
 
 The intended scanning architecture is:
 
@@ -117,6 +119,8 @@ Start with these files:
 - `README.md`: current setup and developer workflow.
 - `src/App.svelte`: scan workflow and coordinated storage explorer.
 - `src/lib/scanner.ts`: frontend scan protocol types and formatters.
+- `src/lib/dev-mock.ts`: development-only Tauri workflow scenarios loaded by
+  the `?mock=` query parameter.
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
@@ -126,6 +130,9 @@ Start with these files:
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
+
+Frontend helper and visualization tests live beside their modules as
+`src/lib/*.test.ts` and run through `just check`.
 
 As the application grows, prefer small modules with clear ownership over adding
 scan, state, and visualization logic directly to the current entry files.
