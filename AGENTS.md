@@ -116,7 +116,7 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
-- `src-tauri/src/scanner.rs`: portable traversal, aggregation, and view snapshots.
+- `src-tauri/src/scanner.rs`: portable traversal, compact arena snapshots, and aggregation.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.

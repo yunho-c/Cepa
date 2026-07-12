@@ -47,9 +47,9 @@ struct RunMeasurement {
     iteration: usize,
     wall_ms: f64,
     scanner_elapsed_ms: u64,
-    traversal_ms: u64,
-    aggregation_ms: u64,
-    indexing_ms: u64,
+    traversal_us: u64,
+    aggregation_us: u64,
+    indexing_us: u64,
     initial_view_ms: f64,
     entries_per_second: f64,
 }
@@ -63,9 +63,9 @@ struct Summary {
     median_entries_per_second: f64,
     min_entries_per_second: f64,
     max_entries_per_second: f64,
-    median_traversal_ms: f64,
-    median_aggregation_ms: f64,
-    median_indexing_ms: f64,
+    median_traversal_us: f64,
+    median_aggregation_us: f64,
+    median_indexing_us: f64,
     median_initial_view_ms: f64,
 }
 
@@ -109,16 +109,16 @@ fn run() -> Result<(), String> {
             iteration,
             wall_ms: duration_ms(wall),
             scanner_elapsed_ms: result.elapsed_ms,
-            traversal_ms: result.traversal_ms,
-            aggregation_ms: result.aggregation_ms,
-            indexing_ms: result.indexing_ms,
+            traversal_us: result.traversal_us,
+            aggregation_us: result.aggregation_us,
+            indexing_us: result.indexing_us,
             initial_view_ms: scan.initial_view_ms,
             entries_per_second,
         });
     }
 
     let report = BenchmarkReport {
-        schema_version: 2,
+        schema_version: 3,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -219,9 +219,9 @@ fn summarize(runs: &[RunMeasurement]) -> Summary {
             .map(|run| run.entries_per_second)
             .reduce(f64::max)
             .unwrap_or_default(),
-        median_traversal_ms: median(runs.iter().map(|run| run.traversal_ms as f64)),
-        median_aggregation_ms: median(runs.iter().map(|run| run.aggregation_ms as f64)),
-        median_indexing_ms: median(runs.iter().map(|run| run.indexing_ms as f64)),
+        median_traversal_us: median(runs.iter().map(|run| run.traversal_us as f64)),
+        median_aggregation_us: median(runs.iter().map(|run| run.aggregation_us as f64)),
+        median_indexing_us: median(runs.iter().map(|run| run.indexing_us as f64)),
         median_initial_view_ms: median(runs.iter().map(|run| run.initial_view_ms)),
     }
 }

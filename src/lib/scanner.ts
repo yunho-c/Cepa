@@ -60,9 +60,9 @@ export interface ScanResult {
   skippedEntries: number;
   skippedFilesystems: number;
   duplicateHardLinks: number;
-  traversalMs: number;
-  aggregationMs: number;
-  indexingMs: number;
+  traversalUs: number;
+  aggregationUs: number;
+  indexingUs: number;
   elapsedMs: number;
   allocatedSizeIsEstimate: boolean;
   hardLinkDeduplicationSupported: boolean;
