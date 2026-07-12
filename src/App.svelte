@@ -59,7 +59,7 @@
     },
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? []));
-  const parentPath = $derived(view?.breadcrumbs.at(-2)?.path ?? null);
+  const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
 
   async function chooseDirectory() {
     errorMessage = "";
@@ -151,13 +151,13 @@
     return Math.max(0.8, Math.min(100, (bytes / view.allocatedBytes) * 100));
   }
 
-  async function openDirectory(directoryPath: string | null) {
-    if (scanId === null || !directoryPath || isNavigating) return;
+  async function openDirectory(nodeId: number | null) {
+    if (scanId === null || nodeId === null || isNavigating) return;
     isNavigating = true;
     try {
       view = await invoke<DirectoryView>("open_scan_directory", {
         scanId,
-        path: directoryPath,
+        nodeId,
       });
       selectedEntry = null;
     } catch (error) {
@@ -168,7 +168,7 @@
   }
 
   function activateEntry(entry: ChartItem | ScanItem) {
-    if (entry.kind === "directory") void openDirectory(entry.path);
+    if (entry.kind === "directory") void openDirectory(entry.id);
   }
 
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
@@ -363,12 +363,12 @@
       </section>
 
       <nav class="breadcrumbs" aria-label="Current scan path">
-        {#each view.breadcrumbs as breadcrumb, index (breadcrumb.path)}
+        {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
           {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
           <button
             type="button"
             aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
-            onclick={() => openDirectory(breadcrumb.path)}
+            onclick={() => openDirectory(breadcrumb.id)}
           >{breadcrumb.name}</button>
         {/each}
       </nav>
@@ -384,7 +384,7 @@
               <Button
                 variant="ghost"
                 size="sm"
-                onclick={() => openDirectory(parentPath)}
+                onclick={() => openDirectory(parentId)}
               >
                 <ArrowLeft data-icon="inline-start" /> Up
               </Button>
@@ -394,8 +394,8 @@
           <div class="sunburst-wrap">
             {#if sunburstSegments.length > 0}
               <svg class="sunburst" viewBox="0 0 340 340" role="img" aria-label={`Storage map for ${view.displayName}`}>
-                {#each sunburstSegments as segment (`${segment.item.path ?? segment.item.name}-${segment.depth}`)}
-                  {#if segment.item.path}
+                {#each sunburstSegments as segment (`${segment.item.id ?? segment.item.name}-${segment.depth}`)}
+                  {#if segment.item.id !== null}
                     <g
                       role="button"
                       tabindex="0"
@@ -411,7 +411,7 @@
                         d={segment.pathData}
                         data-depth={segment.depth}
                         data-color={segment.colorIndex}
-                        data-selected={selectedEntry?.path === segment.item.path}
+                        data-selected={selectedEntry?.id === segment.item.id}
                       />
                     </g>
                   {:else}
@@ -419,7 +419,7 @@
                       d={segment.pathData}
                       data-depth={segment.depth}
                       data-color={segment.colorIndex}
-                      data-selected={selectedEntry?.path === segment.item.path}
+                      data-selected={selectedEntry?.id === segment.item.id}
                     />
                   {/if}
                 {/each}
@@ -451,11 +451,11 @@
 
           {#if view.items.length > 0}
             <div class="item-list" class:is-navigating={isNavigating}>
-              {#each view.items as item, index (item.path)}
+              {#each view.items as item, index (item.id)}
                 <button
                   type="button"
                   class="storage-item"
-                  data-selected={selectedEntry?.path === item.path}
+                  data-selected={selectedEntry?.id === item.id}
                   onclick={() => activateEntry(item)}
                   onmouseenter={() => (selectedEntry = item)}
                   onfocus={() => (selectedEntry = item)}

@@ -51,22 +51,22 @@ was at 95% capacity during measurement. Results are medians of nine warmed runs.
 
 | Workload | Entries | Wall time | Entries/s | Traversal | Aggregation | Initial view |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Directory-rich: 10,000 leaf directories × 10 files | 110,101 | 136.59 ms | 806,045 | 134.89 ms | 0.91 ms | 0.78 ms |
-| Wide: 100 leaf directories × 1,000 files | 100,102 | 100.68 ms | 994,217 | 98.96 ms | 0.71 ms | 0.97 ms |
+| Directory-rich: 10,000 leaf directories × 10 files | 110,101 | 141.55 ms | 777,818 | 140.46 ms | 1.02 ms | 0.17 ms |
+| Wide: 100 leaf directories × 1,000 files | 100,102 | 94.16 ms | 1,063,138 | 93.31 ms | 0.64 ms | 0.13 ms |
 
 The raw runs are preserved in
-[`performance-results/2026-07-11-m4-pro-arena.csv`](performance-results/2026-07-11-m4-pro-arena.csv).
+[`performance-results/2026-07-11-m4-pro-basename.csv`](performance-results/2026-07-11-m4-pro-basename.csv).
 
 ### Snapshot memory
 
 Peak resident memory was measured by running one warmup plus one measured scan
-under macOS `/usr/bin/time -l`. The arena stores every full path once behind a
-shared `Arc<Path>` and uses compact node IDs for parents and children.
+under macOS `/usr/bin/time -l`. The current arena retains one basename per node,
+one root path, and compact node IDs for all relationships and navigation.
 
-| Workload | Path-map snapshot | Arena snapshot | Reduction |
-| --- | ---: | ---: | ---: |
-| Directory-rich | 108.36 MiB | 62.72 MiB | 42.1% |
-| Wide | 101.28 MiB | 67.38 MiB | 33.5% |
+| Workload | Path map | Full-path arena | Basename arena | Total reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Directory-rich | 108.36 MiB | 62.72 MiB | 35.69 MiB | 67.1% |
+| Wide | 101.28 MiB | 67.38 MiB | 46.47 MiB | 54.1% |
 
 The exact memory observations are preserved in
 [`performance-results/2026-07-11-m4-pro-memory.csv`](performance-results/2026-07-11-m4-pro-memory.csv).
@@ -109,6 +109,29 @@ Compared with the bounded-ranking baseline above on identical fixtures:
 | --- | ---: | ---: | ---: |
 | Directory-rich | 200.73 → 136.59 ms (-32.0%) | 548,502 → 806,045 (+47.0%) | 3.11 → 0.78 ms (-74.8%) |
 | Wide | 147.82 → 100.68 ms (-31.9%) | 677,192 → 994,217 (+46.8%) | 8.39 → 0.97 ms (-88.4%) |
+
+The full-path arena runs are preserved in
+[`performance-results/2026-07-11-m4-pro-arena.csv`](performance-results/2026-07-11-m4-pro-arena.csv).
+
+### Basename retention and opaque node IDs
+
+The retained snapshot no longer stores an absolute path for every entry. It
+keeps each basename once and reconstructs only the current directory path when
+needed. Directory navigation now uses bounds-checked opaque node IDs, so list,
+chart, and breadcrumb payloads do not repeat full paths either. `jwalk`'s
+depth-first iterator order supplies parent IDs through a depth stack without a
+path lookup table.
+
+Compared with the full-path arena:
+
+| Workload | Wall time | Entries/s | Initial view | Peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Directory-rich | 136.59 → 141.55 ms (+3.6%) | 806,045 → 777,818 (-3.5%) | 0.78 → 0.17 ms (-77.8%) | 62.72 → 35.69 MiB (-43.1%) |
+| Wide | 100.68 → 94.16 ms (-6.5%) | 994,217 → 1,063,138 (+6.9%) | 0.97 → 0.13 ms (-86.8%) | 67.38 → 46.47 MiB (-31.0%) |
+
+The directory-rich throughput tradeoff is retained intentionally: avoiding
+repeated ancestor bytes materially improves the multi-million-entry memory
+ceiling, while the measured regression is small and explicit.
 
 ## Interpretation and next measurements
 

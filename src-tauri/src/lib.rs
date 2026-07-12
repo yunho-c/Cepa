@@ -25,7 +25,7 @@ pub struct BenchmarkScan {
 pub fn benchmark_scan(path: &Path) -> Result<BenchmarkScan, String> {
     let output = scanner::scan_path(path, Arc::new(AtomicBool::new(false)), |_| {})?;
     let view_started_at = Instant::now();
-    let initial_view = output.snapshot.directory_view(0, &output.result.root)?;
+    let initial_view = output.snapshot.directory_view(0, 0)?;
     Ok(BenchmarkScan {
         result: output.result,
         initial_view_ms: view_started_at.elapsed().as_secs_f64() * 1_000.0,
@@ -100,8 +100,7 @@ impl ScanState {
     }
 
     fn complete(&self, id: u64, snapshot: ScanSnapshot) -> Result<DirectoryView, String> {
-        let root = snapshot.root_path().to_string_lossy().into_owned();
-        let view = snapshot.directory_view(id, &root);
+        let view = snapshot.directory_view(id, 0);
         self.finish(id);
         let view = view?;
         *self
@@ -111,7 +110,7 @@ impl ScanState {
         Ok(view)
     }
 
-    fn directory_view(&self, id: u64, path: &str) -> Result<DirectoryView, String> {
+    fn directory_view(&self, id: u64, node_id: u64) -> Result<DirectoryView, String> {
         let completed = self
             .completed
             .lock()
@@ -120,7 +119,7 @@ impl ScanState {
             .as_ref()
             .filter(|scan| scan.id == id)
             .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        scan.snapshot.directory_view(id, path)
+        scan.snapshot.directory_view(id, node_id)
     }
 }
 
@@ -193,10 +192,10 @@ fn cancel_scan(scan_id: u64, state: tauri::State<'_, ScanState>) -> bool {
 #[tauri::command]
 fn open_scan_directory(
     scan_id: u64,
-    path: String,
+    node_id: u64,
     state: tauri::State<'_, ScanState>,
 ) -> Result<DirectoryView, String> {
-    state.directory_view(scan_id, &path)
+    state.directory_view(scan_id, node_id)
 }
 
 pub fn run() {

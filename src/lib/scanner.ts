@@ -12,8 +12,8 @@ export interface ScanProgress {
 }
 
 export interface ScanItem {
+  id: number;
   name: string;
-  path: string;
   kind: EntryKind;
   logicalBytes: number;
   allocatedBytes: number;
@@ -22,13 +22,13 @@ export interface ScanItem {
 }
 
 export interface Breadcrumb {
+  id: number;
   name: string;
-  path: string;
 }
 
 export interface ChartItem {
+  id: number | null;
   name: string;
-  path: string | null;
   kind: EntryKind;
   logicalBytes: number;
   allocatedBytes: number;
@@ -37,6 +37,7 @@ export interface ChartItem {
 
 export interface DirectoryView {
   scanId: number;
+  nodeId: number;
   root: string;
   path: string;
   displayName: string;

@@ -1,9 +1,9 @@
 use jwalk::{Parallelism, WalkDirGeneric};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
-use std::ffi::OsStr;
+use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::fs::Metadata;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -30,8 +30,8 @@ pub struct ScanProgress {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanItem {
+    pub id: u64,
     pub name: String,
-    pub path: String,
     pub kind: EntryKind,
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
@@ -42,15 +42,15 @@ pub struct ScanItem {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Breadcrumb {
+    pub id: u64,
     pub name: String,
-    pub path: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartItem {
+    pub id: Option<u64>,
     pub name: String,
-    pub path: Option<String>,
     pub kind: EntryKind,
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
@@ -61,6 +61,7 @@ pub struct ChartItem {
 #[serde(rename_all = "camelCase")]
 pub struct DirectoryView {
     pub scan_id: u64,
+    pub node_id: u64,
     pub root: String,
     pub path: String,
     pub display_name: String,
@@ -113,8 +114,8 @@ pub(crate) struct ScanOutput {
 #[derive(Debug)]
 pub(crate) struct ScanSnapshot {
     root: NodeId,
+    root_path: Arc<Path>,
     nodes: Vec<InternalNode>,
-    path_index: HashMap<Arc<Path>, NodeId>,
 }
 
 type NodeId = usize;
@@ -133,7 +134,7 @@ struct FileIdentity(u64, u64);
 
 #[derive(Debug)]
 struct InternalNode {
-    path: Arc<Path>,
+    name: OsString,
     parent: Option<NodeId>,
     children: Vec<NodeId>,
     kind: EntryKind,
@@ -144,9 +145,9 @@ struct InternalNode {
 }
 
 impl InternalNode {
-    fn root(path: Arc<Path>) -> Self {
+    fn root(path: &Path) -> Self {
         Self {
-            path,
+            name: path.file_name().unwrap_or(path.as_os_str()).to_owned(),
             parent: None,
             children: Vec::new(),
             kind: EntryKind::Directory,
@@ -158,7 +159,7 @@ impl InternalNode {
     }
 
     fn name(&self) -> &OsStr {
-        self.path.file_name().unwrap_or(self.path.as_os_str())
+        &self.name
     }
 }
 
@@ -188,9 +189,11 @@ where
     let started_at = Instant::now();
     let root_filesystem = filesystem_id(&root_metadata);
     let root_node_path: Arc<Path> = Arc::from(root.clone());
-    let mut nodes = vec![InternalNode::root(root_node_path.clone())];
-    let mut path_index = HashMap::new();
-    path_index.insert(root_node_path, 0);
+    let mut nodes = vec![InternalNode::root(&root)];
+    // jwalk reads directories in parallel but its public iterator yields them
+    // depth-first. The stack therefore maps entry depth to a compact parent ID
+    // without retaining a full-path lookup table.
+    let mut ancestor_stack = vec![0];
 
     let mut seen_files = HashSet::new();
     let mut files_scanned = 0_u64;
@@ -266,7 +269,6 @@ where
             continue;
         }
 
-        let path: Arc<Path> = Arc::from(entry.path());
         let measured = match entry.client_state {
             Some(measured) => measured,
             None => {
@@ -326,28 +328,17 @@ where
             skipped_entries += 1;
         }
 
-        let parent = path_index
-            .get(entry.parent_path.as_ref())
+        ancestor_stack.truncate(entry.depth);
+        let parent = ancestor_stack
+            .get(entry.depth.saturating_sub(1))
             .copied()
             .ok_or_else(|| {
                 format!(
-                    "The scanner received {} before its parent directory.",
-                    path.display()
+                    "The scanner received {} without its depth-first parent.",
+                    entry.path().display()
                 )
             })?;
         let node_id = nodes.len();
-        nodes[parent].children.push(node_id);
-        path_index.insert(path.clone(), node_id);
-        nodes.push(InternalNode {
-            path: path.clone(),
-            parent: Some(parent),
-            children: Vec::new(),
-            kind,
-            logical_bytes,
-            allocated_bytes,
-            file_count,
-            directory_count,
-        });
 
         entries_since_progress += 1;
         if entries_since_progress >= PROGRESS_ENTRY_INTERVAL
@@ -360,11 +351,26 @@ where
                 logical_bytes: observed_logical_bytes,
                 allocated_bytes: observed_allocated_bytes,
                 skipped_entries,
-                current_path: path.to_string_lossy().into_owned(),
+                current_path: entry.path().to_string_lossy().into_owned(),
                 elapsed_ms: elapsed_ms(started_at),
             });
             entries_since_progress = 0;
             last_progress_at = Instant::now();
+        }
+
+        nodes[parent].children.push(node_id);
+        nodes.push(InternalNode {
+            name: entry.file_name,
+            parent: Some(parent),
+            children: Vec::new(),
+            kind,
+            logical_bytes,
+            allocated_bytes,
+            file_count,
+            directory_count,
+        });
+        if matches!(kind, EntryKind::Directory) {
+            ancestor_stack.push(node_id);
         }
     }
 
@@ -423,8 +429,8 @@ where
 
     let snapshot = ScanSnapshot {
         root: 0,
+        root_path: root_node_path,
         nodes,
-        path_index,
     };
 
     Ok(ScanOutput {
@@ -456,20 +462,15 @@ where
 }
 
 impl ScanSnapshot {
-    pub(crate) fn root_path(&self) -> &Path {
-        &self.nodes[self.root].path
-    }
-
     pub(crate) fn directory_view(
         &self,
         scan_id: u64,
-        requested: &str,
+        requested: u64,
     ) -> Result<DirectoryView, String> {
-        let node_id = self
-            .path_index
-            .get(Path::new(requested))
-            .copied()
-            .ok_or_else(|| "That folder is not part of this scan.".to_string())?;
+        let node_id = usize::try_from(requested)
+            .ok()
+            .filter(|node_id| *node_id < self.nodes.len())
+            .ok_or_else(|| "That item is not part of this scan.".to_string())?;
         let node = &self.nodes[node_id];
 
         if !matches!(node.kind, EntryKind::Directory) {
@@ -486,8 +487,9 @@ impl ScanSnapshot {
 
         Ok(DirectoryView {
             scan_id,
-            root: self.nodes[self.root].path.to_string_lossy().into_owned(),
-            path: node.path.to_string_lossy().into_owned(),
+            node_id: wire_id(node_id),
+            root: self.root_path.to_string_lossy().into_owned(),
+            path: self.node_path(node_id).to_string_lossy().into_owned(),
             display_name: node.name().to_string_lossy().into_owned(),
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
@@ -502,8 +504,8 @@ impl ScanSnapshot {
     fn scan_item(&self, node_id: NodeId) -> ScanItem {
         let node = &self.nodes[node_id];
         ScanItem {
+            id: wire_id(node_id),
             name: node.name().to_string_lossy().into_owned(),
-            path: node.path.to_string_lossy().into_owned(),
             kind: node.kind,
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
@@ -519,8 +521,8 @@ impl ScanSnapshot {
         while let Some(current_id) = current {
             let node = &self.nodes[current_id];
             breadcrumbs.push(Breadcrumb {
+                id: wire_id(current_id),
                 name: node.name().to_string_lossy().into_owned(),
-                path: node.path.to_string_lossy().into_owned(),
             });
             if current_id == self.root {
                 break;
@@ -554,8 +556,8 @@ impl ScanSnapshot {
             .map(|node_id| {
                 let node = &self.nodes[*node_id];
                 ChartItem {
+                    id: Some(wire_id(*node_id)),
                     name: node.name().to_string_lossy().into_owned(),
-                    path: Some(node.path.to_string_lossy().into_owned()),
                     kind: node.kind,
                     logical_bytes: node.logical_bytes,
                     allocated_bytes: node.allocated_bytes,
@@ -586,8 +588,8 @@ impl ScanSnapshot {
                 )
             });
             items.push(ChartItem {
+                id: None,
                 name: format!("{} more items", total_items - ranked_ids.len()),
-                path: None,
                 kind: EntryKind::Other,
                 logical_bytes: total.0.saturating_sub(selected.0),
                 allocated_bytes: total.1.saturating_sub(selected.1),
@@ -610,6 +612,31 @@ impl ScanSnapshot {
         ranked.sort_unstable_by(|left, right| compare_node_ids(&self.nodes, *left, *right));
         ranked
     }
+
+    fn node_path(&self, node_id: NodeId) -> PathBuf {
+        if node_id == self.root {
+            return self.root_path.to_path_buf();
+        }
+
+        let mut ancestors = Vec::new();
+        let mut current = node_id;
+        while current != self.root {
+            ancestors.push(current);
+            current = self.nodes[current]
+                .parent
+                .expect("non-root scan nodes always have a parent");
+        }
+
+        let mut path = self.root_path.to_path_buf();
+        for ancestor in ancestors.into_iter().rev() {
+            path.push(&self.nodes[ancestor].name);
+        }
+        path
+    }
+}
+
+fn wire_id(node_id: NodeId) -> u64 {
+    u64::try_from(node_id).expect("scan node IDs fit in the wire representation")
 }
 
 fn compare_node_ids(nodes: &[InternalNode], left: NodeId, right: NodeId) -> std::cmp::Ordering {
@@ -712,7 +739,7 @@ mod tests {
 
         let view = output
             .snapshot
-            .directory_view(7, &result.root)
+            .directory_view(7, 0)
             .expect("build root view");
         assert_eq!(view.scan_id, 7);
         assert_eq!(view.items.len(), 2);
@@ -720,35 +747,94 @@ mod tests {
         assert_eq!(view.items[0].file_count, 1);
         assert_eq!(view.chart_items.len(), 2);
 
-        let nested_path = view
+        let nested_id = view
             .items
             .iter()
             .find(|item| item.name == "nested")
             .expect("nested directory item")
-            .path
-            .clone();
+            .id;
         let nested_view = output
             .snapshot
-            .directory_view(7, &nested_path)
+            .directory_view(7, nested_id)
             .expect("open nested view");
         assert_eq!(nested_view.items.len(), 1);
         assert_eq!(nested_view.items[0].name, "child.bin");
         assert_eq!(nested_view.breadcrumbs.len(), 2);
+        assert_eq!(
+            nested_view.path,
+            nested
+                .canonicalize()
+                .expect("canonical path")
+                .to_string_lossy()
+        );
 
-        let file_path = view
+        let file_id = view
             .items
             .iter()
             .find(|item| item.name == "root.bin")
             .expect("root file item")
-            .path
-            .clone();
+            .id;
         assert_eq!(
             output
                 .snapshot
-                .directory_view(7, &file_path)
+                .directory_view(7, file_id)
                 .expect_err("files cannot be opened"),
             "Only folders can be opened in the scan map."
         );
+        assert_eq!(
+            output
+                .snapshot
+                .directory_view(7, u64::MAX)
+                .expect_err("unknown node IDs must fail"),
+            "That item is not part of this scan."
+        );
+    }
+
+    #[test]
+    fn reconstructs_deep_paths_and_breadcrumbs_from_node_ids() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let deepest = temp.path().join("alpha").join("beta").join("gamma");
+        fs::create_dir_all(&deepest).expect("create deep directory tree");
+        fs::write(deepest.join("payload.bin"), vec![9_u8; 23]).expect("write deep file");
+
+        let output =
+            scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
+        assert_arena_invariants(&output.snapshot);
+
+        let mut view = output
+            .snapshot
+            .directory_view(11, 0)
+            .expect("open root view");
+        for expected_name in ["alpha", "beta", "gamma"] {
+            let child_id = view
+                .items
+                .iter()
+                .find(|item| item.name == expected_name)
+                .expect("expected child directory")
+                .id;
+            view = output
+                .snapshot
+                .directory_view(11, child_id)
+                .expect("open child directory");
+        }
+
+        assert_eq!(
+            view.path,
+            deepest
+                .canonicalize()
+                .expect("canonical path")
+                .to_string_lossy()
+        );
+        assert_eq!(
+            view.breadcrumbs
+                .iter()
+                .map(|breadcrumb| breadcrumb.name.as_str())
+                .skip(1)
+                .collect::<Vec<_>>(),
+            ["alpha", "beta", "gamma"]
+        );
+        assert_eq!(view.items[0].name, "payload.bin");
+        assert_eq!(view.logical_bytes, 23);
     }
 
     #[test]
@@ -804,7 +890,7 @@ mod tests {
             scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
         let view = output
             .snapshot
-            .directory_view(1, &output.result.root)
+            .directory_view(1, 0)
             .expect("build root view");
         assert_arena_invariants(&output.snapshot);
 
@@ -826,7 +912,7 @@ mod tests {
             scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
         let view = output
             .snapshot
-            .directory_view(1, &output.result.root)
+            .directory_view(1, 0)
             .expect("build root view");
         assert_arena_invariants(&output.snapshot);
 
@@ -842,7 +928,7 @@ mod tests {
             view.chart_items
                 .last()
                 .expect("aggregate item")
-                .path
+                .id
                 .is_none()
         );
         assert_eq!(
@@ -855,16 +941,10 @@ mod tests {
     }
 
     fn assert_arena_invariants(snapshot: &ScanSnapshot) {
-        assert_eq!(snapshot.nodes.len(), snapshot.path_index.len());
+        assert_eq!(snapshot.root, 0);
+        assert!(snapshot.root_path.is_absolute());
 
         for (node_id, node) in snapshot.nodes.iter().enumerate() {
-            let (indexed_path, indexed_id) = snapshot
-                .path_index
-                .get_key_value(node.path.as_ref())
-                .expect("every arena path is indexed");
-            assert_eq!(*indexed_id, node_id);
-            assert!(Arc::ptr_eq(indexed_path, &node.path));
-
             if let Some(parent_id) = node.parent {
                 assert!(parent_id < node_id);
                 assert!(snapshot.nodes[parent_id].children.contains(&node_id));
@@ -875,6 +955,8 @@ mod tests {
             for child_id in &node.children {
                 assert_eq!(snapshot.nodes[*child_id].parent, Some(node_id));
             }
+
+            assert!(!node.name.is_empty());
         }
     }
 }
