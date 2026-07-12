@@ -31,8 +31,10 @@ render coordinated radial and list views in Svelte. macOS uses an initial
 `getattrlistbulk` traversal, Linux uses `getdents64` directory batches plus
 `statx` metadata, and both fall back to `jwalk` when their required native API
 or fields are unavailable. Windows currently uses `jwalk`.
-The UI reports the backend and accounting semantics returned by each completed
-scan and has explicit cancellation and navigation-error states.
+The UI keeps the storage map and ranked items primary. Backend, accounting, and
+skipped-item semantics remain available under the collapsed `Scan details`
+disclosure rather than appearing as status badges or a diagnostic footer. It
+also has explicit cancellation and navigation-error states.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
@@ -144,6 +146,13 @@ shadcn-svelte component may be used where it improves the experience, including
 the shadcn-svelte LayerChart integration for the hierarchical visualization.
 Add UI components through the repository's configured shadcn-svelte setup and
 preserve the aliases and styling conventions in `components.json`.
+
+Keep implementation vocabulary out of the primary hierarchy. Do not repeat
+completion state, native backend names, syscall names, or accounting guarantees
+in banners, badges, headings, and footers. User-relevant exceptions stay visible;
+routine technical evidence belongs in the existing progressive disclosure.
+Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
+and subtle separators over bordered dashboard grids and all-caps microcopy.
 
 ## Repository map
 

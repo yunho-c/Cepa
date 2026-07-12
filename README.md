@@ -35,7 +35,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   report a range and confidence, and identify exact target codecs versus proxies
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
-  and completed states with visible backend/accounting semantics
+  and completed states, with backend/accounting semantics available under a
+  compact scan-details disclosure
 
 Symlinks are reported but never followed. Mounted filesystems are not traversed
 when the portable backend can identify filesystem boundaries. The result view

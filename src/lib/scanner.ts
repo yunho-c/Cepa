@@ -189,19 +189,6 @@ export function formatMetric(metric: SizeMetric): string {
   return metric === "logical" ? "Logical size" : "Space on disk";
 }
 
-export function formatCompressionCapability(
-  capability: CompressionCapability,
-): string {
-  switch (capability.status) {
-    case "inspectOnly":
-      return `${capability.filesystem} compression · analysis only`;
-    case "unsupported":
-      return `Compression unavailable on ${capability.filesystem}`;
-    case "unavailable":
-      return "Compression status unavailable";
-  }
-}
-
 export function formatCompressionState(state: CompressionState): string {
   switch (state.state) {
     case "compressed":

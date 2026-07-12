@@ -7,17 +7,11 @@
     ArrowLeft,
     ChevronRight,
     CircleStop,
-    Clock3,
-    Database,
     File,
-    Files,
     Folder,
     FolderOpen,
     FolderSearch,
-    Gauge,
-    HardDrive,
     Link2,
-    RotateCcw,
     ScanSearch,
     X,
   } from "@lucide/svelte";
@@ -26,7 +20,6 @@
   import {
     formatBytes,
     formatBackend,
-    formatCompressionCapability,
     formatCompressionState,
     formatCount,
     formatDuration,
@@ -76,8 +69,8 @@
   let isCancellingEstimate = $state(false);
   let activeEstimateRequestId = $state<number | null>(null);
   let estimateRequestSequence = 0;
-  let estimateActionButton: HTMLButtonElement | undefined = $state();
-  let estimateCancelButton: HTMLButtonElement | undefined = $state();
+  let estimateActionButton: HTMLButtonElement | null = $state(null);
+  let estimateCancelButton: HTMLButtonElement | null = $state(null);
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -109,21 +102,8 @@
         compressionState.state,
       ),
   );
-  const headerLabel = $derived(
-    status === "scanning"
-      ? "Scan active"
-      : status === "cancelling"
-        ? "Stopping scan"
-        : status === "complete"
-          ? "Scan complete"
-          : status === "cancelled"
-            ? "Scan stopped"
-            : status === "error"
-              ? "Needs attention"
-              : "Ready",
-  );
-  const headerDetail = $derived(
-    status === "complete" && result ? formatBackend(result.backend) : "Local only",
+  const scanTargetName = $derived(
+    path.split(/[\\/]/).filter(Boolean).at(-1) ?? path,
   );
   const scanAnnouncement = $derived(
     status === "cancelling"
@@ -509,50 +489,47 @@
       <span>Cepa</span>
     </button>
 
-    <div class="header-meta">
-      <span class="status-dot" data-state={status}></span>
-      <span>{headerLabel}</span>
-      <span class="header-separator"></span>
-      <span class="header-detail">
-        {headerDetail}
-        {#if status === "complete" && result}<span class="header-technical"> · {result.backend}</span>{/if}
-      </span>
-    </div>
+    {#if status === "complete"}
+      <Button variant="outline" size="sm" onclick={chooseDirectory}>
+        <FolderOpen data-icon="inline-start" />
+        Choose folder
+      </Button>
+    {/if}
   </header>
 
   {#if status === "idle" || status === "error" || status === "cancelled"}
     <main class="landing">
       <section class="landing-copy" aria-labelledby="landing-title">
-        <p class="eyebrow">Storage, without the archaeology.</p>
-        <h1 id="landing-title">See where your<br />space went.</h1>
+        <div class="app-symbol" aria-hidden="true"><ScanSearch /></div>
+        <h1 id="landing-title">Find what’s taking up space.</h1>
         <p class="lede">
-          Scan a folder locally. Cepa maps the files that matter, without
-          uploading a byte.
+          Choose a folder to see its largest files and subfolders. Everything
+          stays on this device.
         </p>
 
         <div class="scan-entry">
           <Button class="choose-button" size="lg" onclick={chooseDirectory}>
             <FolderOpen data-icon="inline-start" />
-            Choose a folder
+            Choose folder…
           </Button>
 
-          <div class="or-rule"><span>or enter a path</span></div>
-
-          <form class="path-form" onsubmit={startScan}>
-            <label class="sr-only" for="scan-path">Folder path</label>
-            <Input
-              id="scan-path"
-              class="path-input"
-              placeholder="/Users/you/Documents"
-              autocomplete="off"
-              spellcheck={false}
-              bind:value={path}
-            />
-            <Button variant="outline" type="submit" disabled={!path.trim()}>
-              Scan
-              <ScanSearch data-icon="inline-end" />
-            </Button>
-          </form>
+          <details class="manual-path">
+            <summary>Enter a path instead</summary>
+            <form class="path-form" onsubmit={startScan}>
+              <label class="sr-only" for="scan-path">Folder path</label>
+              <Input
+                id="scan-path"
+                class="path-input"
+                placeholder="/Users/you/Documents"
+                autocomplete="off"
+                spellcheck={false}
+                bind:value={path}
+              />
+              <Button variant="outline" type="submit" disabled={!path.trim()}>
+                Scan
+              </Button>
+            </form>
+          </details>
 
           {#if status === "error" && errorMessage}
             <div
@@ -578,152 +555,96 @@
               <div>
                 <strong>Scan stopped.</strong>
                 <span>
-                  Kept your path after {formatCount(displayProgress.entriesScanned)} entries ·
-                  {formatBytes(displayProgress.allocatedBytes)} observed
+                  {formatCount(displayProgress.entriesScanned)} items and
+                  {formatBytes(displayProgress.allocatedBytes)} were found before it stopped.
                 </span>
               </div>
             </div>
           {/if}
         </div>
       </section>
-
-      <aside class="landing-visual" aria-hidden="true">
-        <div class="orbit orbit-outer"></div>
-        <div class="orbit orbit-middle"></div>
-        <div class="orbit orbit-inner"></div>
-        <div class="visual-core">
-          <HardDrive />
-          <span>LOCAL</span>
-        </div>
-        <span class="orbit-label label-a">FILES</span>
-        <span class="orbit-label label-b">SPACE</span>
-        <span class="orbit-label label-c">CLEAR</span>
-      </aside>
     </main>
   {:else if status === "scanning" || status === "cancelling"}
     <main class="scan-view" aria-busy="true">
       <p class="sr-only" aria-live="polite">{scanAnnouncement}</p>
-      <section class="scan-heading">
-        <div>
-          <p class="eyebrow">{status === "cancelling" ? "Stopping safely" : "Reading the map"}</p>
-          <h1>{formatBytes(displayProgress.allocatedBytes)}</h1>
-          <p class="scan-path" title={displayProgress.currentPath}>
-            {displayProgress.currentPath || path}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onclick={cancelScan}
-          disabled={scanId === null || status === "cancelling"}
-        >
-          <X data-icon="inline-start" />
-          {status === "cancelling" ? "Stopping…" : "Cancel"}
-        </Button>
-      </section>
-
-      <div class="scan-line"><span></span></div>
-
-      <section class="live-grid" aria-label="Live scan statistics">
-        <div class="live-stat">
-          <Files />
-          <span>Entries</span>
-          <strong>{formatCount(displayProgress.entriesScanned)}</strong>
-        </div>
-        <div class="live-stat">
-          <File />
-          <span>Files</span>
-          <strong>{formatCount(displayProgress.filesScanned)}</strong>
-        </div>
-        <div class="live-stat">
-          <Folder />
-          <span>Folders</span>
-          <strong>{formatCount(displayProgress.directoriesScanned)}</strong>
-        </div>
-        <div class="live-stat">
-          <Clock3 />
-          <span>Elapsed</span>
-          <strong>{formatDuration(displayProgress.elapsedMs)}</strong>
-        </div>
-      </section>
-
-      {#if displayProgress.largestItems.length > 0}
-        <section class="partial-results" aria-label="Largest files observed so far">
-          <div class="partial-heading">
-            <span>Largest files so far</span>
-            <span>Observed space on disk</span>
+      <section class="scan-card">
+        <div class="scan-titlebar">
+          <div>
+            <span class="scan-kicker">
+              <span class="status-dot" aria-hidden="true"></span>
+              {status === "cancelling" ? "Stopping" : "Scanning"}
+            </span>
+            <h1>{scanTargetName}</h1>
           </div>
-          <ol>
-            {#each displayProgress.largestItems.slice(0, 4) as item (item.id)}
-              <li>
-                <span class="partial-kind">File</span>
-                <strong title={item.name}>{item.name}</strong>
-                <span>{formatBytes(item.allocatedBytes)}</span>
-              </li>
-            {/each}
-          </ol>
-        </section>
-      {:else}
-        <div class="scan-pulse" aria-hidden="true">
-          <div class="pulse-disc"><ScanSearch /></div>
-          <span class="pulse-ring ring-one"></span>
-          <span class="pulse-ring ring-two"></span>
-          <span class="pulse-ring ring-three"></span>
+          <Button
+            variant="outline"
+            size="sm"
+            onclick={cancelScan}
+            disabled={scanId === null || status === "cancelling"}
+          >
+            {status === "cancelling" ? "Stopping…" : "Stop"}
+          </Button>
         </div>
-      {/if}
 
-      <p class="scan-footnote">
-        Symlinks stay closed · Mount boundaries are respected where available · Nothing leaves this device
-      </p>
+        <div class="scan-total">
+          <strong>{formatBytes(displayProgress.allocatedBytes)}</strong>
+          <span>found so far</span>
+        </div>
+        <p class="scan-path" title={displayProgress.currentPath}>
+          {displayProgress.currentPath || path}
+        </p>
+
+        <div class="scan-line" aria-hidden="true"><span></span></div>
+
+        <dl class="scan-stats" aria-label="Scan progress">
+          <div><dt>Items</dt><dd>{formatCount(displayProgress.entriesScanned)}</dd></div>
+          <div><dt>Files</dt><dd>{formatCount(displayProgress.filesScanned)}</dd></div>
+          <div><dt>Folders</dt><dd>{formatCount(displayProgress.directoriesScanned)}</dd></div>
+          <div><dt>Elapsed</dt><dd>{formatDuration(displayProgress.elapsedMs)}</dd></div>
+        </dl>
+
+        {#if displayProgress.largestItems.length > 0}
+          <section class="partial-results" aria-label="Largest files observed so far">
+            <h2>Largest files found</h2>
+            <ol>
+              {#each displayProgress.largestItems.slice(0, 4) as item (item.id)}
+                <li>
+                  <File aria-hidden="true" />
+                  <strong title={item.name}>{item.name}</strong>
+                  <span>{formatBytes(item.allocatedBytes)}</span>
+                </li>
+              {/each}
+            </ol>
+          </section>
+        {:else}
+          <div class="scan-empty-progress">
+            <ScanSearch aria-hidden="true" />
+            <span>Looking for files…</span>
+          </div>
+        {/if}
+
+        <p class="scan-footnote">Nothing leaves this device.</p>
+      </section>
     </main>
   {:else if result && view}
     <main class="results-view">
       <section class="results-heading">
-        <div>
-          <div class="eyebrow-row">
-            <p class="eyebrow">Scan complete</p>
-            <span class="backend-badge" title={result.backend}>{formatBackend(result.backend)}</span>
-          </div>
+        <div class="result-title">
           <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>
           <p class="result-path" title={result.root}>{result.root}</p>
         </div>
-        <div class="result-actions">
-          <Button variant="outline" onclick={reset}>
-            <RotateCcw data-icon="inline-start" />
-            New scan
-          </Button>
-          <Button onclick={chooseDirectory}>
-            <FolderOpen data-icon="inline-start" />
-            Scan another
-          </Button>
+        <div class="result-total">
+          <span>Space on disk{result.allocatedSizeIsEstimate ? " (estimated)" : ""}</span>
+          <strong>{formatBytes(result.allocatedBytes)}</strong>
         </div>
       </section>
 
-      <section class="summary-grid" aria-label="Scan summary">
-        <div class="total-stat">
-          <span>Space on disk {result.allocatedSizeIsEstimate ? "(estimate)" : ""}</span>
-          <strong>{formatBytes(result.allocatedBytes)}</strong>
-        </div>
-        <div class="summary-stat">
-          <Database />
-          <span>Logical size</span>
-          <strong>{formatBytes(result.logicalBytes)}</strong>
-        </div>
-        <div class="summary-stat">
-          <Files />
-          <span>Files</span>
-          <strong>{formatCount(result.fileCount)}</strong>
-        </div>
-        <div class="summary-stat">
-          <Folder />
-          <span>Folders</span>
-          <strong>{formatCount(result.directoryCount)}</strong>
-        </div>
-        <div class="summary-stat">
-          <Gauge />
-          <span>Scan time</span>
-          <strong>{formatDuration(result.elapsedMs)}</strong>
-        </div>
-      </section>
+      <p class="result-summary" aria-label="Scan summary">
+        <span>{formatBytes(result.logicalBytes)} logical</span>
+        <span>{formatCount(result.fileCount)} files</span>
+        <span>{formatCount(result.directoryCount)} folders</span>
+        <span>{formatDuration(result.elapsedMs)}</span>
+      </p>
 
       <div class="explorer-toolbar">
         <nav class="breadcrumbs" aria-label="Current scan path">
@@ -738,7 +659,6 @@
           {/each}
         </nav>
         <div class="metric-switch" role="group" aria-label="Size metric">
-          <span>Measure</span>
           <button
             type="button"
             aria-pressed={sizeMetric === "allocated"}
@@ -778,7 +698,7 @@
         >
           <AlertCircle />
           <div>
-            <strong>That item could not be revealed.</strong>
+            <strong>That item could not be shown.</strong>
             <span>{revealError}</span>
           </div>
         </div>
@@ -790,22 +710,20 @@
         aria-busy={isNavigating}
       >
         <div class="chart-pane">
-          <div class="chart-heading">
-            <div>
-              <p class="eyebrow">Storage map</p>
-              <h2 tabindex="-1" bind:this={viewHeading}>{view.displayName}</h2>
-            </div>
-            {#if view.path !== view.root}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={isNavigating}
-                onclick={() => openDirectory(parentId)}
-              >
-                <ArrowLeft data-icon="inline-start" /> Up
-              </Button>
-            {/if}
-          </div>
+          <h2 class="sr-only" tabindex="-1" bind:this={viewHeading}>
+            Storage map for {view.displayName}
+          </h2>
+          {#if view.path !== view.root}
+            <Button
+              class="chart-back"
+              variant="ghost"
+              size="sm"
+              disabled={isNavigating}
+              onclick={() => openDirectory(parentId)}
+            >
+              <ArrowLeft data-icon="inline-start" /> Up
+            </Button>
+          {/if}
 
           <div class="sunburst-wrap">
             {#if sunburstSegments.length > 0}
@@ -845,21 +763,17 @@
             {/if}
 
             <div class="chart-center" aria-live="polite">
-              <span>{formatMetric(sizeMetric)}</span>
               <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
               <em>{activeEntry?.name ?? view.displayName}</em>
             </div>
           </div>
 
-          <p class="chart-help">Ranked by {formatMetric(sizeMetric).toLowerCase()} · Select to inspect · Open folders to drill down</p>
+          <p class="chart-help">Select a segment to explore it</p>
         </div>
 
         <div class="directory-pane">
           <div class="section-heading">
-            <div>
-              <p class="eyebrow">Current folder</p>
-              <h2>Largest first</h2>
-            </div>
+            <h2>{view.displayName}</h2>
             <span>
               {view.itemsTruncated ? `Top ${view.items.length} of ${view.totalItems}` : `${view.totalItems} items`}
             </span>
@@ -872,67 +786,92 @@
               aria-busy={isInspectingCompression}
               aria-live="polite"
             >
-              <div class="selection-name">
-                <span>Selected {inspectedEntry.kind === "file" ? "file" : "item"}</span>
-                <strong title={inspectedEntry.name}>{inspectedEntry.name}</strong>
-              </div>
-              <div class="selection-state">
+              <header class="inspector-heading">
+                <div>
+                  <span>{inspectedEntry.kind === "file" ? "File details" : "Item details"}</span>
+                  <strong title={inspectedEntry.name}>{inspectedEntry.name}</strong>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Close item details"
+                  title="Close"
+                  onclick={clearInspection}
+                ><X /></Button>
+              </header>
+              <div class="inspection-state">
                 <span>Compression</span>
-                <strong
-                  data-state={compressionState?.state ?? "loading"}
-                  title={compressionState?.detail}
-                >
+                <strong data-state={compressionState?.state ?? "loading"}>
                   {isInspectingCompression
-                    ? "Reading metadata…"
+                    ? "Checking…"
                     : compressionState
                       ? formatCompressionState(compressionState)
-                      : "State unavailable"}
+                      : "Unavailable"}
                 </strong>
               </div>
-              {#if compressionState}<p>{compressionState.detail}</p>{/if}
               {#if isEstimatingSavings}
                 <div class="estimate-readout" aria-live="polite">
                   <div>
                     <span>Potential savings</span>
-                    <strong>{isCancellingEstimate ? "Stopping estimate…" : "Sampling up to 768 KB…"}</strong>
+                    <strong>{isCancellingEstimate ? "Stopping…" : "Estimating…"}</strong>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     disabled={isCancellingEstimate}
-                    bind:this={estimateCancelButton}
+                    bind:ref={estimateCancelButton}
                     onclick={cancelEstimate}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               {:else if savingsEstimate}
                 <div class="estimate-readout" data-status={savingsEstimate.status}>
                   <div>
                     <span>Potential savings</span>
                     <strong>{formatSavingsEstimate(savingsEstimate)}</strong>
-                    {#if savingsEstimate.algorithm}
-                      <em>
-                        {savingsEstimate.algorithm} · {savingsEstimate.fidelity === "exact" ? "target codec" : "proxy codec"} · {savingsEstimate.confidence} confidence · {formatBytes(savingsEstimate.sampledBytes)} sampled
-                      </em>
-                    {/if}
                   </div>
                   {#if canEstimateSavings}
-                    <button type="button" bind:this={estimateActionButton} onclick={estimateSavings}>Re-estimate</button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      bind:ref={estimateActionButton}
+                      onclick={estimateSavings}
+                    >Estimate again</Button>
                   {/if}
-                  <p>{savingsEstimate.detail}</p>
+                  <details class="metadata-disclosure">
+                    <summary>Estimate details</summary>
+                    {#if savingsEstimate.algorithm}
+                      <p>
+                        {savingsEstimate.algorithm} · {savingsEstimate.fidelity === "exact" ? "target codec" : "proxy codec"} · {savingsEstimate.confidence} confidence · {formatBytes(savingsEstimate.sampledBytes)} sampled
+                      </p>
+                    {/if}
+                    <p>{savingsEstimate.detail}</p>
+                  </details>
                 </div>
               {:else if canEstimateSavings}
                 <div class="estimate-prompt">
-                  <span>Read up to 768 KB locally for a bounded savings range.</span>
-                  <button type="button" bind:this={estimateActionButton} onclick={estimateSavings}>Estimate savings</button>
+                  <span>See how much space compression might save.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    bind:ref={estimateActionButton}
+                    onclick={estimateSavings}
+                  >Estimate</Button>
                 </div>
+              {/if}
+              {#if compressionState}
+                <details class="metadata-disclosure">
+                  <summary>Compression details</summary>
+                  <p>{compressionState.detail}</p>
+                </details>
               {/if}
             </section>
           {/if}
 
           {#if view.items.length > 0}
             <div class="item-list" class:is-navigating={isNavigating}>
-              {#each view.items as item, index (item.id)}
+              {#each view.items as item (item.id)}
                 <div
                   class="storage-row"
                   data-selected={activeEntry?.id === item.id}
@@ -946,9 +885,8 @@
                     onfocus={() => (selectedEntry = item)}
                     onmouseleave={() => (selectedEntry = null)}
                     onblur={() => (selectedEntry = null)}
-                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", inspect compression state"}`}
+                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
                   >
-                    <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
                     <span class="item-icon" data-kind={item.kind}>
                       {#if item.kind === "directory"}
                         <Folder />
@@ -991,39 +929,44 @@
           {:else}
             <div class="empty-result">
               <Folder />
-              <strong>This folder is empty.</strong>
-              <span>There is nothing to account for here.</span>
+              <strong>This folder is empty</strong>
             </div>
           {/if}
         </div>
       </section>
 
-      <footer class="result-notes">
-        <span>Accounting</span>
-        <p>{formatBackend(result.backend)} ({result.backend})</p>
-        <p>Allocated size {result.allocatedSizeIsEstimate ? "estimated" : "exact"}</p>
-        <p>
-          {result.hardLinkDeduplicationSupported
-            ? "Hard links deduplicated"
-            : "Hard-link deduplication unavailable"}
-        </p>
-        <p>
-          {result.sameFilesystemEnforced
-            ? "Filesystem boundary enforced"
-            : "Filesystem boundary unavailable"}
-        </p>
-        {#if result.skippedEntries > 0}<p>{formatCount(result.skippedEntries)} unreadable entries skipped</p>{/if}
-        {#if result.skippedFilesystems > 0}<p>{formatCount(result.skippedFilesystems)} mounted filesystems not traversed</p>{/if}
-        {#if result.duplicateHardLinks > 0}<p>{formatCount(result.duplicateHardLinks)} duplicate hard links counted once</p>{/if}
-        {#if compressionCapability}
-          <p
-            class="compression-note"
-            data-status={compressionCapability.status}
-            title={compressionCapability.detail}
-            aria-live="polite"
-          >{formatCompressionCapability(compressionCapability)}</p>
-        {/if}
-      </footer>
+      <details class="scan-details">
+        <summary>
+          <span>
+            <strong>Scan details</strong>
+            <small>Scanner, accounting, and skipped items</small>
+          </span>
+          <ChevronRight aria-hidden="true" />
+        </summary>
+        <dl>
+          <div><dt>Scanner</dt><dd>{formatBackend(result.backend)}</dd></div>
+          <div><dt>Space on disk</dt><dd>{result.allocatedSizeIsEstimate ? "Estimated" : "Exact"}</dd></div>
+          <div><dt>Hard links</dt><dd>{result.hardLinkDeduplicationSupported ? "Counted once" : "Not deduplicated"}</dd></div>
+          <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
+          <div><dt>Unreadable items</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
+          <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
+          {#if result.duplicateHardLinks > 0}
+            <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>
+          {/if}
+          {#if compressionCapability}
+            <div class="compression-detail">
+              <dt>Filesystem compression</dt>
+              <dd title={compressionCapability.detail} aria-live="polite">
+                {compressionCapability.status === "inspectOnly"
+                  ? "Available for analysis"
+                  : compressionCapability.status === "unsupported"
+                    ? "Not supported"
+                    : "Couldn’t be checked"}
+              </dd>
+            </div>
+          {/if}
+        </dl>
+      </details>
     </main>
   {/if}
 </div>

@@ -3,7 +3,6 @@ import {
   describeEntry,
   formatBackend,
   formatBytes,
-  formatCompressionCapability,
   formatCompressionState,
   formatDuration,
   formatMetric,
@@ -14,29 +13,6 @@ import {
 } from "./scanner";
 
 describe("scanner presentation helpers", () => {
-  test("keeps read-only compression capability distinct from a writer", () => {
-    expect(
-      formatCompressionCapability({
-        status: "inspectOnly",
-        filesystem: "apfs",
-        volumeSupportsTransparentCompression: true,
-        writerAvailable: false,
-        algorithms: [],
-        detail: "Read-only capability.",
-      }),
-    ).toBe("apfs compression · analysis only");
-    expect(
-      formatCompressionCapability({
-        status: "unsupported",
-        filesystem: "ext4",
-        volumeSupportsTransparentCompression: false,
-        writerAvailable: false,
-        algorithms: [],
-        detail: "Unsupported capability.",
-      }),
-    ).toBe("Compression unavailable on ext4");
-  });
-
   test("labels existing-data state separately from future-write policy", () => {
     expect(
       formatCompressionState({
