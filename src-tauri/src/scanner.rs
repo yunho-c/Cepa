@@ -8,6 +8,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
 const MAX_LIST_ITEMS: usize = 500;
@@ -105,6 +108,13 @@ pub struct ScanResult {
     pub same_filesystem_enforced: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanBackend {
+    Auto,
+    Jwalk,
+    Getattrlistbulk,
+}
+
 #[derive(Debug)]
 pub(crate) struct ScanOutput {
     pub result: ScanResult,
@@ -131,6 +141,25 @@ struct MeasuredMetadata {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct FileIdentity(u64, u64);
+
+#[derive(Debug, Default)]
+struct ScanCounters {
+    files_scanned: u64,
+    directories_scanned: u64,
+    skipped_entries: u64,
+    skipped_filesystems: u64,
+    duplicate_hard_links: u64,
+    observed_logical_bytes: u64,
+    observed_allocated_bytes: u64,
+    seen_files: HashSet<FileIdentity>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ScanSemantics {
+    allocated_size_is_estimate: bool,
+    hard_link_deduplication_supported: bool,
+    same_filesystem_enforced: bool,
+}
 
 #[derive(Debug)]
 struct InternalNode {
@@ -163,7 +192,109 @@ impl InternalNode {
     }
 }
 
+impl ScanCounters {
+    fn push_node(
+        &mut self,
+        nodes: &mut Vec<InternalNode>,
+        parent: NodeId,
+        name: OsString,
+        kind: EntryKind,
+        measured: MeasuredMetadata,
+    ) -> NodeId {
+        let (mut logical_bytes, mut allocated_bytes, file_count, directory_count) = match kind {
+            EntryKind::Directory => {
+                self.directories_scanned += 1;
+                (0, 0, 0, 1)
+            }
+            EntryKind::File => {
+                self.files_scanned += 1;
+                (measured.logical_bytes, measured.allocated_bytes, 1, 0)
+            }
+            EntryKind::Symlink | EntryKind::Other => (0, 0, 0, 0),
+        };
+
+        if let Some(identity) = measured.file_identity
+            && !self.seen_files.insert(identity)
+        {
+            self.duplicate_hard_links += 1;
+            logical_bytes = 0;
+            allocated_bytes = 0;
+        }
+
+        self.observed_logical_bytes = self.observed_logical_bytes.saturating_add(logical_bytes);
+        self.observed_allocated_bytes = self
+            .observed_allocated_bytes
+            .saturating_add(allocated_bytes);
+
+        let node_id = nodes.len();
+        nodes[parent].children.push(node_id);
+        nodes.push(InternalNode {
+            name,
+            parent: Some(parent),
+            children: Vec::new(),
+            kind,
+            logical_bytes,
+            allocated_bytes,
+            file_count,
+            directory_count,
+        });
+        node_id
+    }
+}
+
 pub(crate) fn scan_path<F>(
+    root: &Path,
+    cancel: Arc<AtomicBool>,
+    on_progress: F,
+) -> Result<ScanOutput, String>
+where
+    F: FnMut(ScanProgress),
+{
+    scan_path_with_backend(root, cancel, ScanBackend::Auto, on_progress)
+}
+
+pub(crate) fn scan_path_with_backend<F>(
+    root: &Path,
+    cancel: Arc<AtomicBool>,
+    backend: ScanBackend,
+    mut on_progress: F,
+) -> Result<ScanOutput, String>
+where
+    F: FnMut(ScanProgress),
+{
+    match backend {
+        ScanBackend::Auto => {
+            #[cfg(target_os = "macos")]
+            {
+                match macos::scan_path(root, cancel.clone(), &mut on_progress) {
+                    Ok(output) => return Ok(output),
+                    Err(macos::NativeScanError::Unavailable) => {}
+                    Err(macos::NativeScanError::Fatal(error)) => return Err(error),
+                }
+            }
+            scan_path_jwalk(root, cancel, on_progress)
+        }
+        ScanBackend::Jwalk => scan_path_jwalk(root, cancel, on_progress),
+        ScanBackend::Getattrlistbulk => {
+            #[cfg(target_os = "macos")]
+            {
+                macos::scan_path(root, cancel, &mut on_progress).map_err(|error| match error {
+                    macos::NativeScanError::Unavailable => {
+                        "getattrlistbulk is unavailable for this filesystem.".to_string()
+                    }
+                    macos::NativeScanError::Fatal(error) => error,
+                })
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (root, cancel, on_progress);
+                Err("getattrlistbulk is only available on macOS.".to_string())
+            }
+        }
+    }
+}
+
+fn scan_path_jwalk<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
     mut on_progress: F,
@@ -195,14 +326,7 @@ where
     // without retaining a full-path lookup table.
     let mut ancestor_stack = vec![0];
 
-    let mut seen_files = HashSet::new();
-    let mut files_scanned = 0_u64;
-    let mut directories_scanned = 0_u64;
-    let mut skipped_entries = 0_u64;
-    let mut skipped_filesystems = 0_u64;
-    let mut duplicate_hard_links = 0_u64;
-    let mut observed_logical_bytes = 0_u64;
-    let mut observed_allocated_bytes = 0_u64;
+    let mut counters = ScanCounters::default();
     let mut entries_since_progress = 0_u64;
     let mut last_progress_at = Instant::now();
 
@@ -257,14 +381,14 @@ where
         let entry = match entry_result {
             Ok(entry) => entry,
             Err(_) => {
-                skipped_entries += 1;
+                counters.skipped_entries += 1;
                 continue;
             }
         };
 
         if entry.depth == 0 {
             if entry.read_children_error.is_some() {
-                skipped_entries += 1;
+                counters.skipped_entries += 1;
             }
             continue;
         }
@@ -272,13 +396,13 @@ where
         let measured = match entry.client_state {
             Some(measured) => measured,
             None => {
-                skipped_entries += 1;
+                counters.skipped_entries += 1;
                 continue;
             }
         };
 
         if measured.metadata_error {
-            skipped_entries += 1;
+            counters.skipped_entries += 1;
         }
 
         let kind = if entry.file_type.is_dir() {
@@ -297,35 +421,12 @@ where
                 (Some(root_id), Some(entry_id)) if root_id != entry_id
             );
 
-        let (mut logical_bytes, mut allocated_bytes, file_count, directory_count) = match kind {
-            EntryKind::Directory => {
-                directories_scanned += 1;
-                (0, 0, 0, 1)
-            }
-            EntryKind::File => {
-                files_scanned += 1;
-                (measured.logical_bytes, measured.allocated_bytes, 1, 0)
-            }
-            EntryKind::Symlink | EntryKind::Other => (0, 0, 0, 0),
-        };
-
         if is_other_filesystem {
-            skipped_filesystems += 1;
+            counters.skipped_filesystems += 1;
         }
-
-        if let Some(identity) = measured.file_identity
-            && !seen_files.insert(identity)
-        {
-            duplicate_hard_links += 1;
-            logical_bytes = 0;
-            allocated_bytes = 0;
-        }
-
-        observed_logical_bytes = observed_logical_bytes.saturating_add(logical_bytes);
-        observed_allocated_bytes = observed_allocated_bytes.saturating_add(allocated_bytes);
 
         if entry.read_children_error.is_some() {
-            skipped_entries += 1;
+            counters.skipped_entries += 1;
         }
 
         ancestor_stack.truncate(entry.depth);
@@ -338,39 +439,31 @@ where
                     entry.path().display()
                 )
             })?;
-        let node_id = nodes.len();
-
         entries_since_progress += 1;
-        if entries_since_progress >= PROGRESS_ENTRY_INTERVAL
-            || last_progress_at.elapsed() >= PROGRESS_INTERVAL
-        {
+        let should_report_progress = entries_since_progress >= PROGRESS_ENTRY_INTERVAL
+            || last_progress_at.elapsed() >= PROGRESS_INTERVAL;
+        let current_path =
+            should_report_progress.then(|| entry.path().to_string_lossy().into_owned());
+
+        let node_id = counters.push_node(&mut nodes, parent, entry.file_name, kind, measured);
+        debug_assert_eq!(node_id, nodes.len() - 1);
+        if matches!(kind, EntryKind::Directory) {
+            ancestor_stack.push(node_id);
+        }
+
+        if let Some(current_path) = current_path {
             on_progress(ScanProgress {
-                entries_scanned: files_scanned + directories_scanned,
-                files_scanned,
-                directories_scanned,
-                logical_bytes: observed_logical_bytes,
-                allocated_bytes: observed_allocated_bytes,
-                skipped_entries,
-                current_path: entry.path().to_string_lossy().into_owned(),
+                entries_scanned: counters.files_scanned + counters.directories_scanned,
+                files_scanned: counters.files_scanned,
+                directories_scanned: counters.directories_scanned,
+                logical_bytes: counters.observed_logical_bytes,
+                allocated_bytes: counters.observed_allocated_bytes,
+                skipped_entries: counters.skipped_entries,
+                current_path,
                 elapsed_ms: elapsed_ms(started_at),
             });
             entries_since_progress = 0;
             last_progress_at = Instant::now();
-        }
-
-        nodes[parent].children.push(node_id);
-        nodes.push(InternalNode {
-            name: entry.file_name,
-            parent: Some(parent),
-            children: Vec::new(),
-            kind,
-            logical_bytes,
-            allocated_bytes,
-            file_count,
-            directory_count,
-        });
-        if matches!(kind, EntryKind::Directory) {
-            ancestor_stack.push(node_id);
         }
     }
 
@@ -379,6 +472,40 @@ where
     }
 
     let traversal_completed_at = Instant::now();
+    finish_scan(
+        root,
+        root_node_path,
+        nodes,
+        counters,
+        "jwalk",
+        ScanSemantics {
+            allocated_size_is_estimate: !cfg!(unix),
+            hard_link_deduplication_supported: cfg!(unix),
+            same_filesystem_enforced: root_filesystem.is_some(),
+        },
+        started_at,
+        traversal_completed_at,
+        &cancel,
+        &mut on_progress,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_scan<F>(
+    root: PathBuf,
+    root_node_path: Arc<Path>,
+    mut nodes: Vec<InternalNode>,
+    counters: ScanCounters,
+    backend: &'static str,
+    semantics: ScanSemantics,
+    started_at: Instant,
+    traversal_completed_at: Instant,
+    cancel: &AtomicBool,
+    on_progress: &mut F,
+) -> Result<ScanOutput, String>
+where
+    F: FnMut(ScanProgress),
+{
     let traversal_us = duration_us(traversal_completed_at.duration_since(started_at));
 
     for node_id in (1..nodes.len()).rev() {
@@ -422,7 +549,7 @@ where
         directories_scanned: directory_count,
         logical_bytes,
         allocated_bytes,
-        skipped_entries,
+        skipped_entries: counters.skipped_entries,
         current_path: root.to_string_lossy().into_owned(),
         elapsed_ms,
     });
@@ -441,21 +568,21 @@ where
                 .unwrap_or(root.as_os_str())
                 .to_string_lossy()
                 .into_owned(),
-            backend: "jwalk",
+            backend,
             logical_bytes,
             allocated_bytes,
             file_count,
             directory_count,
-            skipped_entries,
-            skipped_filesystems,
-            duplicate_hard_links,
+            skipped_entries: counters.skipped_entries,
+            skipped_filesystems: counters.skipped_filesystems,
+            duplicate_hard_links: counters.duplicate_hard_links,
             traversal_us,
             aggregation_us,
             indexing_us,
             elapsed_ms,
-            allocated_size_is_estimate: !cfg!(unix),
-            hard_link_deduplication_supported: cfg!(unix),
-            same_filesystem_enforced: root_filesystem.is_some(),
+            allocated_size_is_estimate: semantics.allocated_size_is_estimate,
+            hard_link_deduplication_supported: semantics.hard_link_deduplication_supported,
+            same_filesystem_enforced: semantics.same_filesystem_enforced,
         },
         snapshot,
     })
@@ -730,7 +857,14 @@ mod tests {
         .expect("scan fixture");
         let result = output.result;
 
-        assert_eq!(result.backend, "jwalk");
+        assert_eq!(
+            result.backend,
+            if cfg!(target_os = "macos") {
+                "getattrlistbulk"
+            } else {
+                "jwalk"
+            }
+        );
         assert_eq!(result.logical_bytes, 48);
         assert_eq!(result.file_count, 2);
         assert_eq!(result.directory_count, 1);
@@ -898,6 +1032,66 @@ mod tests {
         assert_eq!(output.result.file_count, 0);
         assert_eq!(view.items.len(), 1);
         assert!(matches!(view.items[0].kind, EntryKind::Symlink));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_backend_matches_portable_accounting() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let nested = temp.path().join("nested");
+        fs::create_dir(&nested).expect("create nested directory");
+        fs::write(temp.path().join("root.bin"), vec![1_u8; 17]).expect("write root file");
+        fs::write(nested.join("child.bin"), vec![2_u8; 31]).expect("write nested file");
+
+        let portable = scan_path_with_backend(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            ScanBackend::Jwalk,
+            |_| {},
+        )
+        .expect("scan with jwalk");
+        let native = scan_path_with_backend(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            ScanBackend::Getattrlistbulk,
+            |_| {},
+        )
+        .expect("scan with getattrlistbulk");
+
+        assert_eq!(portable.result.logical_bytes, native.result.logical_bytes);
+        assert_eq!(
+            portable.result.allocated_bytes,
+            native.result.allocated_bytes
+        );
+        assert_eq!(portable.result.file_count, native.result.file_count);
+        assert_eq!(
+            portable.result.directory_count,
+            native.result.directory_count
+        );
+        assert_eq!(
+            portable.result.duplicate_hard_links,
+            native.result.duplicate_hard_links
+        );
+
+        let portable_view = portable
+            .snapshot
+            .directory_view(1, 0)
+            .expect("build portable view");
+        let native_view = native
+            .snapshot
+            .directory_view(1, 0)
+            .expect("build native view");
+        let portable_items = portable_view
+            .items
+            .iter()
+            .map(|item| (&item.name, item.logical_bytes, item.allocated_bytes))
+            .collect::<Vec<_>>();
+        let native_items = native_view
+            .items
+            .iter()
+            .map(|item| (&item.name, item.logical_bytes, item.allocated_bytes))
+            .collect::<Vec<_>>();
+        assert_eq!(portable_items, native_items);
     }
 
     #[test]

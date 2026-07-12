@@ -3,13 +3,15 @@
 Cepa is a fast, cross-platform disk space analyzer built with Tauri 2, Rust,
 Svelte 5, Tailwind CSS 4, and shadcn-svelte.
 
-The current milestone is a usable portable scanner: choose a folder, watch
-bounded progress updates, and explore the result through a coordinated radial
-storage map and size-ranked directory list. All scanning happens locally.
+The current milestone is a usable cross-platform scanner: choose a folder,
+watch bounded progress updates, and explore the result through a coordinated
+radial storage map and size-ranked directory list. All scanning happens locally.
 
 ## Current capabilities
 
 - Parallel portable traversal with `jwalk`
+- Batched `getattrlistbulk` traversal on macOS, with automatic fallback to
+  `jwalk` when the native API is unavailable for the selected filesystem
 - Native directory picker on supported desktop platforms
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
@@ -27,9 +29,8 @@ returns at most 500 rows for a directory, while the radial chart is bounded to
 combined into an aggregate. These bounds keep bridge and rendering costs
 predictable even when a scan contains millions of entries.
 
-Platform-native scanners (`getattrlistbulk` on macOS, MFT traversal on Windows,
-and `statx` on Linux) and transparent filesystem compression remain roadmap
-work.
+MFT traversal on Windows, `statx` traversal on Linux, native-backend performance
+measurement, and transparent filesystem compression remain roadmap work.
 
 ## Prerequisites
 

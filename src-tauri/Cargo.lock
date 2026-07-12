@@ -281,6 +281,7 @@ name = "cepa"
 version = "0.1.0"
 dependencies = [
  "jwalk",
+ "libc",
  "serde",
  "serde_json",
  "tauri",

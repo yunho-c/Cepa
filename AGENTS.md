@@ -19,15 +19,18 @@ those have been designed and documented.
 
 ## Current state and roadmap
 
-The repository contains the first portable scanner milestone. It can select and
-scan a directory with `jwalk`, stream bounded progress over a Tauri channel,
+The repository contains the first cross-platform scanner milestone. It can
+select and scan a directory, stream bounded progress over a Tauri channel,
 cancel active work, retain an in-memory result snapshot for drill-down, and
-render coordinated radial and list views in Svelte.
+render coordinated radial and list views in Svelte. macOS uses an initial
+`getattrlistbulk` traversal and falls back to `jwalk` when the native API is
+unavailable for the selected filesystem; other platforms use `jwalk`.
 
 The intended scanning architecture is:
 
 - `jwalk` as the implemented portable fallback and behavioral reference.
-- `getattrlistbulk` for an optimized macOS implementation.
+- `getattrlistbulk` as the implemented macOS backend. Its first parity fixture
+  exists, but broader filesystem validation and comparative benchmarks remain.
 - Master File Table (MFT) traversal for an optimized Windows implementation.
 - `statx`-based traversal for an optimized Linux implementation.
 
@@ -116,7 +119,9 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
-- `src-tauri/src/scanner.rs`: portable traversal, compact basename arenas, and aggregation.
+- `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
+  and aggregation.
+- `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.

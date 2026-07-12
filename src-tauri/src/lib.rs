@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::ipc::Channel;
 
-pub use scanner::ScanResult;
+pub use scanner::{ScanBackend, ScanResult};
 
 /// A completed benchmark scan. Retaining the snapshot keeps benchmark timing
 /// aligned with the application, which stores it for interactive drill-down.
@@ -23,7 +23,16 @@ pub struct BenchmarkScan {
 /// Runs the same portable scan and snapshot construction used by the desktop
 /// application while retaining the completed snapshot through measurement.
 pub fn benchmark_scan(path: &Path) -> Result<BenchmarkScan, String> {
-    let output = scanner::scan_path(path, Arc::new(AtomicBool::new(false)), |_| {})?;
+    benchmark_scan_with_backend(path, ScanBackend::Jwalk)
+}
+
+/// Runs a benchmark scan with an explicitly selected traversal backend.
+pub fn benchmark_scan_with_backend(
+    path: &Path,
+    backend: ScanBackend,
+) -> Result<BenchmarkScan, String> {
+    let output =
+        scanner::scan_path_with_backend(path, Arc::new(AtomicBool::new(false)), backend, |_| {})?;
     let view_started_at = Instant::now();
     let initial_view = output.snapshot.directory_view(0, 0)?;
     Ok(BenchmarkScan {
