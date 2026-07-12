@@ -3,6 +3,7 @@ use super::{
     PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
     finish_scan, observe_partial_file,
 };
+use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
 use libc::{self, attribute_set_t, attrlist, attrreference_t};
 use std::ffi::OsString;
@@ -514,6 +515,8 @@ fn requested_attributes() -> attrlist {
             | libc::ATTR_CMN_NAME
             | libc::ATTR_CMN_DEVID
             | libc::ATTR_CMN_OBJTYPE
+            | libc::ATTR_CMN_MODTIME
+            | libc::ATTR_CMN_CHGTIME
             | libc::ATTR_CMN_FLAGS
             | libc::ATTR_CMN_FILEID
             | ATTR_CMN_ERROR,
@@ -550,6 +553,8 @@ fn parse_entry(record: &[u8]) -> Result<NativeEntry, String> {
     let name = referenced_name(record, name_reference_offset, name_reference)?;
     let device = cursor.read::<libc::dev_t>()?;
     let object_type = cursor.read::<u32>()?;
+    let modified = cursor.read::<libc::timespec>()?;
+    let changed = cursor.read::<libc::timespec>()?;
     let flags = cursor.read::<u32>()?;
     let file_id = cursor.read::<u64>()?;
     let kind = match object_type {
@@ -582,6 +587,15 @@ fn parse_entry(record: &[u8]) -> Result<NativeEntry, String> {
     let identity_attributes_valid = returned.commonattr
         & (libc::ATTR_CMN_DEVID | libc::ATTR_CMN_FILEID)
         == (libc::ATTR_CMN_DEVID | libc::ATTR_CMN_FILEID);
+    let revision_attributes_valid = returned.commonattr
+        & (libc::ATTR_CMN_DEVID
+            | libc::ATTR_CMN_FILEID
+            | libc::ATTR_CMN_MODTIME
+            | libc::ATTR_CMN_CHGTIME)
+        == (libc::ATTR_CMN_DEVID
+            | libc::ATTR_CMN_FILEID
+            | libc::ATTR_CMN_MODTIME
+            | libc::ATTR_CMN_CHGTIME);
 
     Ok(NativeEntry {
         name,
@@ -603,6 +617,18 @@ fn parse_entry(record: &[u8]) -> Result<NativeEntry, String> {
                 && identity_attributes_valid
                 && link_count > 1)
                 .then_some(FileIdentity(device as u64, file_id)),
+            scan_revision: (matches!(kind, EntryKind::File) && revision_attributes_valid)
+                .then(|| {
+                    ScannedFileRevision::from_unix_parts(
+                        device as u64,
+                        file_id,
+                        modified.tv_sec,
+                        modified.tv_nsec,
+                        changed.tv_sec,
+                        changed.tv_nsec,
+                    )
+                })
+                .flatten(),
             metadata_error: matches!(kind, EntryKind::File) && !file_attributes_valid,
         },
         entry_error,

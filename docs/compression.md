@@ -270,19 +270,23 @@ Step 1.5 implements a dormant, read-only `CompressionPlan` protocol. Preparation
 accepts only a completed scan ID, opaque node ID, and requested operation. It
 reopens regular files without following links, checks scan size and exact
 allocation where the scan backend provides it, and records an immutable
-platform-specific metadata revision. Unix revisions include device, inode, size,
-allocation, modification/change timestamps, and link count. Windows revisions
-include volume serial, file ID, exact size/allocation, last-write/change times,
-and link count. Revalidation returns `valid`, `changed`, or `unavailable`; a new
-scan or newer plan invalidates the previous plan.
+platform-specific metadata revision. The scanner retains a compact 32-byte
+revision for regular files when the backend supplies a nonzero stable file ID
+and exact timestamps. Unix revisions include device, inode, modification time,
+and change time; Windows revisions include volume serial, file ID, last-write
+time, and change time. Preparation requires that retained revision to match the
+reopened file before it checks current size and allocation. Revalidation also
+includes size, allocation, and link count and returns `valid`, `changed`, or
+`unavailable`; a new scan or newer plan invalidates the previous plan.
 
 Every preview currently contains a `writerUnavailable` blocker, no apply command
 exists, and the UI intentionally exposes no dead-end planning action. The
 metadata revision is not a content fingerprint, and the retained scan snapshot
-does not yet carry scan-time identity for every node. Consequently an
-identical-size replacement between scan and planning, or a same-clock-tick data
-rewrite on a coarse-timestamp filesystem, is not fully distinguishable. A future
-writer must close both gaps with a measured scan identity design and a
+rejects planning when a usable scan-time revision is unavailable. Tests cover
+identical-size replacement and rewrite between scanning and planning. A
+same-clock-tick rewrite—or delete/recreate that reuses the same file ID within
+that tick—can still be indistinguishable because the revision is metadata, not a
+content fingerprint. A future writer must close that remaining gap with a
 held-handle/content-integrity strategy; this preview is not mutation authority.
 
 Step 2 is implemented as a bounded, cancellable per-file estimator and candidate
@@ -296,7 +300,7 @@ gates.
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.
 2. Add bounded local estimation and candidate UX without mutation.
-3. Complete scan-to-plan identity and held-handle/content-integrity gates, then
+3. Complete the held-handle/content-integrity gate, then
    pilot explicit regular-file NTFS compression/decompression behind an
    experimental flag.
 4. Add Btrfs future-write policy, then separately gate existing-extent rewrite.
@@ -309,7 +313,9 @@ gates.
 - Microsoft: [`FSCTL_SET_COMPRESSION`](https://learn.microsoft.com/windows/win32/api/winioctl/ni-winioctl-fsctl_set_compression),
   [`FSCTL_GET_COMPRESSION`](https://learn.microsoft.com/windows/win32/api/winioctl/ni-winioctl-fsctl_get_compression),
   [`GetVolumeInformationW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationw),
-  and [`GetCompressedFileSizeW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getcompressedfilesizew).
+  [`GetCompressedFileSizeW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-getcompressedfilesizew),
+  [`GetFileInformationByHandleEx`](https://learn.microsoft.com/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex),
+  and [`FILE_BASIC_INFO`](https://learn.microsoft.com/windows/win32/api/winbase/ns-winbase-file_basic_info).
 - Btrfs documentation: [Compression](https://btrfs.readthedocs.io/en/latest/Compression.html),
   [`btrfs-property`](https://btrfs.readthedocs.io/en/latest/btrfs-property.html),
   and [`btrfs-filesystem defragment`](https://btrfs.readthedocs.io/en/latest/btrfs-filesystem.html#defragment).

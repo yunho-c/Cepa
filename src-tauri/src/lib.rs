@@ -1,4 +1,5 @@
 mod compression;
+mod file_revision;
 mod scanner;
 
 use scanner::{CompressionTarget, DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
@@ -683,12 +684,16 @@ mod tests {
         };
         #[cfg(not(unix))]
         let allocated_bytes = metadata.len();
+        let scan_revision = crate::file_revision::snapshot_no_follow(&path)
+            .ok()
+            .map(|snapshot| snapshot.scanned);
         let target = scanner::CompressionTarget {
             path,
             kind: scanner::EntryKind::File,
             logical_bytes: metadata.len(),
             allocated_bytes,
             allocated_size_is_estimate: !cfg!(unix),
+            scan_revision,
         };
 
         let state = CompressionPlanState::default();

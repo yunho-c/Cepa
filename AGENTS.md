@@ -54,8 +54,7 @@ Selecting a non-directory item requests its compression state through the same
 retained scan/node boundary. macOS and Windows report existing-data metadata;
 Btrfs reports future-write inode policy because those flags do not prove that
 existing extents are compressed. The inspector opens or stats paths without
-following links. It does not create the stronger immutable identity/revision
-snapshot required by a future mutation plan.
+following links. Inspection alone does not create a mutation plan.
 Savings estimation begins only from an explicit file action. It reads at most
 three aligned 256 KiB ranges, is cancellable, rejects changed sizes and links, and
 returns lower/upper savings bounds with confidence and algorithm fidelity. Windows
@@ -67,10 +66,12 @@ Compression-plan preparation is also scan-authorized: the frontend supplies a
 completed scan ID, opaque node ID, and operation, never a path. Rust opens the
 file without following links, snapshots platform identity and revision metadata,
 and can revalidate that immutable plan. A new scan or newer plan invalidates the
-old plan. The current snapshot is metadata-based, not a content fingerprint, and
-the scanner does not retain scan-time identity for every node. These are explicit
-writer gates: do not add an apply command or expose a dead-end plan UI until a
-held-handle/content-integrity design and scan-to-plan identity contract exist.
+old plan. For regular files, the scanner retains a compact exact identity plus
+modification/change revision when the backend can provide it, and preparation
+rejects unavailable or mismatched scan-time revisions before producing a plan.
+This metadata is not a content fingerprint: same-clock-tick inode reuse or data
+rewrites may remain indistinguishable. Do not add an apply command or expose a
+dead-end plan UI until a held-handle/content-integrity design closes that gate.
 
 The intended scanning architecture is:
 

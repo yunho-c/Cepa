@@ -4,6 +4,7 @@ use super::{
     PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
     finish_scan, observe_partial_file,
 };
+use crate::file_revision::ScannedFileRevision;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString, c_void};
 use std::fs::File;
@@ -23,12 +24,12 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_ATTRIBUTE_DIRECTORY,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_ID_DESCRIPTOR, FILE_ID_DESCRIPTOR_0, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-    FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileIdType, FileStandardInfo, FindClose,
-    FindFirstFileNameW, FindNextFileNameW, GetFileInformationByHandle,
-    GetFileInformationByHandleEx, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
-    GetVolumePathNameW, OPEN_EXISTING, OpenFileById,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_DESCRIPTOR, FILE_ID_DESCRIPTOR_0, FILE_READ_ATTRIBUTES,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileBasicInfo,
+    FileIdType, FileStandardInfo, FindClose, FindFirstFileNameW, FindNextFileNameW,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
+    GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, OPEN_EXISTING, OpenFileById,
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, MFT_ENUM_DATA_V0};
@@ -417,6 +418,18 @@ fn measure_file_by_id(
     if success == 0 {
         return Err(io::Error::last_os_error());
     }
+    let mut basic = FILE_BASIC_INFO::default();
+    let success = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            (&mut basic as *mut FILE_BASIC_INFO).cast(),
+            size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    if success == 0 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(WindowsMeasurement {
         measured: MeasuredMetadata {
             logical_bytes: u64::try_from(standard.EndOfFile).unwrap_or(0),
@@ -424,6 +437,12 @@ fn measure_file_by_id(
             filesystem_id: Some(volume_serial),
             file_identity: (standard.NumberOfLinks > 1)
                 .then_some(FileIdentity(volume_serial, reference)),
+            scan_revision: ScannedFileRevision::from_raw_parts(
+                volume_serial,
+                reference,
+                basic.LastWriteTime as u64,
+                basic.ChangeTime as u64,
+            ),
             metadata_error: false,
         },
         link_count: standard.NumberOfLinks,

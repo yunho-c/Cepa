@@ -508,6 +508,9 @@ mod tests {
             logical_bytes,
             allocated_bytes,
             allocated_size_is_estimate: !cfg!(unix),
+            scan_revision: crate::file_revision::snapshot_no_follow(path)
+                .ok()
+                .map(|snapshot| snapshot.scanned),
         }
     }
 

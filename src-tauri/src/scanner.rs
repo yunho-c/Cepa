@@ -10,6 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::file_revision::ScannedFileRevision;
+
 #[cfg(target_os = "linux")]
 #[path = "scanner/linux.rs"]
 mod linux;
@@ -223,6 +225,7 @@ pub(crate) struct CompressionTarget {
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
     pub allocated_size_is_estimate: bool,
+    pub scan_revision: Option<ScannedFileRevision>,
 }
 
 type NodeId = usize;
@@ -233,6 +236,7 @@ struct MeasuredMetadata {
     allocated_bytes: u64,
     filesystem_id: Option<u64>,
     file_identity: Option<FileIdentity>,
+    scan_revision: Option<ScannedFileRevision>,
     metadata_error: bool,
 }
 
@@ -288,6 +292,7 @@ struct InternalNode {
     allocated_bytes: u64,
     file_count: u64,
     directory_count: u64,
+    scan_revision: Option<ScannedFileRevision>,
 }
 
 impl InternalNode {
@@ -301,6 +306,7 @@ impl InternalNode {
             allocated_bytes: 0,
             file_count: 0,
             directory_count: 1,
+            scan_revision: None,
         }
     }
 
@@ -355,6 +361,7 @@ impl ScanCounters {
             allocated_bytes,
             file_count,
             directory_count,
+            scan_revision: measured.scan_revision,
         });
 
         let mut replaced_owner = None;
@@ -634,6 +641,19 @@ where
                 match child.metadata() {
                     Ok(metadata) => {
                         let measured = measure_metadata(&metadata, child.file_type.is_file());
+                        #[cfg(windows)]
+                        let measured = if child.file_type.is_file() {
+                            MeasuredMetadata {
+                                scan_revision: crate::file_revision::snapshot_no_follow(
+                                    &child.path(),
+                                )
+                                .ok()
+                                .map(|snapshot| snapshot.scanned),
+                                ..measured
+                            }
+                        } else {
+                            measured
+                        };
                         if child.file_type.is_dir()
                             && root_filesystem.is_some()
                             && measured.filesystem_id != root_filesystem
@@ -890,6 +910,7 @@ impl ScanSnapshot {
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
             allocated_size_is_estimate: self.allocated_size_is_estimate,
+            scan_revision: node.scan_revision,
         })
     }
 
@@ -1223,6 +1244,7 @@ fn measure_metadata(metadata: &Metadata, is_file: bool) -> MeasuredMetadata {
         allocated_bytes,
         filesystem_id: filesystem_id(metadata),
         file_identity: is_file.then(|| file_identity(metadata)).flatten(),
+        scan_revision: is_file.then(|| scanned_file_revision(metadata)).flatten(),
         metadata_error: false,
     }
 }
@@ -1257,6 +1279,16 @@ fn file_identity(metadata: &Metadata) -> Option<FileIdentity> {
 
 #[cfg(not(unix))]
 fn file_identity(_: &Metadata) -> Option<FileIdentity> {
+    None
+}
+
+#[cfg(unix)]
+fn scanned_file_revision(metadata: &Metadata) -> Option<ScannedFileRevision> {
+    ScannedFileRevision::from_unix_metadata(metadata)
+}
+
+#[cfg(not(unix))]
+fn scanned_file_revision(_: &Metadata) -> Option<ScannedFileRevision> {
     None
 }
 
@@ -1337,6 +1369,14 @@ mod tests {
             .find(|item| item.name == "root.bin")
             .expect("root file item")
             .id;
+        let compression_target = output
+            .snapshot
+            .compression_target(file_id)
+            .expect("build compression target");
+        assert!(
+            compression_target.scan_revision.is_some(),
+            "supported scanner backends must retain a planning revision"
+        );
         assert_eq!(
             output
                 .snapshot
@@ -1827,6 +1867,7 @@ mod tests {
                 allocated_bytes: 100,
                 file_count: 1,
                 directory_count: 0,
+                scan_revision: None,
             });
         }
         let sparse_id = nodes.len();
@@ -1840,6 +1881,7 @@ mod tests {
             allocated_bytes: 0,
             file_count: 1,
             directory_count: 0,
+            scan_revision: None,
         });
         root.logical_bytes = (MAX_LIST_ITEMS as u64 + 1) * 10 + 10_000;
         root.allocated_bytes = (MAX_LIST_ITEMS as u64 + 1) * 100;

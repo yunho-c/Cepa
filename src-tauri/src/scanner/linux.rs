@@ -3,6 +3,7 @@ use super::{
     PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
     finish_scan, observe_partial_file,
 };
+use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
 use rustix::fd::OwnedFd;
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, RawDir, Statx, StatxFlags, open, openat, statx};
@@ -465,6 +466,18 @@ fn read_entry(
             filesystem_id: Some(device),
             file_identity: (matches!(kind, EntryKind::File) && stat.stx_nlink > 1)
                 .then_some(FileIdentity(device, stat.stx_ino)),
+            scan_revision: matches!(kind, EntryKind::File)
+                .then(|| {
+                    ScannedFileRevision::from_unix_parts(
+                        device,
+                        stat.stx_ino,
+                        stat.stx_mtime.tv_sec,
+                        i64::from(stat.stx_mtime.tv_nsec),
+                        stat.stx_ctime.tv_sec,
+                        i64::from(stat.stx_ctime.tv_nsec),
+                    )
+                })
+                .flatten(),
             metadata_error: false,
         },
         mount_boundary,

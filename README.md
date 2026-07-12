@@ -30,6 +30,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
+- Compact scan-time file identity and revision retention across native and
+  portable backends, used to reject changed files before compression planning
 - Scan-authorized, read-only volume compression capability reporting on macOS,
   Windows, and Linux, with unsupported and unavailable states kept explicit
 - Selection-driven, no-follow compression-state inspection for regular files:
@@ -61,8 +63,10 @@ cancellation, but `statx` was slower than `jwalk` on all three warm workloads;
 Cepa does not claim a Linux speedup. The app can prepare and revalidate an
 immutable, scan-authorized single-file plan preview,
 but every preview is blocked because no writer exists. This dormant protocol has
-no UI action and does not authorize mutation; scan-to-plan identity retention and
-content-integrity gating remain required before an apply command can exist. The
+no UI action and does not authorize mutation. Planning now requires an exact
+retained scan-time identity/revision match, closing ordinary identical-size
+replacement and rewrite gaps; same-clock-tick metadata collisions and
+content-integrity/held-handle gating remain before an apply command can exist. The
 scan-details disclosure, selection inspector, and bounded estimator are likewise
 read-only and never infer compression state from allocated size.
 The safety and backend contract is specified in

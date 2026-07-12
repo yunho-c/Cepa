@@ -404,6 +404,38 @@ Raw evidence is preserved in
 and
 [`performance-results/2026-07-12-linux-result-queue-strace.csv`](performance-results/2026-07-12-linux-result-queue-strace.csv).
 
+### 2026-07-12 scan-time revision retention
+
+Compression planning now retains a 32-byte file identity/revision field in each
+scanner node and populates it for regular files. `Option<ScannedFileRevision>`
+is also exactly 32 bytes through a nonzero file-ID niche, so unavailable
+revisions need no additional tag. Native macOS and
+Linux obtain the timestamps from their existing batched metadata records;
+Windows adds one `FileBasicInfo` query to the already-open file-ID handle.
+
+Fresh interleaved A/B runs compared commit `c857e86` with the revision-retaining
+scanner. On the 100,001-file APFS fixtures, eleven paired warm runs found no
+throughput regression: median native wall time changed from 140.24 to 134.14 ms
+on the directory-rich fixture and from 172.74 to 171.82 ms on the wide fixture.
+Five paired process-RSS observations on the directory-rich fixture increased
+from a 34,668,544-byte median to 38,010,880 bytes, a 3,342,336-byte increase
+consistent with the intentional 32-byte revision per file plus allocator noise.
+
+The native Linux release harness passed 44 tests. On a fresh ext4 fixture with
+100,001 files and 1,010 directories, nine warm `statx` runs had a 23.86 ms median
+traversal and 25.12 ms median wall time; one `/usr/bin/time -v` observation used
+18,712 KiB peak RSS. Rust 1.97 also advanced the full Tauri compile through the
+dependency MSRV gate; it now stops at the host's missing `dbus-1.pc`, outside the
+scanner module graph.
+
+The native Windows release harness passed 35 tests. Eleven interleaved runs on
+an 8,001-file NTFS fixture compared otherwise identical binaries before and
+after the extra `FileBasicInfo` query. Median MFT traversal changed from 122.22
+to 118.62 ms, so this sample likewise found no measurable regression. These are
+warm synthetic results, not evidence about cold-cache or antivirus-heavy
+systems. Summary samples are preserved in
+[`performance-results/2026-07-12-scan-revision-impact.csv`](performance-results/2026-07-12-scan-revision-impact.csv).
+
 ### 2026-07-12 Windows NTFS MFT validation
 
 The Windows backend was compiled and run natively over SSH on an AMD64 Windows

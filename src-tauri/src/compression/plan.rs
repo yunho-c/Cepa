@@ -1,11 +1,8 @@
 use serde::{Deserialize, Serialize};
-#[cfg(windows)]
-use std::fs::File;
-#[cfg(unix)]
-use std::fs::OpenOptions;
 use std::io;
 use std::path::Path;
 
+use crate::file_revision::{self, ScannedFileRevision};
 use crate::scanner::{CompressionTarget, EntryKind};
 
 use super::{CompressionCapabilityStatus, CompressionStateKind, inspect, probe};
@@ -95,22 +92,10 @@ impl PreparedCompressionPlan {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct FileRevision {
-    identity: StableIdentity,
+    scanned: ScannedFileRevision,
     logical_bytes: u64,
     allocated_bytes: Option<u64>,
-    modified_seconds: i64,
-    modified_subseconds: i64,
-    changed_seconds: i64,
-    changed_subseconds: i64,
     link_count: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum StableIdentity {
-    #[cfg(unix)]
-    Unix { device: u64, inode: u64 },
-    #[cfg(windows)]
-    Windows { volume_serial: u64, file_id: u64 },
 }
 
 pub(super) fn prepare(
@@ -126,6 +111,15 @@ pub(super) fn prepare(
 
     let revision = snapshot_revision(&target.path)
         .map_err(|error| format!("The file could not be opened safely for planning: {error}."))?;
+    let scanned_revision = target.scan_revision.ok_or_else(|| {
+        "The scan could not retain a stable file identity and revision; rescan with a supported backend before planning."
+            .to_string()
+    })?;
+    if revision.scanned != scanned_revision {
+        return Err(
+            "The file identity or revision changed after the scan; rescan before planning.".into(),
+        );
+    }
     if revision.logical_bytes != target.logical_bytes {
         return Err("The file size changed after the scan; rescan before planning.".into());
     }
@@ -256,129 +250,14 @@ pub(super) fn revalidate(plan: &PreparedCompressionPlan) -> PlanValidation {
     }
 }
 
-#[cfg(unix)]
 fn snapshot_revision(path: &Path) -> io::Result<FileRevision> {
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
-
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-        .open(path)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the path is no longer a regular file",
-        ));
-    }
+    let snapshot = file_revision::snapshot_no_follow(path)?;
     Ok(FileRevision {
-        identity: StableIdentity::Unix {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        },
-        logical_bytes: metadata.len(),
-        allocated_bytes: Some(metadata.blocks().saturating_mul(512)),
-        modified_seconds: metadata.mtime(),
-        modified_subseconds: metadata.mtime_nsec(),
-        changed_seconds: metadata.ctime(),
-        changed_subseconds: metadata.ctime_nsec(),
-        link_count: metadata.nlink(),
+        scanned: snapshot.scanned,
+        logical_bytes: snapshot.logical_bytes,
+        allocated_bytes: snapshot.allocated_bytes,
+        link_count: snapshot.link_count,
     })
-}
-
-#[cfg(windows)]
-fn snapshot_revision(path: &Path) -> io::Result<FileRevision> {
-    use std::mem::size_of;
-    use std::os::windows::ffi::OsStrExt;
-    use std::os::windows::io::{AsRawHandle, FromRawHandle};
-    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-    use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO,
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileBasicInfo, FileStandardInfo,
-        GetFileInformationByHandle, GetFileInformationByHandleEx, OPEN_EXISTING,
-    };
-
-    let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
-    wide.push(0);
-    let handle = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            std::ptr::null(),
-            OPEN_EXISTING,
-            FILE_FLAG_OPEN_REPARSE_POINT,
-            std::ptr::null_mut(),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    let file = unsafe { File::from_raw_handle(handle) };
-    let mut information = BY_HANDLE_FILE_INFORMATION::default();
-    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the path is a reparse point",
-        ));
-    }
-    let mut standard = FILE_STANDARD_INFO::default();
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle(),
-            FileStandardInfo,
-            (&mut standard as *mut FILE_STANDARD_INFO).cast(),
-            size_of::<FILE_STANDARD_INFO>() as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    if standard.Directory {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the path is no longer a regular file",
-        ));
-    }
-    let mut basic = FILE_BASIC_INFO::default();
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle(),
-            FileBasicInfo,
-            (&mut basic as *mut FILE_BASIC_INFO).cast(),
-            size_of::<FILE_BASIC_INFO>() as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-
-    Ok(FileRevision {
-        identity: StableIdentity::Windows {
-            volume_serial: u64::from(information.dwVolumeSerialNumber),
-            file_id: u64::from(information.nFileIndexHigh) << 32
-                | u64::from(information.nFileIndexLow),
-        },
-        logical_bytes: u64::try_from(standard.EndOfFile).unwrap_or(0),
-        allocated_bytes: Some(u64::try_from(standard.AllocationSize).unwrap_or(0)),
-        modified_seconds: basic.LastWriteTime,
-        modified_subseconds: 0,
-        changed_seconds: basic.ChangeTime,
-        changed_subseconds: 0,
-        link_count: u64::from(standard.NumberOfLinks),
-    })
-}
-
-#[cfg(not(any(unix, windows)))]
-fn snapshot_revision(_path: &Path) -> io::Result<FileRevision> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "stable file identity is unavailable on this platform",
-    ))
 }
 
 #[cfg(test)]
@@ -401,6 +280,9 @@ mod tests {
             logical_bytes: metadata.len(),
             allocated_bytes,
             allocated_size_is_estimate: !cfg!(unix),
+            scan_revision: file_revision::snapshot_no_follow(path)
+                .ok()
+                .map(|snapshot| snapshot.scanned),
         }
     }
 
@@ -448,6 +330,37 @@ mod tests {
         assert_eq!(validation.status, PlanValidationStatus::Changed);
     }
 
+    #[test]
+    fn preparation_rejects_same_length_replacement_after_scan() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        let original = temp.path().join("original.bin");
+        fs::write(&path, b"before").expect("write fixture");
+        let stale = target(&path);
+        fs::rename(&path, &original).expect("move scanned file aside");
+        fs::write(&path, b"after!").expect("replace fixture at the same length");
+
+        let error = prepare(1, 1, 1, stale, CompressionOperation::Compress)
+            .expect_err("replacement after scan must fail");
+
+        assert!(error.contains("identity or revision changed"));
+    }
+
+    #[test]
+    fn preparation_rejects_same_length_rewrite_after_scan() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, b"before").expect("write fixture");
+        let stale = target(&path);
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        fs::write(&path, b"after!").expect("rewrite fixture at the same length");
+
+        let error = prepare(1, 1, 1, stale, CompressionOperation::Compress)
+            .expect_err("rewrite after scan must fail");
+
+        assert!(error.contains("identity or revision changed"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn revalidation_refuses_a_symlink_replacement() {
@@ -480,5 +393,19 @@ mod tests {
             .expect_err("stale scan size must fail");
 
         assert!(error.contains("size changed"));
+    }
+
+    #[test]
+    fn preparation_rejects_an_unavailable_scan_revision() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, b"unchanged").expect("write fixture");
+        let mut target = target(&path);
+        target.scan_revision = None;
+
+        let error = prepare(1, 1, 1, target, CompressionOperation::Compress)
+            .expect_err("missing scan identity must fail");
+
+        assert!(error.contains("could not retain a stable file identity"));
     }
 }
