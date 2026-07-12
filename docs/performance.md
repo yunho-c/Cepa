@@ -26,9 +26,9 @@ just benchmark-scan /tmp/cepa-fixture 9 jwalk > /tmp/cepa-report.json
 ```
 
 On macOS, pass `getattrlistbulk` instead of `jwalk` to compare the native
-backend on the identical fixture. `auto` measures the backend selected by the
-desktop application. The default remains `jwalk` so historical portable
-baselines stay directly reproducible.
+backend on the identical fixture. On Linux, pass `statx`. `auto` measures the
+backend selected by the desktop application. The default remains `jwalk` so
+historical portable baselines stay directly reproducible.
 
 The harness performs one unmeasured warmup followed by the requested measured
 runs. Progress is written to stderr and schema-versioned JSON to stdout. It
@@ -39,6 +39,8 @@ Compare two backends on a quiescent tree:
 
 ```sh
 just validate-scan /path/to/tree jwalk getattrlistbulk
+# Linux:
+just validate-scan /path/to/tree jwalk statx
 ```
 
 The parity command compares every correctness-relevant `ScanResult` field,
@@ -50,6 +52,8 @@ Measure cancellation initiated by a separate thread after a progress boundary:
 
 ```sh
 just benchmark-cancellation /tmp/cepa-fixture getattrlistbulk 9 2048
+# Linux:
+just benchmark-cancellation /tmp/cepa-fixture statx 9 2048
 ```
 
 This performs one complete warmup, then reports scan elapsed time and the time
@@ -244,6 +248,54 @@ The directory-rich throughput tradeoff is retained intentionally: avoiding
 repeated ancestor bytes materially improves the multi-million-entry memory
 ceiling, while the measured regression is small and explicit.
 
+## Linux native validation contract
+
+Linux `auto` first attempts the native backend and falls back to `jwalk` when
+`statx` is unavailable or does not report both basic metadata and mount IDs. The
+native traversal reads 64 KiB `getdents64` buffers through `rustix::fs::RawDir`,
+requests no-follow `statx` metadata relative to open directory descriptors, and
+passes at most 512 entries per result batch. Worker and result queues are bounded
+to twice a pool capped at eight workers.
+
+Directories are opened relative to a retained parent descriptor only when a
+worker schedules them. The opened descriptor's device, inode, and mount ID must
+still match the discovery snapshot before traversal. A changed directory is
+skipped, symlinks are not followed, and a different `stx_mnt_id` is recorded as
+a skipped filesystem. Hard-link identity uses device plus inode, while physical
+size uses `stx_blocks * 512`.
+
+Linux-native unit tests cover automatic selection, portable parity, hard-link
+ownership, no-follow symlinks, bounded progress cancellation, and file-type and
+device mapping. CI additionally generates a 4,096-file fixture, adds hard-link
+and external-symlink cases, runs the parity harness, and measures three native
+cancellation runs. These are correctness and responsiveness gates, not a
+throughput baseline. No Linux speedup is claimed until native release benchmarks
+are recorded with the environment and raw results.
+
+The syscall contracts are documented by the Linux man-pages for
+[`getdents64`](https://man7.org/linux/man-pages/man2/getdents.2.html) and
+[`statx`](https://man7.org/linux/man-pages/man2/statx.2.html); the safe wrappers
+used here are documented by
+[`rustix::fs::RawDir`](https://docs.rs/rustix/latest/rustix/fs/struct.RawDir.html)
+and [`rustix::fs::statx`](https://docs.rs/rustix/latest/rustix/fs/fn.statx.html).
+
+### 2026-07-11 Linux container correctness run
+
+The complete Rust/Tauri test suite and strict Clippy passed in an arm64 Debian
+Bookworm container with Rust 1.88.0, LinuxKit kernel 5.15.49, Docker Desktop
+24.0.5, and a 4 KiB-block overlayfs fixture. This validates a real Linux syscall
+path but not a representative native installation or storage device.
+
+The debug-profile parity harness matched all correctness fields for 4,099 files,
+33 directories, one duplicate hard link, a directory symlink outside the root,
+16,777,411 logical bytes, and 8,192 allocated bytes. Three debug cancellation
+runs returned in 271–334 us after the progress boundary. Those timings only
+bound this fixture's responsiveness; they are not release throughput results.
+The raw reports are preserved in
+[`performance-results/2026-07-11-linux-container-statx-parity.json`](performance-results/2026-07-11-linux-container-statx-parity.json)
+and
+[`performance-results/2026-07-11-linux-container-statx-cancellation.json`](performance-results/2026-07-11-linux-container-statx-cancellation.json).
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
@@ -260,5 +312,6 @@ Before generalizing these results beyond the measured workloads, add:
 - snapshot-owned bytes per entry and scaling beyond 100,000 entries;
 - cancellation latency during deliberately long aggregation work;
 - IPC serialization and first-render timing;
-- portable-versus-native parity and throughput on Windows and Linux once their
-  native backends exist.
+- portable-versus-native throughput and real-tree parity on Linux;
+- portable-versus-native parity and throughput on Windows once its native
+  backend exists.

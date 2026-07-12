@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "path": "/tmp/cepa-statx-fixture",
+  "backend": "statx",
+  "triggerAfterEntries": 1024,
+  "warmupRuns": 1,
+  "workloadEntries": 4132,
+  "runs": [
+    {
+      "entriesAtRequest": 2047,
+      "scanElapsedUs": 3689,
+      "cancellationLatencyUs": 321
+    },
+    {
+      "entriesAtRequest": 2047,
+      "scanElapsedUs": 3498,
+      "cancellationLatencyUs": 271
+    },
+    {
+      "entriesAtRequest": 2047,
+      "scanElapsedUs": 3619,
+      "cancellationLatencyUs": 334
+    }
+  ],
+  "summary": {
+    "medianCancellationLatencyUs": 321.0,
+    "minCancellationLatencyUs": 271,
+    "maxCancellationLatencyUs": 334,
+    "medianScanElapsedUs": 3619.0
+  }
+}

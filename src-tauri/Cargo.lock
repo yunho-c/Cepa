@@ -431,6 +431,7 @@ dependencies = [
  "libc",
  "lznt1",
  "miniz_oxide",
+ "rustix",
  "serde",
  "serde_json",
  "tauri",

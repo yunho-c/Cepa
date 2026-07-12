@@ -28,8 +28,9 @@ The repository contains the first cross-platform scanner milestone. It can
 select and scan a directory, stream bounded progress over a Tauri channel,
 cancel active work, retain an in-memory result snapshot for drill-down, and
 render coordinated radial and list views in Svelte. macOS uses an initial
-`getattrlistbulk` traversal and falls back to `jwalk` when the native API is
-unavailable for the selected filesystem; other platforms use `jwalk`.
+`getattrlistbulk` traversal, Linux uses `getdents64` directory batches plus
+`statx` metadata, and both fall back to `jwalk` when their required native API
+or fields are unavailable. Windows currently uses `jwalk`.
 The UI reports the backend and accounting semantics returned by each completed
 scan and has explicit cancellation and navigation-error states.
 Hard-linked bytes are deterministically assigned to the lexicographically first
@@ -65,7 +66,9 @@ The intended scanning architecture is:
   plus synthetic and local real-tree validation exist, but broader filesystem
   coverage and cold-cache measurements remain.
 - Master File Table (MFT) traversal for an optimized Windows implementation.
-- `statx`-based traversal for an optimized Linux implementation.
+- `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
+  to run parity and cancellation fixtures; representative Linux throughput,
+  cold-cache, and real-tree measurements remain required before performance claims.
 
 Keep roadmap items described as planned until the code and validation exist.
 Do not present compilation, UI wiring, or a mocked scan as proof of real
@@ -161,6 +164,8 @@ Start with these files:
 - `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.
+- `src-tauri/src/scanner/linux.rs`: Linux bounded worker pool, `getdents64`
+  batches, descriptor-relative `statx`, mount boundaries, and identity checks.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `docs/accounting.md`: shared filesystem accounting and traversal semantics.
 - `docs/compression.md`: proposed transparent-compression contract and rollout gates.

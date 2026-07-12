@@ -39,6 +39,8 @@ enum EstimateConfidence {
 #[serde(rename_all = "camelCase")]
 enum AlgorithmFidelity {
     Exact,
+    // macOS is currently the only proxy estimator target.
+    #[allow(dead_code)]
     Proxy,
     None,
 }

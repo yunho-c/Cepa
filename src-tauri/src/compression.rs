@@ -69,6 +69,9 @@ pub(crate) struct CompressionState {
 }
 
 impl CompressionState {
+    // Linux reports future-write policy, so this constructor is native only on
+    // the macOS and Windows targets.
+    #[allow(dead_code)]
     fn existing_data(compressed: bool, format: Option<&str>, detail: impl Into<String>) -> Self {
         Self {
             state: if compressed {

@@ -10,7 +10,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "linux")]
+#[path = "scanner/linux.rs"]
+mod linux;
 #[cfg(target_os = "macos")]
+#[path = "scanner/macos.rs"]
 mod macos;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -153,6 +157,7 @@ pub enum ScanBackend {
     Auto,
     Jwalk,
     Getattrlistbulk,
+    Statx,
 }
 
 impl ScanBackend {
@@ -161,6 +166,7 @@ impl ScanBackend {
             Self::Auto => "auto",
             Self::Jwalk => "jwalk",
             Self::Getattrlistbulk => "getattrlistbulk",
+            Self::Statx => "statx",
         }
     }
 }
@@ -179,8 +185,9 @@ impl FromStr for ScanBackend {
             "auto" => Ok(Self::Auto),
             "jwalk" => Ok(Self::Jwalk),
             "getattrlistbulk" => Ok(Self::Getattrlistbulk),
+            "statx" => Ok(Self::Statx),
             value => Err(format!(
-                "unknown backend {value:?}; expected auto, jwalk, or getattrlistbulk"
+                "unknown backend {value:?}; expected auto, jwalk, getattrlistbulk, or statx"
             )),
         }
     }
@@ -464,7 +471,16 @@ where
                     Err(macos::NativeScanError::Fatal(error)) => return Err(error),
                 }
             }
-            scan_path_jwalk(root, cancel, on_progress)
+            #[cfg(target_os = "linux")]
+            {
+                scan_path_auto_linux(root, cancel, &mut on_progress, |root, cancel, progress| {
+                    linux::scan_path(root, cancel, progress)
+                })
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                scan_path_jwalk(root, cancel, on_progress)
+            }
         }
         ScanBackend::Jwalk => scan_path_jwalk(root, cancel, on_progress),
         ScanBackend::Getattrlistbulk => {
@@ -483,6 +499,40 @@ where
                 Err("getattrlistbulk is only available on macOS.".to_string())
             }
         }
+        ScanBackend::Statx => {
+            #[cfg(target_os = "linux")]
+            {
+                linux::scan_path(root, cancel, &mut on_progress).map_err(|error| match error {
+                    linux::NativeScanError::Unavailable => {
+                        "statx is unavailable on this Linux kernel or runtime.".to_string()
+                    }
+                    linux::NativeScanError::Fatal(error) => error,
+                })
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = (root, cancel, on_progress);
+                Err("statx is only available on Linux.".to_string())
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn scan_path_auto_linux<F, N>(
+    root: &Path,
+    cancel: Arc<AtomicBool>,
+    on_progress: &mut F,
+    native: N,
+) -> Result<ScanOutput, String>
+where
+    F: FnMut(ScanProgress),
+    N: FnOnce(&Path, Arc<AtomicBool>, &mut F) -> Result<ScanOutput, linux::NativeScanError>,
+{
+    match native(root, cancel.clone(), on_progress) {
+        Ok(output) => Ok(output),
+        Err(linux::NativeScanError::Unavailable) => scan_path_jwalk(root, cancel, on_progress),
+        Err(linux::NativeScanError::Fatal(error)) => Err(error),
     }
 }
 
@@ -1194,6 +1244,8 @@ mod tests {
             result.backend,
             if cfg!(target_os = "macos") {
                 "getattrlistbulk"
+            } else if cfg!(target_os = "linux") {
+                "statx"
             } else {
                 "jwalk"
             }
@@ -1391,6 +1443,8 @@ mod tests {
         let mut backends = vec![ScanBackend::Jwalk];
         #[cfg(target_os = "macos")]
         backends.push(ScanBackend::Getattrlistbulk);
+        #[cfg(target_os = "linux")]
+        backends.push(ScanBackend::Statx);
 
         for backend in backends {
             let mut progress = Vec::new();
@@ -1543,6 +1597,80 @@ mod tests {
         assert_eq!(portable_items, native_items);
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_backend_matches_portable_accounting_and_auto_selects_statx() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let nested = temp.path().join("nested");
+        fs::create_dir(&nested).expect("create nested directory");
+        fs::write(temp.path().join("root.bin"), vec![1_u8; 17]).expect("write root file");
+        fs::write(nested.join("child.bin"), vec![2_u8; 31]).expect("write nested file");
+
+        let portable = scan_path_with_backend(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            ScanBackend::Jwalk,
+            |_| {},
+        )
+        .expect("scan with jwalk");
+        let native = scan_path_with_backend(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            ScanBackend::Statx,
+            |_| {},
+        )
+        .expect("scan with statx");
+        let automatic = scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan with automatic backend");
+
+        assert!(
+            portable
+                .result
+                .accounting_mismatches(&native.result)
+                .is_empty()
+        );
+        assert_eq!(native.result.backend, "statx");
+        assert_eq!(automatic.result.backend, "statx");
+
+        let portable_view = portable
+            .snapshot
+            .directory_view(1, 0)
+            .expect("build portable view");
+        let native_view = native
+            .snapshot
+            .directory_view(1, 0)
+            .expect("build native view");
+        let portable_items = portable_view
+            .items
+            .iter()
+            .map(|item| (&item.name, item.logical_bytes, item.allocated_bytes))
+            .collect::<Vec<_>>();
+        let native_items = native_view
+            .items
+            .iter()
+            .map(|item| (&item.name, item.logical_bytes, item.allocated_bytes))
+            .collect::<Vec<_>>();
+        assert_eq!(portable_items, native_items);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_auto_falls_back_when_statx_is_unavailable() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("file.bin"), vec![1_u8; 17]).expect("write fixture file");
+
+        let output = scan_path_auto_linux(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            &mut |_| {},
+            |_, _, _| Err(linux::NativeScanError::Unavailable),
+        )
+        .expect("fall back to portable scan");
+
+        assert_eq!(output.result.backend, "jwalk");
+        assert_eq!(output.result.logical_bytes, 17);
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_backend_cancels_during_result_ingestion() {
@@ -1561,6 +1689,26 @@ mod tests {
             ScanBackend::Getattrlistbulk,
             move |_| cancel_from_progress.store(true, Ordering::Relaxed),
         )
+        .expect_err("scan should stop after progress callback cancels it");
+
+        assert_eq!(error, "Scan cancelled.");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_backend_cancels_during_result_ingestion() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let nested = temp.path().join("nested");
+        fs::create_dir(&nested).expect("create nested directory");
+        for index in 0..=PROGRESS_ENTRY_INTERVAL {
+            fs::write(nested.join(format!("file-{index}")), []).expect("write fixture file");
+        }
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_from_progress = cancel.clone();
+        let error = scan_path_with_backend(temp.path(), cancel, ScanBackend::Statx, move |_| {
+            cancel_from_progress.store(true, Ordering::Relaxed)
+        })
         .expect_err("scan should stop after progress callback cancels it");
 
         assert_eq!(error, "Scan cancelled.");

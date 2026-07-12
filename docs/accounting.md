@@ -51,6 +51,10 @@ marks hard-link deduplication as unsupported.
 - macOS firmlinks and entries whose mount-boundary status cannot be established
   are not traversed by the native backend. They are reflected in skipped-entry
   accounting rather than guessed through.
+- Linux native traversal compares `statx` mount IDs, not only device numbers,
+  so bind mounts are boundaries too. Child directories are opened relative to
+  their retained parent descriptor with no-follow semantics and are traversed
+  only if device, inode, and mount identity still match discovery.
 - Sockets, devices, and other special entries are listed as `other` and
   contribute no bytes.
 

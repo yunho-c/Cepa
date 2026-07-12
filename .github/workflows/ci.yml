@@ -64,5 +64,17 @@ jobs:
       - name: Run checks and tests
         run: just check
 
+      - name: Validate Linux statx accounting and cancellation
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/cepa-statx-fixture"
+          just benchmark-fixture "$fixture" 32 128 4096
+          printf 'hard-link fixture\n' > "$fixture/hard-link-source.bin"
+          ln "$fixture/hard-link-source.bin" "$fixture/group-0000/hard-link-copy.bin"
+          ln -s /etc "$fixture/external-directory-link"
+          just validate-scan "$fixture" jwalk statx
+          just benchmark-cancellation "$fixture" statx 3 1024
+
       - name: Build native application
         run: just build
