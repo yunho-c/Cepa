@@ -36,6 +36,9 @@ marks hard-link deduplication as unsupported.
 ## Links, mounts, and special entries
 
 - Symbolic links are listed but never followed and contribute no target bytes.
+  They are also excluded from reveal-in-file-manager actions because the
+  cross-platform opener canonicalizes paths and would otherwise follow the
+  target silently.
 - Cepa does not intentionally cross filesystem boundaries. A mount point is
   listed as a directory but its children are not traversed when the backend can
   establish the boundary.

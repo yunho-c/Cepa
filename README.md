@@ -22,6 +22,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Permission and traversal-error accounting without aborting the whole scan
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
+- Reveal-in-file-manager actions authorized by completed scan and item IDs
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   and completed states with visible backend/accounting semantics
@@ -67,6 +68,7 @@ http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
+http://localhost:1420/?mock=reveal-error
 ```
 
 These mocks are removed from production builds.

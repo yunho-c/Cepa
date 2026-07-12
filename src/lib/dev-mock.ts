@@ -1,7 +1,12 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type { DirectoryView, ScanProgress, ScanResponse } from "./scanner";
 
-type DevScenario = "complete" | "scanning" | "error" | "navigation-error";
+type DevScenario =
+  | "complete"
+  | "scanning"
+  | "error"
+  | "navigation-error"
+  | "reveal-error";
 
 const ROOT = "/Users/demo";
 const scanId = 42;
@@ -47,6 +52,11 @@ export function installDevMock(requestedScenario: string) {
           throw "The mocked snapshot is no longer available.";
         }
         return mockDirectoryView(Number(args.nodeId));
+      case "reveal_scan_item":
+        if (scenario === "reveal-error") {
+          throw "The mocked item disappeared after the scan completed.";
+        }
+        return null;
       default:
         throw new Error(`Unhandled development mock command: ${command}`);
     }
@@ -54,7 +64,13 @@ export function installDevMock(requestedScenario: string) {
 }
 
 function isScenario(value: string): value is DevScenario {
-  return ["complete", "scanning", "error", "navigation-error"].includes(value);
+  return [
+    "complete",
+    "scanning",
+    "error",
+    "navigation-error",
+    "reveal-error",
+  ].includes(value);
 }
 
 function emitChannel(channelId: number, index: number, message: unknown) {

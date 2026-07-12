@@ -13,6 +13,7 @@
     Files,
     Folder,
     FolderOpen,
+    FolderSearch,
     Gauge,
     HardDrive,
     Link2,
@@ -52,10 +53,13 @@
   let isNavigating = $state(false);
   let errorMessage = $state("");
   let navigationError = $state("");
+  let revealError = $state("");
+  let revealingNodeId = $state<number | null>(null);
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
+  let revealNotice: HTMLDivElement | undefined = $state();
 
   const isBusy = $derived(status === "scanning" || status === "cancelling");
   const displayProgress = $derived(
@@ -125,6 +129,8 @@
     path = requestedPath;
     errorMessage = "";
     navigationError = "";
+    revealError = "";
+    revealingNodeId = null;
     progress = null;
     result = null;
     view = null;
@@ -191,6 +197,8 @@
     selectedEntry = null;
     errorMessage = "";
     navigationError = "";
+    revealError = "";
+    revealingNodeId = null;
   }
 
   function itemPercent(bytes: number): number {
@@ -202,6 +210,7 @@
     if (scanId === null || nodeId === null || isNavigating) return;
     isNavigating = true;
     navigationError = "";
+    revealError = "";
     try {
       view = await invoke<DirectoryView>("open_scan_directory", {
         scanId,
@@ -216,6 +225,21 @@
       navigationNotice?.focus();
     } finally {
       isNavigating = false;
+    }
+  }
+
+  async function revealItem(nodeId: number) {
+    if (scanId === null || revealingNodeId !== null) return;
+    revealingNodeId = nodeId;
+    revealError = "";
+    try {
+      await invoke("reveal_scan_item", { scanId, nodeId });
+    } catch (error) {
+      revealError = String(error);
+      await tick();
+      revealNotice?.focus();
+    } finally {
+      revealingNodeId = null;
     }
   }
 
@@ -495,6 +519,21 @@
         </div>
       {/if}
 
+      {#if revealError}
+        <div
+          class="error-callout navigation-error"
+          role="alert"
+          tabindex="-1"
+          bind:this={revealNotice}
+        >
+          <AlertCircle />
+          <div>
+            <strong>That item could not be revealed.</strong>
+            <span>{revealError}</span>
+          </div>
+        </div>
+      {/if}
+
       <section
         class="explorer"
         aria-label="Storage map and folder contents"
@@ -579,43 +618,59 @@
           {#if view.items.length > 0}
             <div class="item-list" class:is-navigating={isNavigating}>
               {#each view.items as item, index (item.id)}
-                <button
-                  type="button"
-                  class="storage-item"
-                  disabled={isNavigating}
+                <div
+                  class="storage-row"
                   data-selected={selectedEntry?.id === item.id}
-                  onclick={() => activateEntry(item)}
-                  onmouseenter={() => (selectedEntry = item)}
-                  onfocus={() => (selectedEntry = item)}
-                  onmouseleave={() => (selectedEntry = null)}
-                  onblur={() => (selectedEntry = null)}
-                  aria-label={`${item.name}, ${formatBytes(item.allocatedBytes)}${item.kind === "directory" ? ", open folder" : ""}`}
                 >
-                  <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
-                  <span class="item-icon" data-kind={item.kind}>
-                    {#if item.kind === "directory"}
-                      <Folder />
-                    {:else if item.kind === "symlink"}
-                      <Link2 />
-                    {:else}
-                      <File />
-                    {/if}
-                  </span>
-                  <span class="item-copy">
-                    <strong title={item.name}>{item.name}</strong>
-                    <span>
-                      {describeEntry(item)}
+                  <button
+                    type="button"
+                    class="storage-item"
+                    disabled={isNavigating}
+                    onclick={() => activateEntry(item)}
+                    onmouseenter={() => (selectedEntry = item)}
+                    onfocus={() => (selectedEntry = item)}
+                    onmouseleave={() => (selectedEntry = null)}
+                    onblur={() => (selectedEntry = null)}
+                    aria-label={`${item.name}, ${formatBytes(item.allocatedBytes)}${item.kind === "directory" ? ", open folder" : ""}`}
+                  >
+                    <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
+                    <span class="item-icon" data-kind={item.kind}>
+                      {#if item.kind === "directory"}
+                        <Folder />
+                      {:else if item.kind === "symlink"}
+                        <Link2 />
+                      {:else}
+                        <File />
+                      {/if}
                     </span>
-                    <span class="item-bar" aria-hidden="true">
-                      <span style:width={`${itemPercent(item.allocatedBytes)}%`}></span>
+                    <span class="item-copy">
+                      <strong title={item.name}>{item.name}</strong>
+                      <span>
+                        {describeEntry(item)}
+                      </span>
+                      <span class="item-bar" aria-hidden="true">
+                        <span style:width={`${itemPercent(item.allocatedBytes)}%`}></span>
+                      </span>
                     </span>
-                  </span>
-                  <span class="item-size">
-                    <strong>{formatBytes(item.allocatedBytes)}</strong>
-                    <span>{formatPercent(item.allocatedBytes, view.allocatedBytes)}</span>
-                  </span>
-                  {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
-                </button>
+                    <span class="item-size">
+                      <strong>{formatBytes(item.allocatedBytes)}</strong>
+                      <span>{formatPercent(item.allocatedBytes, view.allocatedBytes)}</span>
+                    </span>
+                    {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
+                  </button>
+                  {#if item.kind !== "symlink"}
+                    <button
+                      type="button"
+                      class="reveal-item"
+                      disabled={isNavigating || revealingNodeId !== null}
+                      aria-label={`Reveal ${item.name} in the system file manager`}
+                      title="Reveal in file manager"
+                      onclick={() => revealItem(item.id)}
+                    >
+                      <FolderSearch />
+                    </button>
+                  {/if}
+                </div>
               {/each}
             </div>
           {:else}

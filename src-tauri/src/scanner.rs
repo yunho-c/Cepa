@@ -778,10 +778,7 @@ impl ScanSnapshot {
         scan_id: u64,
         requested: u64,
     ) -> Result<DirectoryView, String> {
-        let node_id = usize::try_from(requested)
-            .ok()
-            .filter(|node_id| *node_id < self.nodes.len())
-            .ok_or_else(|| "That item is not part of this scan.".to_string())?;
+        let node_id = self.valid_node_id(requested)?;
         let node = &self.nodes[node_id];
 
         if !matches!(node.kind, EntryKind::Directory) {
@@ -810,6 +807,21 @@ impl ScanSnapshot {
             items,
             chart_items: self.chart_items(node_id, 0, &ranked_ids[..chart_item_count], total_items),
         })
+    }
+
+    pub(crate) fn reveal_path(&self, requested: u64) -> Result<PathBuf, String> {
+        let node_id = self.valid_node_id(requested)?;
+        if matches!(self.nodes[node_id].kind, EntryKind::Symlink) {
+            return Err("Symbolic links cannot be revealed without following their target.".into());
+        }
+        Ok(self.node_path(node_id))
+    }
+
+    fn valid_node_id(&self, requested: u64) -> Result<NodeId, String> {
+        usize::try_from(requested)
+            .ok()
+            .filter(|node_id| *node_id < self.nodes.len())
+            .ok_or_else(|| "That item is not part of this scan.".to_string())
     }
 
     fn scan_item(&self, node_id: NodeId) -> ScanItem {
@@ -1389,6 +1401,13 @@ mod tests {
         assert_eq!(output.result.file_count, 0);
         assert_eq!(view.items.len(), 1);
         assert!(matches!(view.items[0].kind, EntryKind::Symlink));
+        assert_eq!(
+            output
+                .snapshot
+                .reveal_path(view.items[0].id)
+                .expect_err("revealing a symlink would follow its target"),
+            "Symbolic links cannot be revealed without following their target."
+        );
     }
 
     #[cfg(target_os = "macos")]

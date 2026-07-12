@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 use tauri::ipc::Channel;
+use tauri_plugin_opener::OpenerExt;
 
 pub use scanner::{ScanBackend, ScanResult};
 
@@ -207,6 +208,18 @@ impl ScanState {
             .ok_or_else(|| "That scan is no longer available.".to_string())?;
         scan.snapshot.directory_view(id, node_id)
     }
+
+    fn reveal_path(&self, id: u64, node_id: u64) -> Result<PathBuf, String> {
+        let completed = self
+            .completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let scan = completed
+            .as_ref()
+            .filter(|scan| scan.id == id)
+            .ok_or_else(|| "That scan is no longer available.".to_string())?;
+        scan.snapshot.reveal_path(node_id)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -284,14 +297,33 @@ fn open_scan_directory(
     state.directory_view(scan_id, node_id)
 }
 
+#[tauri::command]
+async fn reveal_scan_item(
+    scan_id: u64,
+    node_id: u64,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ScanState>,
+) -> Result<(), String> {
+    let path = state.reveal_path(scan_id, node_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.opener()
+            .reveal_item_in_dir(&path)
+            .map_err(|error| format!("Could not reveal {}: {error}", path.display()))
+    })
+    .await
+    .map_err(|error| format!("The file manager task stopped unexpectedly: {error}"))?
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
         .invoke_handler(tauri::generate_handler![
             scan_directory,
             cancel_scan,
-            open_scan_directory
+            open_scan_directory,
+            reveal_scan_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -299,8 +331,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{ScanBackend, ScanState, benchmark_cancellation};
+    use super::{ScanBackend, ScanState, benchmark_cancellation, scanner};
     use std::fs;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
 
     #[test]
@@ -327,5 +361,49 @@ mod tests {
 
         assert!(measurement.entries_at_request >= 2_048);
         assert!(measurement.scan_elapsed_us >= measurement.cancellation_latency_us);
+    }
+
+    #[test]
+    fn completed_scans_resolve_only_validated_item_paths() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let file = temp.path().join("payload.bin");
+        fs::write(&file, [1_u8]).expect("write fixture file");
+        let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan fixture");
+        let state = ScanState::default();
+        let view = state.complete(7, output.snapshot).expect("retain snapshot");
+        let file_id = view
+            .items
+            .iter()
+            .find(|item| item.name == "payload.bin")
+            .expect("find fixture file")
+            .id;
+
+        assert_eq!(
+            state.reveal_path(7, file_id).expect("resolve scanned item"),
+            file.canonicalize().expect("canonical fixture path")
+        );
+        assert_eq!(
+            state
+                .reveal_path(8, file_id)
+                .expect_err("reject stale scan"),
+            "That scan is no longer available."
+        );
+        assert_eq!(
+            state
+                .reveal_path(7, u64::MAX)
+                .expect_err("reject unknown item"),
+            "That item is not part of this scan."
+        );
+    }
+
+    #[test]
+    #[ignore = "opens the system file manager"]
+    fn reveals_an_existing_item_in_the_system_file_manager() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let file = temp.path().join("reveal-me.txt");
+        fs::write(&file, b"Cepa reveal smoke test").expect("write fixture file");
+
+        tauri_plugin_opener::reveal_item_in_dir(&file).expect("reveal fixture file");
     }
 }

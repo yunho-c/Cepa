@@ -29,6 +29,9 @@ The UI reports the backend and accounting semantics returned by each completed
 scan and has explicit cancellation and navigation-error states.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
+Completed items can be revealed in the platform file manager through a backend
+command that validates the retained scan and opaque node ID before reconstructing
+the path; do not replace that boundary with a frontend-supplied arbitrary path.
 
 The intended scanning architecture is:
 
