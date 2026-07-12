@@ -8,10 +8,10 @@ them before it can replace `jwalk` for a platform.
 
 - Logical size is the byte length reported for regular files. Directory,
   symbolic-link, and other entry types contribute zero direct bytes.
-- Allocated size is physical blocks multiplied by 512 on Unix and the native
-  allocation-size attribute on macOS. Platforms without an allocated-size API
-  currently report logical size as an estimate and mark that limitation in the
-  result protocol.
+- Allocated size is physical blocks multiplied by 512 on Unix, native allocation
+  attributes on macOS, and `FILE_STANDARD_INFO::AllocationSize` in the Windows
+  MFT backend. The portable Windows fallback reports logical size as an estimate
+  and marks that limitation in the result protocol.
 - Sparse files can therefore have a logical size larger than their allocated
   size. Cepa preserves both values instead of substituting one for the other.
 - A directory's totals are the saturating sum of its accounted descendants.
@@ -39,6 +39,12 @@ owner.
 On platforms where stable file identity is unavailable, the result explicitly
 marks hard-link deduplication as unsupported.
 
+The Windows MFT backend enumerates every link name for records whose NTFS link
+count exceeds one. Those names are inserted into the same tree before
+aggregation, so file counts, lexicographic ownership, and deduplicated bytes use
+the shared rule above. A link-enumeration failure is counted as a skipped entry
+rather than silently claiming complete path accounting.
+
 ## Links, mounts, and special entries
 
 - Symbolic links are listed but never followed and contribute no target bytes.
@@ -55,6 +61,9 @@ marks hard-link deduplication as unsupported.
   so bind mounts are boundaries too. Child directories are opened relative to
   their retained parent descriptor with no-follow semantics and are traversed
   only if device, inode, and mount identity still match discovery.
+- Windows native traversal is selected only for the root of an NTFS volume.
+  Reparse points are listed as links and not followed. Subfolder, network, and
+  non-NTFS scans use the portable backend before native progress is emitted.
 - Sockets, devices, and other special entries are listed as `other` and
   contribute no bytes.
 

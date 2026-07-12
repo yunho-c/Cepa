@@ -220,7 +220,8 @@ fn parse_positive_usize(value: OsString, name: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-    "usage: scan_benchmark <directory> [iterations] [auto|jwalk|getattrlistbulk]".to_string()
+    "usage: scan_benchmark <directory> [iterations] [auto|jwalk|getattrlistbulk|mft|statx]"
+        .to_string()
 }
 
 fn duration_ms(duration: Duration) -> f64 {
@@ -293,6 +294,14 @@ mod tests {
         assert_eq!(
             parse_backend(OsString::from("getattrlistbulk")).expect("parse native"),
             ScanBackend::Getattrlistbulk
+        );
+        assert_eq!(
+            parse_backend(OsString::from("mft")).expect("parse Windows native"),
+            ScanBackend::Mft
+        );
+        assert_eq!(
+            parse_backend(OsString::from("statx")).expect("parse Linux native"),
+            ScanBackend::Statx
         );
         assert!(parse_backend(OsString::from("unknown")).is_err());
     }

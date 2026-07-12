@@ -15,6 +15,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   filesystem
 - Bounded-parallel `getdents64` + `statx` traversal on Linux, with automatic
   fallback to `jwalk` when the kernel/runtime cannot supply the required fields
+- MFT enumeration on Windows NTFS volume roots, with exact allocation sizes,
+  hard-link name recovery, and automatic `jwalk` fallback for subfolders,
+  non-NTFS volumes, or unavailable volume access
 - Native directory picker on supported desktop platforms
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
@@ -51,12 +54,13 @@ the completed directory breakdown. See
 [`docs/accounting.md`](docs/accounting.md) for the complete size, link, mount,
 error, and concurrent-mutation semantics.
 
-MFT traversal on Windows, broader native-filesystem and cold-cache validation,
-Linux-native performance measurement, stronger mutation-plan identity snapshots,
-and compression mutation remain roadmap work. The result footer, selection
-inspector, and bounded estimator are read-only; they never infer compression
-state from allocated size and never claim a writer is available. The safety and
-backend contract is specified in [`docs/compression.md`](docs/compression.md).
+Broader native-filesystem and cold-cache validation, representative Windows and
+Linux native measurements, stronger mutation-plan identity snapshots, and
+compression mutation remain roadmap work. The scan-details disclosure,
+selection inspector, and bounded estimator are read-only; they never infer
+compression state from allocated size and never claim a writer is available.
+The safety and backend contract is specified in
+[`docs/compression.md`](docs/compression.md).
 
 ## Prerequisites
 
@@ -100,8 +104,10 @@ just benchmark-fixture /tmp/cepa-fixture 1000 100 0
 just benchmark-scan /tmp/cepa-fixture 9 jwalk
 ```
 
-The optional third argument selects `jwalk`, `getattrlistbulk`, `statx`, or
-`auto`. Platform-specific backends reject explicit use on the wrong OS.
+The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
+or `auto`. Platform-specific backends reject explicit use on the wrong OS. MFT
+is deliberately limited to an NTFS volume root because whole-volume enumeration
+has a fixed cost that is unsuitable for arbitrary subfolders.
 
 Validate aggregate parity on a quiescent tree and measure asynchronous
 cancellation latency with:

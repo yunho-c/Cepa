@@ -6,6 +6,8 @@ node_modules
 /package
 /.playwright-cli
 /output
+/.codex-local.md
+/.windows-harness
 .env
 .env.*
 !.env.example

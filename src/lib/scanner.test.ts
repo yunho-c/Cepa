@@ -76,6 +76,7 @@ describe("scanner presentation helpers", () => {
   test("labels native and portable backends accurately", () => {
     expect(formatBackend("jwalk")).toBe("Portable");
     expect(formatBackend("getattrlistbulk")).toBe("macOS native");
+    expect(formatBackend("mft")).toBe("Windows native");
     expect(formatBackend("statx")).toBe("Linux native");
   });
 

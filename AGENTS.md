@@ -29,8 +29,10 @@ select and scan a directory, stream bounded progress over a Tauri channel,
 cancel active work, retain an in-memory result snapshot for drill-down, and
 render coordinated radial and list views in Svelte. macOS uses an initial
 `getattrlistbulk` traversal, Linux uses `getdents64` directory batches plus
-`statx` metadata, and both fall back to `jwalk` when their required native API
-or fields are unavailable. Windows currently uses `jwalk`.
+`statx` metadata, and Windows uses MFT enumeration for NTFS volume roots. Each
+falls back to `jwalk` when its native API is unavailable or unsuitable; Windows
+subfolder scans deliberately use `jwalk` because MFT enumeration has a
+whole-volume fixed cost.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 skipped-item semantics remain available under the collapsed `Scan details`
 disclosure rather than appearing as status badges or a diagnostic footer. It
@@ -67,7 +69,12 @@ The intended scanning architecture is:
 - `getattrlistbulk` as the implemented macOS backend. Its first parity fixture
   plus synthetic and local real-tree validation exist, but broader filesystem
   coverage and cold-cache measurements remain.
-- Master File Table (MFT) traversal for an optimized Windows implementation.
+- Master File Table (MFT) traversal as the implemented Windows volume-root
+  backend. It recovers all hard-link names, queries exact allocation size by
+  file ID, and falls back for subfolders and non-NTFS volumes. The checked-in
+  evidence from a native fixture covers parity, deterministic ownership,
+  performance, and cancellation; broader real-volume and cold-cache evidence
+  remains required.
 - `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
   to run parity and cancellation fixtures; representative Linux throughput,
   cold-cache, and real-tree measurements remain required before performance claims.

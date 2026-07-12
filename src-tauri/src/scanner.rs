@@ -16,6 +16,12 @@ mod linux;
 #[cfg(target_os = "macos")]
 #[path = "scanner/macos.rs"]
 mod macos;
+#[cfg(any(target_os = "windows", test))]
+#[path = "scanner/mft.rs"]
+mod mft;
+#[cfg(target_os = "windows")]
+#[path = "scanner/windows.rs"]
+mod windows;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
@@ -157,6 +163,7 @@ pub enum ScanBackend {
     Auto,
     Jwalk,
     Getattrlistbulk,
+    Mft,
     Statx,
 }
 
@@ -166,6 +173,7 @@ impl ScanBackend {
             Self::Auto => "auto",
             Self::Jwalk => "jwalk",
             Self::Getattrlistbulk => "getattrlistbulk",
+            Self::Mft => "mft",
             Self::Statx => "statx",
         }
     }
@@ -185,9 +193,10 @@ impl FromStr for ScanBackend {
             "auto" => Ok(Self::Auto),
             "jwalk" => Ok(Self::Jwalk),
             "getattrlistbulk" => Ok(Self::Getattrlistbulk),
+            "mft" => Ok(Self::Mft),
             "statx" => Ok(Self::Statx),
             value => Err(format!(
-                "unknown backend {value:?}; expected auto, jwalk, getattrlistbulk, or statx"
+                "unknown backend {value:?}; expected auto, jwalk, getattrlistbulk, mft, or statx"
             )),
         }
     }
@@ -477,7 +486,17 @@ where
                     linux::scan_path(root, cancel, progress)
                 })
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "windows")]
+            {
+                match windows::scan_path(root, cancel.clone(), &mut on_progress) {
+                    Ok(output) => Ok(output),
+                    Err(windows::NativeScanError::Unavailable) => {
+                        scan_path_jwalk(root, cancel, on_progress)
+                    }
+                    Err(windows::NativeScanError::Fatal(error)) => Err(error),
+                }
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
             {
                 scan_path_jwalk(root, cancel, on_progress)
             }
@@ -497,6 +516,23 @@ where
             {
                 let _ = (root, cancel, on_progress);
                 Err("getattrlistbulk is only available on macOS.".to_string())
+            }
+        }
+        ScanBackend::Mft => {
+            #[cfg(target_os = "windows")]
+            {
+                windows::scan_path(root, cancel, &mut on_progress).map_err(|error| match error {
+                    windows::NativeScanError::Unavailable => {
+                        "MFT traversal is unavailable for this Windows volume or process."
+                            .to_string()
+                    }
+                    windows::NativeScanError::Fatal(error) => error,
+                })
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (root, cancel, on_progress);
+                Err("MFT traversal is only available on Windows.".to_string())
             }
         }
         ScanBackend::Statx => {
@@ -1666,6 +1702,19 @@ mod tests {
             |_, _, _| Err(linux::NativeScanError::Unavailable),
         )
         .expect("fall back to portable scan");
+
+        assert_eq!(output.result.backend, "jwalk");
+        assert_eq!(output.result.logical_bytes, 17);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_auto_uses_portable_traversal_for_subfolders() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("file.bin"), vec![1_u8; 17]).expect("write fixture file");
+
+        let output = scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan subfolder with automatic backend");
 
         assert_eq!(output.result.backend, "jwalk");
         assert_eq!(output.result.logical_bytes, 17);

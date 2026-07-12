@@ -296,6 +296,40 @@ The raw reports are preserved in
 and
 [`performance-results/2026-07-11-linux-container-statx-cancellation.json`](performance-results/2026-07-11-linux-container-statx-cancellation.json).
 
+### 2026-07-12 Windows NTFS MFT validation
+
+The Windows backend was compiled and run natively over SSH on an AMD64 Windows
+machine (`DESKTOP-1NSAB4F`) with Rust 1.97.0 GNU and an NTFS virtual disk. The
+release fixture contained 8,192 empty files plus a nested three-file tree, one
+hard link, and a junction targeting another volume. The volume also contained
+the normal recycle-bin and system-volume-information directories. Both backends
+listed the junction without following it. MFT hard-link name enumeration
+restored both paths, assigned bytes to the lexicographically earlier path, and
+charged the physical file once; the portable Windows backend reported both
+paths but cannot deduplicate their bytes.
+
+Across nine warm runs, median traversal time was 156,644 us for MFT and 304,161
+us for `jwalk`; median complete harness time was 158,050 us and 304,570 us,
+respectively. On this fixture, MFT traversal was 48.5% faster. Nine cancellation
+runs requested cancellation after the 2,048-entry progress boundary and returned
+in 638–1,124 us, with a 721 us median.
+
+The backend deliberately rejects subfolder roots before enumeration. A measured
+prototype that enumerated the system volume for a three-file subfolder took
+27.9 seconds versus 1.5 ms for `jwalk`, demonstrating that whole-volume MFT cost
+is unsuitable for arbitrary folder scans. Automatic selection therefore keeps
+`jwalk` for Windows subfolders, non-NTFS volumes, and unavailable volume access.
+
+Raw warm-run and cancellation values are preserved in
+[`performance-results/2026-07-12-g14-windows-mft.csv`](performance-results/2026-07-12-g14-windows-mft.csv).
+This is one warm-cache virtual disk and does not establish cold-cache or broad
+hardware performance. The MFT control and record contracts follow Microsoft's
+[`FSCTL_ENUM_USN_DATA`](https://learn.microsoft.com/windows/win32/api/winioctl/ni-winioctl-fsctl_enum_usn_data),
+[`USN_RECORD_V2`](https://learn.microsoft.com/windows/win32/api/winioctl/ns-winioctl-usn_record_v2),
+and
+[`FindFirstFileNameW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-findfirstfilenamew)
+documentation.
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
@@ -313,5 +347,5 @@ Before generalizing these results beyond the measured workloads, add:
 - cancellation latency during deliberately long aggregation work;
 - IPC serialization and first-render timing;
 - portable-versus-native throughput and real-tree parity on Linux;
-- portable-versus-native parity and throughput on Windows once its native
-  backend exists.
+- broader portable-versus-native parity, cold-cache throughput, and peak-memory
+  scaling on representative Windows system volumes.
