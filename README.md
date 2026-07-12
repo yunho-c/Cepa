@@ -17,7 +17,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
   currently an estimate elsewhere)
-- Unix hard-link deduplication and same-filesystem traversal boundaries
+- Deterministic Unix hard-link deduplication and same-filesystem traversal
+  boundaries
 - Permission and traversal-error accounting without aborting the whole scan
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
@@ -31,6 +32,12 @@ returns at most 500 rows for a directory, while the radial chart is bounded to
 16 segments per directory and three visible levels; omitted chart segments are
 combined into an aggregate. These bounds keep bridge and rendering costs
 predictable even when a scan contains millions of entries.
+
+Hard-linked bytes are counted once and assigned to the lexicographically first
+relative path in the selected root, so parallel discovery order cannot change
+the completed directory breakdown. See
+[`docs/accounting.md`](docs/accounting.md) for the complete size, link, mount,
+error, and concurrent-mutation semantics.
 
 MFT traversal on Windows, `statx` traversal on Linux, native-backend performance
 measurement, and transparent filesystem compression remain roadmap work.

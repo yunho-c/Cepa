@@ -410,8 +410,9 @@ where
 
         let child_path =
             matches!(entry.kind, EntryKind::Directory).then(|| directory_path.join(&entry.name));
-        let node_id = counters.push_node(nodes, parent_id, entry.name, entry.kind, entry.measured);
-        observe_partial_file(partial_ranking, nodes, node_id);
+        let (node_id, replaced_owner) =
+            counters.push_node(nodes, parent_id, entry.name, entry.kind, entry.measured);
+        observe_partial_file(partial_ranking, nodes, node_id, replaced_owner);
 
         if matches!(entry.kind, EntryKind::Directory) {
             if entry.mount_point {

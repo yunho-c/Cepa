@@ -27,6 +27,8 @@ render coordinated radial and list views in Svelte. macOS uses an initial
 unavailable for the selected filesystem; other platforms use `jwalk`.
 The UI reports the backend and accounting semantics returned by each completed
 scan and has explicit cancellation and navigation-error states.
+Hard-linked bytes are deterministically assigned to the lexicographically first
+relative path so parallel discovery order cannot change directory totals.
 
 The intended scanning architecture is:
 
@@ -128,6 +130,7 @@ Start with these files:
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
+- `docs/accounting.md`: shared filesystem accounting and traversal semantics.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
 

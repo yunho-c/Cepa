@@ -1,6 +1,6 @@
 use jwalk::{Parallelism, WalkDirGeneric};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::Metadata;
@@ -206,6 +206,13 @@ struct MeasuredMetadata {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct FileIdentity(u64, u64);
 
+#[derive(Clone, Copy, Debug)]
+struct HardLinkOwner {
+    node_id: NodeId,
+    logical_bytes: u64,
+    allocated_bytes: u64,
+}
+
 #[derive(Debug, Default)]
 struct ScanCounters {
     files_scanned: u64,
@@ -215,7 +222,7 @@ struct ScanCounters {
     duplicate_hard_links: u64,
     observed_logical_bytes: u64,
     observed_allocated_bytes: u64,
-    seen_files: HashSet<FileIdentity>,
+    hard_link_owners: HashMap<FileIdentity, HardLinkOwner>,
 }
 
 #[derive(Debug, Default)]
@@ -277,7 +284,7 @@ impl ScanCounters {
         name: OsString,
         kind: EntryKind,
         measured: MeasuredMetadata,
-    ) -> NodeId {
+    ) -> (NodeId, Option<NodeId>) {
         let (mut logical_bytes, mut allocated_bytes, file_count, directory_count) = match kind {
             EntryKind::Directory => {
                 self.directories_scanned += 1;
@@ -290,9 +297,10 @@ impl ScanCounters {
             EntryKind::Symlink | EntryKind::Other => (0, 0, 0, 0),
         };
 
-        if let Some(identity) = measured.file_identity
-            && !self.seen_files.insert(identity)
-        {
+        let previous_owner = measured
+            .file_identity
+            .and_then(|identity| self.hard_link_owners.get(&identity).copied());
+        if previous_owner.is_some() {
             self.duplicate_hard_links += 1;
             logical_bytes = 0;
             allocated_bytes = 0;
@@ -315,7 +323,45 @@ impl ScanCounters {
             file_count,
             directory_count,
         });
-        node_id
+
+        let mut replaced_owner = None;
+        if let Some(identity) = measured.file_identity {
+            if let Some(owner) = previous_owner {
+                if compare_relative_node_paths(nodes, node_id, owner.node_id).is_lt() {
+                    nodes[owner.node_id].logical_bytes = 0;
+                    nodes[owner.node_id].allocated_bytes = 0;
+                    nodes[node_id].logical_bytes = measured.logical_bytes;
+                    nodes[node_id].allocated_bytes = measured.allocated_bytes;
+                    self.observed_logical_bytes = self
+                        .observed_logical_bytes
+                        .saturating_sub(owner.logical_bytes)
+                        .saturating_add(measured.logical_bytes);
+                    self.observed_allocated_bytes = self
+                        .observed_allocated_bytes
+                        .saturating_sub(owner.allocated_bytes)
+                        .saturating_add(measured.allocated_bytes);
+                    self.hard_link_owners.insert(
+                        identity,
+                        HardLinkOwner {
+                            node_id,
+                            logical_bytes: measured.logical_bytes,
+                            allocated_bytes: measured.allocated_bytes,
+                        },
+                    );
+                    replaced_owner = Some(owner.node_id);
+                }
+            } else {
+                self.hard_link_owners.insert(
+                    identity,
+                    HardLinkOwner {
+                        node_id,
+                        logical_bytes: measured.logical_bytes,
+                        allocated_bytes: measured.allocated_bytes,
+                    },
+                );
+            }
+        }
+        (node_id, replaced_owner)
     }
 }
 
@@ -346,6 +392,21 @@ impl PartialRanking {
             .enumerate()
             .max_by(|(_, left), (_, right)| compare_partial_candidates(left, right))
             .map(|(index, _)| index);
+    }
+
+    fn replace(&mut self, previous_node_id: NodeId, candidate: PartialCandidate) -> bool {
+        let Some(index) = self
+            .candidates
+            .iter()
+            .position(|current| current.node_id == previous_node_id)
+        else {
+            return false;
+        };
+        self.candidates[index] = candidate;
+        if self.candidates.len() == MAX_PARTIAL_ITEMS {
+            self.refresh_worst();
+        }
+        true
     }
 
     fn items(&self, nodes: &[InternalNode]) -> Vec<ScanItem> {
@@ -562,8 +623,9 @@ where
         let current_path =
             should_report_progress.then(|| entry.path().to_string_lossy().into_owned());
 
-        let node_id = counters.push_node(&mut nodes, parent, entry.file_name, kind, measured);
-        observe_partial_file(&mut partial_ranking, &nodes, node_id);
+        let (node_id, replaced_owner) =
+            counters.push_node(&mut nodes, parent, entry.file_name, kind, measured);
+        observe_partial_file(&mut partial_ranking, &nodes, node_id, replaced_owner);
         debug_assert_eq!(node_id, nodes.len() - 1);
         if matches!(kind, EntryKind::Directory) {
             ancestor_stack.push(node_id);
@@ -897,6 +959,7 @@ fn observe_partial_file(
     partial_ranking: &mut PartialRanking,
     nodes: &[InternalNode],
     node_id: NodeId,
+    replaced_owner: Option<NodeId>,
 ) {
     let node = &nodes[node_id];
     // Empty files cannot contribute to a storage ranking. Skipping them is
@@ -905,12 +968,39 @@ fn observe_partial_file(
     if matches!(node.kind, EntryKind::File)
         && (node.logical_bytes != 0 || node.allocated_bytes != 0)
     {
-        partial_ranking.observe(PartialCandidate {
+        let candidate = PartialCandidate {
             node_id,
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
-        });
+        };
+        if let Some(replaced_owner) = replaced_owner
+            && partial_ranking.replace(replaced_owner, candidate)
+        {
+            return;
+        }
+        partial_ranking.observe(candidate);
     }
+}
+
+fn compare_relative_node_paths(
+    nodes: &[InternalNode],
+    left: NodeId,
+    right: NodeId,
+) -> std::cmp::Ordering {
+    let mut left_components = relative_node_path(nodes, left);
+    let mut right_components = relative_node_path(nodes, right);
+    left_components.reverse();
+    right_components.reverse();
+    left_components.cmp(&right_components)
+}
+
+fn relative_node_path(nodes: &[InternalNode], mut node_id: NodeId) -> Vec<&OsStr> {
+    let mut components = Vec::new();
+    while let Some(parent) = nodes[node_id].parent {
+        components.push(nodes[node_id].name());
+        node_id = parent;
+    }
+    components
 }
 
 fn compare_node_ids(nodes: &[InternalNode], left: NodeId, right: NodeId) -> std::cmp::Ordering {
@@ -1203,19 +1293,78 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn counts_hard_linked_content_once() {
+    fn assigns_hard_linked_content_to_the_first_relative_path() {
         let temp = tempfile::tempdir().expect("create fixture directory");
-        let original = temp.path().join("original.bin");
+        let later = temp.path().join("z-owner");
+        let earlier = temp.path().join("a-owner");
+        fs::create_dir(&later).expect("create later owner directory first");
+        fs::create_dir(&earlier).expect("create earlier owner directory second");
+        let original = later.join("original.bin");
         fs::write(&original, vec![7_u8; 64]).expect("write fixture file");
-        fs::hard_link(&original, temp.path().join("copy.bin")).expect("create hard link");
+        fs::hard_link(&original, earlier.join("copy.bin")).expect("create hard link");
 
-        let output =
-            scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
-        let result = output.result;
+        let mut backends = vec![ScanBackend::Jwalk];
+        #[cfg(target_os = "macos")]
+        backends.push(ScanBackend::Getattrlistbulk);
 
-        assert_eq!(result.logical_bytes, 64);
-        assert_eq!(result.file_count, 2);
-        assert_eq!(result.duplicate_hard_links, 1);
+        for backend in backends {
+            let mut progress = Vec::new();
+            let output = scan_path_with_backend(
+                temp.path(),
+                Arc::new(AtomicBool::new(false)),
+                backend,
+                |update| progress.push(update),
+            )
+            .expect("scan fixture");
+            let result = &output.result;
+
+            assert_eq!(result.logical_bytes, 64);
+            assert_eq!(result.file_count, 2);
+            assert_eq!(result.duplicate_hard_links, 1);
+
+            let root_view = output
+                .snapshot
+                .directory_view(1, 0)
+                .expect("build root view");
+            let earlier_id = root_view
+                .items
+                .iter()
+                .find(|item| item.name == "a-owner")
+                .expect("find deterministic owner")
+                .id;
+            let later_id = root_view
+                .items
+                .iter()
+                .find(|item| item.name == "z-owner")
+                .expect("find non-owner")
+                .id;
+            assert_eq!(
+                output
+                    .snapshot
+                    .directory_view(1, earlier_id)
+                    .expect("open deterministic owner")
+                    .logical_bytes,
+                64
+            );
+            assert_eq!(
+                output
+                    .snapshot
+                    .directory_view(1, later_id)
+                    .expect("open non-owner")
+                    .logical_bytes,
+                0
+            );
+            assert_eq!(
+                progress
+                    .last()
+                    .expect("final progress")
+                    .largest_items
+                    .first()
+                    .expect("largest hard link")
+                    .name,
+                "copy.bin"
+            );
+        }
     }
 
     #[cfg(unix)]

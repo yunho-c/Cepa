@@ -150,6 +150,24 @@ by nine cancellation runs on both 100k-entry fixtures.
 The raw measurements are preserved in
 [`performance-results/2026-07-11-m4-pro-cancellation.csv`](performance-results/2026-07-11-m4-pro-cancellation.csv).
 
+## Deterministic hard-link ownership check
+
+After making hard-link byte ownership independent of traversal order, the local
+Cepa checkout provided a hard-link-heavy validation workload: 77,283 entries,
+36,141 duplicate hard links, and 9.14 GB allocated. A parity scan matched every
+correctness-relevant field between `jwalk` and `getattrlistbulk`. One warmup and
+nine measured release runs produced:
+
+| Backend | Wall time | Entries/s | Traversal | Aggregation |
+| --- | ---: | ---: | ---: | ---: |
+| `jwalk` | 236.50 ms | 326,775 | 235.96 ms | 0.45 ms |
+| `getattrlistbulk` | 37.52 ms | 2,059,779 | 37.00 ms | 0.46 ms |
+
+The checkout contained more build artifacts than the earlier real-tree
+baseline, so these numbers establish a new correctness-change baseline rather
+than a like-for-like speedup or regression claim. The raw runs are preserved in
+[`performance-results/2026-07-11-m4-pro-hardlink-ownership.csv`](performance-results/2026-07-11-m4-pro-hardlink-ownership.csv).
+
 ## Snapshot memory baseline
 
 Peak resident memory was measured by running one warmup plus one measured scan
