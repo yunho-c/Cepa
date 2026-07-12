@@ -6,6 +6,7 @@ import type {
   DirectoryView,
   ScanProgress,
   ScanResponse,
+  SavingsEstimate,
   SizeMetric,
 } from "./scanner";
 
@@ -24,6 +25,7 @@ export function installDevMock(requestedScenario: string) {
     ? requestedScenario
     : "complete";
   let rejectPendingScan: ((reason: string) => void) | null = null;
+  const cancelledEstimateRequests = new Set<number>();
 
   mockIPC(async (command, payload = {}) => {
     const args = payload as unknown as Record<string, unknown>;
@@ -84,12 +86,47 @@ export function installDevMock(requestedScenario: string) {
           } satisfies CompressionState;
         }
         return {
-          state: "compressed",
+          state: "notCompressed",
           scope: "existingData",
-          format: "decmpfs",
-          detail:
-            "macOS reports UF_COMPRESSED for this file. Cepa reads this metadata but does not modify it.",
+          format: null,
+          detail: "macOS does not report UF_COMPRESSED for this file.",
         } satisfies CompressionState;
+      case "estimate_compression_savings":
+        for (let step = 0; step < 30; step += 1) {
+          await delay(20);
+          if (cancelledEstimateRequests.delete(Number(args.requestId))) {
+            return {
+              status: "cancelled",
+              algorithm: null,
+              fidelity: "none",
+              confidence: "none",
+              sampledBytes: 0,
+              logicalBytes: 71_940_358_144,
+              allocatedBytes: 71_940_358_144,
+              estimatedSavingsLower: null,
+              estimatedSavingsUpper: null,
+              estimatorVersion: 1,
+              detail: "Savings estimation was cancelled before it completed.",
+            } satisfies SavingsEstimate;
+          }
+        }
+        return {
+          status: "estimated",
+          algorithm: "zlib-proxy",
+          fidelity: "proxy",
+          confidence: "low",
+          sampledBytes: 786_432,
+          logicalBytes: 71_940_358_144,
+          allocatedBytes: 71_940_358_144,
+          estimatedSavingsLower: 3_221_225_472,
+          estimatedSavingsUpper: 6_442_450_944,
+          estimatorVersion: 1,
+          detail:
+            "The macOS writer algorithm is undefined, so Cepa uses zlib only as a clearly labeled compressibility proxy. This is not guaranteed filesystem savings.",
+        } satisfies SavingsEstimate;
+      case "cancel_compression_estimate":
+        cancelledEstimateRequests.add(Number(args.requestId));
+        return true;
       case "reveal_scan_item":
         if (scenario === "reveal-error") {
           throw "The mocked item disappeared after the scan completed.";

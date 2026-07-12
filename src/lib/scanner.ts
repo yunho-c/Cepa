@@ -33,6 +33,29 @@ export interface CompressionState {
   detail: string;
 }
 
+export type EstimateStatus =
+  | "estimated"
+  | "notCandidate"
+  | "unsupported"
+  | "unavailable"
+  | "cancelled";
+export type EstimateConfidence = "high" | "medium" | "low" | "none";
+export type AlgorithmFidelity = "exact" | "proxy" | "none";
+
+export interface SavingsEstimate {
+  status: EstimateStatus;
+  algorithm: string | null;
+  fidelity: AlgorithmFidelity;
+  confidence: EstimateConfidence;
+  sampledBytes: number;
+  logicalBytes: number;
+  allocatedBytes: number;
+  estimatedSavingsLower: number | null;
+  estimatedSavingsUpper: number | null;
+  estimatorVersion: number;
+  detail: string;
+}
+
 export interface ScanProgress {
   entriesScanned: number;
   filesScanned: number;
@@ -196,6 +219,32 @@ export function formatCompressionState(state: CompressionState): string {
     case "unavailable":
       return "State unavailable";
   }
+}
+
+export function formatSavingsEstimate(estimate: SavingsEstimate): string {
+  if (
+    estimate.status !== "estimated" ||
+    estimate.estimatedSavingsLower === null ||
+    estimate.estimatedSavingsUpper === null
+  ) {
+    switch (estimate.status) {
+      case "notCandidate":
+        return "No estimate needed";
+      case "unsupported":
+        return "Estimation unsupported";
+      case "unavailable":
+        return "Estimate unavailable";
+      case "cancelled":
+        return "Estimate cancelled";
+      case "estimated":
+        return "Estimate unavailable";
+    }
+  }
+  if (estimate.estimatedSavingsUpper === 0) return "No likely savings";
+  if (estimate.estimatedSavingsLower === estimate.estimatedSavingsUpper) {
+    return `${formatBytes(estimate.estimatedSavingsUpper)} potential savings`;
+  }
+  return `${formatBytes(estimate.estimatedSavingsLower)}–${formatBytes(estimate.estimatedSavingsUpper)} potential savings`;
 }
 
 export function isCancellationError(error: unknown): boolean {

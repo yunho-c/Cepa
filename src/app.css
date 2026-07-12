@@ -327,6 +327,17 @@ body {
 .selection-state strong { font-size: 11px; font-weight: 650; }
 .selection-state strong[data-state="compressed"], .selection-state strong[data-state="enabled"] { color: oklch(0.42 0.1 105); }
 .selection-inspector p { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted-foreground); font-size: 9px; line-height: 1.45; }
+.estimate-prompt, .estimate-readout { grid-column: 1 / -1; margin-top: 3px; padding-top: 10px; border-top: 1px solid var(--border); }
+.estimate-prompt { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.estimate-prompt > span { max-width: 320px; line-height: 1.5; letter-spacing: 0; text-transform: none; font-weight: 450; }
+.estimate-prompt button, .estimate-readout button { flex: 0 0 auto; min-height: 28px; padding: 0 9px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); font-size: 9px; font-weight: 650; }
+.estimate-prompt button:hover, .estimate-readout button:hover { background: var(--muted); }
+.estimate-prompt button:focus-visible, .estimate-readout button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.estimate-readout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 14px; }
+.estimate-readout > div { min-width: 0; display: grid; gap: 3px; }
+.estimate-readout strong { font-size: 13px; letter-spacing: -0.02em; }
+.estimate-readout em { color: var(--muted-foreground); font-size: 8px; font-style: normal; text-transform: uppercase; letter-spacing: 0.06em; }
+.estimate-readout > p { grid-column: 1 / -1; }
 .item-list { display: grid; max-height: 500px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; transition: opacity 120ms ease; }
 .item-list.is-navigating { opacity: 0.45; pointer-events: none; }
 .storage-row { display: grid; grid-template-columns: minmax(0, 1fr) 36px; align-items: stretch; border-bottom: 1px solid var(--border); transition: background 120ms ease; }
@@ -408,6 +419,9 @@ body {
   .item-size { min-width: 72px; }
   .selection-inspector { grid-template-columns: 1fr; }
   .selection-inspector p { grid-column: auto; }
+  .estimate-prompt, .estimate-readout { grid-column: auto; }
+  .estimate-prompt { align-items: flex-start; flex-direction: column; }
+  .estimate-readout > p { grid-column: 1 / -1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

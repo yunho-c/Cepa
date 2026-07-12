@@ -32,6 +32,7 @@
     formatDuration,
     formatMetric,
     formatPercent,
+    formatSavingsEstimate,
     describeEntry,
     isCancellationError,
     metricBytes,
@@ -44,6 +45,7 @@
     type ScanProgress,
     type ScanResponse,
     type ScanResult,
+    type SavingsEstimate,
     type SizeMetric,
   } from "$lib/scanner";
   import { createSunburst } from "$lib/sunburst";
@@ -69,6 +71,13 @@
   let compressionState = $state<CompressionState | null>(null);
   let isInspectingCompression = $state(false);
   let inspectionSequence = 0;
+  let savingsEstimate = $state<SavingsEstimate | null>(null);
+  let isEstimatingSavings = $state(false);
+  let isCancellingEstimate = $state(false);
+  let activeEstimateRequestId = $state<number | null>(null);
+  let estimateRequestSequence = 0;
+  let estimateActionButton: HTMLButtonElement | undefined = $state();
+  let estimateCancelButton: HTMLButtonElement | undefined = $state();
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -93,6 +102,13 @@
   const activeEntry = $derived(inspectedEntry ?? selectedEntry);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
+  const canEstimateSavings = $derived(
+    inspectedEntry?.kind === "file" &&
+      compressionState !== null &&
+      ["notCompressed", "enabled", "disabled", "inherited"].includes(
+        compressionState.state,
+      ),
+  );
   const headerLabel = $derived(
     status === "scanning"
       ? "Scan active"
@@ -250,6 +266,7 @@
   }
 
   function clearInspection() {
+    clearEstimate();
     inspectionSequence += 1;
     inspectedEntry = null;
     compressionState = null;
@@ -258,6 +275,7 @@
 
   async function inspectEntry(entry: ChartItem | ScanItem) {
     if (scanId === null || entry.id === null) return;
+    clearEstimate();
     const completedScanId = scanId;
     const request = ++inspectionSequence;
     inspectedEntry = entry;
@@ -292,6 +310,103 @@
       if (inspectionSequence === request) {
         isInspectingCompression = false;
       }
+    }
+  }
+
+  function clearEstimate() {
+    if (activeEstimateRequestId !== null && isEstimatingSavings) {
+      void invoke("cancel_compression_estimate", {
+        requestId: activeEstimateRequestId,
+      });
+    }
+    savingsEstimate = null;
+    isEstimatingSavings = false;
+    isCancellingEstimate = false;
+    activeEstimateRequestId = null;
+  }
+
+  async function estimateSavings() {
+    if (
+      scanId === null ||
+      inspectedEntry === null ||
+      inspectedEntry.id === null ||
+      isEstimatingSavings
+    ) return;
+    const completedScanId = scanId;
+    const nodeId = inspectedEntry.id;
+    const requestId = ++estimateRequestSequence;
+    activeEstimateRequestId = requestId;
+    savingsEstimate = null;
+    isEstimatingSavings = true;
+    isCancellingEstimate = false;
+    try {
+      await tick();
+      estimateCancelButton?.focus();
+      const estimate = await invoke<SavingsEstimate>("estimate_compression_savings", {
+        scanId: completedScanId,
+        nodeId,
+        requestId,
+      });
+      if (
+        activeEstimateRequestId === requestId &&
+        scanId === completedScanId &&
+        inspectedEntry?.id === nodeId
+      ) {
+        savingsEstimate = estimate;
+      }
+    } catch (error) {
+      if (
+        activeEstimateRequestId === requestId &&
+        scanId === completedScanId &&
+        inspectedEntry?.id === nodeId
+      ) {
+        savingsEstimate = {
+          status: "unavailable",
+          algorithm: null,
+          fidelity: "none",
+          confidence: "none",
+          sampledBytes: 0,
+          logicalBytes: inspectedEntry.logicalBytes,
+          allocatedBytes: inspectedEntry.allocatedBytes,
+          estimatedSavingsLower: null,
+          estimatedSavingsUpper: null,
+          estimatorVersion: 1,
+          detail: `The estimate request failed: ${String(error)}`,
+        };
+      }
+    } finally {
+      if (activeEstimateRequestId === requestId) {
+        isEstimatingSavings = false;
+        isCancellingEstimate = false;
+        activeEstimateRequestId = null;
+        await tick();
+        estimateActionButton?.focus();
+      }
+    }
+  }
+
+  async function cancelEstimate() {
+    if (activeEstimateRequestId === null || !isEstimatingSavings) return;
+    isCancellingEstimate = true;
+    try {
+      await invoke("cancel_compression_estimate", {
+        requestId: activeEstimateRequestId,
+      });
+    } catch (error) {
+      isCancellingEstimate = false;
+      savingsEstimate = {
+        status: "unavailable",
+        algorithm: null,
+        fidelity: "none",
+        confidence: "none",
+        sampledBytes: 0,
+        logicalBytes: inspectedEntry?.logicalBytes ?? 0,
+        allocatedBytes: inspectedEntry?.allocatedBytes ?? 0,
+        estimatedSavingsLower: null,
+        estimatedSavingsUpper: null,
+        estimatorVersion: 1,
+        detail: `The estimate could not be cancelled: ${String(error)}`,
+      };
     }
   }
 
@@ -712,7 +827,7 @@
                         d={segment.pathData}
                         data-depth={segment.depth}
                         data-color={segment.colorIndex}
-                        data-selected={selectedEntry?.id === segment.item.id}
+                        data-selected={activeEntry?.id === segment.item.id}
                       />
                     </g>
                   {:else}
@@ -775,6 +890,43 @@
                 </strong>
               </div>
               {#if compressionState}<p>{compressionState.detail}</p>{/if}
+              {#if isEstimatingSavings}
+                <div class="estimate-readout" aria-live="polite">
+                  <div>
+                    <span>Potential savings</span>
+                    <strong>{isCancellingEstimate ? "Stopping estimate…" : "Sampling up to 768 KB…"}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isCancellingEstimate}
+                    bind:this={estimateCancelButton}
+                    onclick={cancelEstimate}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              {:else if savingsEstimate}
+                <div class="estimate-readout" data-status={savingsEstimate.status}>
+                  <div>
+                    <span>Potential savings</span>
+                    <strong>{formatSavingsEstimate(savingsEstimate)}</strong>
+                    {#if savingsEstimate.algorithm}
+                      <em>
+                        {savingsEstimate.algorithm} · {savingsEstimate.fidelity === "exact" ? "target codec" : "proxy codec"} · {savingsEstimate.confidence} confidence · {formatBytes(savingsEstimate.sampledBytes)} sampled
+                      </em>
+                    {/if}
+                  </div>
+                  {#if canEstimateSavings}
+                    <button type="button" bind:this={estimateActionButton} onclick={estimateSavings}>Re-estimate</button>
+                  {/if}
+                  <p>{savingsEstimate.detail}</p>
+                </div>
+              {:else if canEstimateSavings}
+                <div class="estimate-prompt">
+                  <span>Read up to 768 KB locally for a bounded savings range.</span>
+                  <button type="button" bind:this={estimateActionButton} onclick={estimateSavings}>Estimate savings</button>
+                </div>
+              {/if}
             </section>
           {/if}
 

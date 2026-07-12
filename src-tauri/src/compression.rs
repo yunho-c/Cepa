@@ -3,6 +3,11 @@ use std::path::Path;
 
 use crate::scanner::EntryKind;
 
+#[path = "compression/estimator.rs"]
+mod estimator;
+
+pub(crate) use estimator::SavingsEstimate;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum CompressionCapabilityStatus {
@@ -172,6 +177,13 @@ pub(crate) fn inspect(path: &Path, kind: EntryKind) -> CompressionState {
             CompressionState::not_applicable("This filesystem entry is not a regular file.")
         }
     }
+}
+
+pub(crate) fn estimate(
+    target: &crate::scanner::CompressionTarget,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> SavingsEstimate {
+    estimator::estimate(target, cancel)
 }
 
 #[cfg(target_os = "macos")]

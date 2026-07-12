@@ -8,6 +8,7 @@ import {
   formatDuration,
   formatMetric,
   formatPercent,
+  formatSavingsEstimate,
   isCancellationError,
   metricBytes,
 } from "./scanner";
@@ -61,6 +62,24 @@ describe("scanner presentation helpers", () => {
         detail: "Inherited policy.",
       }),
     ).toBe("Following filesystem policy");
+  });
+
+  test("formats savings as a bounded range rather than a guarantee", () => {
+    expect(
+      formatSavingsEstimate({
+        status: "estimated",
+        algorithm: "zlib-proxy",
+        fidelity: "proxy",
+        confidence: "low",
+        sampledBytes: 786_432,
+        logicalBytes: 10_737_418_240,
+        allocatedBytes: 10_737_418_240,
+        estimatedSavingsLower: 2_147_483_648,
+        estimatedSavingsUpper: 4_294_967_296,
+        estimatorVersion: 1,
+        detail: "Bounded proxy estimate.",
+      }),
+    ).toBe("2.00 GB–4.00 GB potential savings");
   });
 
   test("formats byte and duration boundaries", () => {

@@ -17,8 +17,9 @@ Transparent filesystem compression is a future product capability. Its proposed
 semantics, platform coverage, safety model, and rollout gates are documented in
 `docs/compression.md`. A read-only, scan-authorized volume capability probe is
 implemented in `src-tauri/src/compression.rs`, along with no-follow per-item state
-inspection. Estimation, mutation-plan identity snapshots, and mutation are not.
-Preserve those evidence boundaries instead of presenting inspection as writable
+inspection. Bounded savings estimation is implemented separately and remains
+read-only; mutation-plan identity snapshots and mutation are not. Preserve those
+evidence boundaries instead of presenting inspection or estimation as writable
 compression support.
 
 ## Current state and roadmap
@@ -49,6 +50,13 @@ Btrfs reports future-write inode policy because those flags do not prove that
 existing extents are compressed. The inspector opens or stats paths without
 following links. It does not create the stronger immutable identity/revision
 snapshot required by a future mutation plan.
+Savings estimation begins only from an explicit file action. It reads at most
+three aligned 256 KiB ranges, is cancellable, rejects changed sizes and links, and
+returns lower/upper savings bounds with confidence and algorithm fidelity. Windows
+uses LZNT1, Btrfs uses 128 KiB-chunked Zstd level 3, and macOS uses a clearly
+labeled zlib proxy because no writer algorithm has been selected. Do not turn a
+proxy estimate into a guaranteed savings number or run estimation automatically
+on hover/selection.
 
 The intended scanning architecture is:
 
@@ -148,6 +156,8 @@ Start with these files:
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and
   per-item state probes plus their backend-neutral wire contracts.
+- `src-tauri/src/compression/estimator.rs`: bounded sampling, codec adapters,
+  conservative savings ranges, confidence, and cancellation.
 - `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.

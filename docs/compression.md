@@ -182,6 +182,25 @@ cannot be the only decision. A low-confidence sample is labeled accordingly.
 Forcing compression of incompressible data is not the default; Btrfs itself uses
 heuristics and can mark files `NOCOMPRESS` after failed attempts.
 
+The implemented estimator is explicit and per-file. Files up to 768 KiB are read
+in full; larger files sample aligned 256 KiB ranges at the beginning, middle, and
+end. Reads check cancellation every 64 KiB, open without following links, and
+reject a size or Unix allocation that changed after scanning. Starting a new
+estimate cancels superseded work, and internal generation tokens prevent a reused
+wire request ID from clearing newer work. Each range is compressed independently
+so unrelated ranges cannot create artificial cross-sample redundancy.
+
+Windows samples with the exact 4 KiB-chunked LZNT1 codec. Btrfs samples with Zstd
+level 3 in independent 128 KiB chunks, matching the filesystem's maximum
+compression-extent size. macOS reports `zlib-proxy` because no supported writer
+or target algorithm has been selected; its fidelity is always labeled `proxy`.
+The result includes the codec, fidelity, sampled bytes, confidence, and lower and
+upper allocated-savings bounds. Sparse files force the lower bound to zero.
+The current version detects sparse allocation from scan totals but does not map
+individual hole ranges, so it deliberately makes no minimum-savings claim for a
+sparse file. No estimates are cached yet, which avoids violating the
+identity-keyed cache contract above.
+
 ## User experience
 
 The action begins from explicit file selections. A preview shows:
@@ -244,9 +263,17 @@ target-specific compile checks and have native-CI regular-file tests, but those
 native runs and a real Btrfs runtime fixture remain external evidence gates.
 
 Every platform reports `writerAvailable: false`. Inspection does not estimate
-savings, infer state from logical and allocated bytes, authorize mutation, or
-replace the immutable identity/revision snapshot required by a future
-`CompressionPlan`.
+savings or infer state from logical and allocated bytes. Estimation is a separate
+explicit request and neither operation authorizes mutation or replaces the
+immutable identity/revision snapshot required by a future `CompressionPlan`.
+
+Step 2 is implemented as a bounded, cancellable per-file estimator and candidate
+UI. Deterministic tests cover sampling bounds, full small-file coverage,
+compressible versus pseudo-random data, sparse-file conservatism, wire semantics,
+and cancellation ownership. macOS runs the real proxy codec locally; the Windows
+module and Linux platform code pass isolated target checks. Linux's bundled Zstd
+C dependency, native estimator accuracy, and Btrfs runtime fixtures remain CI or
+external evidence gates.
 
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.

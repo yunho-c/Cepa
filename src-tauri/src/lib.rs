@@ -1,7 +1,7 @@
 mod compression;
 mod scanner;
 
-use scanner::{DirectoryView, EntryKind, ScanProgress, ScanSnapshot, SizeMetric};
+use scanner::{CompressionTarget, DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
 use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
@@ -139,6 +139,76 @@ struct CompletedScan {
     snapshot: ScanSnapshot,
 }
 
+#[derive(Default)]
+struct EstimateState {
+    next_token: AtomicU64,
+    active: Mutex<Option<ActiveEstimate>>,
+}
+
+struct ActiveEstimate {
+    token: u64,
+    request_id: u64,
+    cancel: Arc<AtomicBool>,
+}
+
+impl EstimateState {
+    fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
+        let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(previous) = active.replace(ActiveEstimate {
+            token,
+            request_id,
+            cancel: cancel.clone(),
+        }) {
+            previous.cancel.store(true, Ordering::Relaxed);
+        }
+        (token, cancel)
+    }
+
+    fn cancel(&self, request_id: u64) -> bool {
+        let active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        active.as_ref().is_some_and(|estimate| {
+            if estimate.request_id == request_id {
+                estimate.cancel.store(true, Ordering::Relaxed);
+                true
+            } else {
+                false
+            }
+        })
+    }
+
+    fn cancel_active(&self) {
+        if let Some(active) = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take()
+        {
+            active.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn finish(&self, token: u64) {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if active
+            .as_ref()
+            .is_some_and(|estimate| estimate.token == token)
+        {
+            *active = None;
+        }
+    }
+}
+
 impl ScanState {
     fn begin(&self) -> (u64, Arc<AtomicBool>) {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
@@ -240,7 +310,7 @@ impl ScanState {
         Ok(scan.snapshot.root_path())
     }
 
-    fn compression_target(&self, id: u64, node_id: u64) -> Result<(PathBuf, EntryKind), String> {
+    fn compression_target(&self, id: u64, node_id: u64) -> Result<CompressionTarget, String> {
         let completed = self
             .completed
             .lock()
@@ -279,7 +349,9 @@ async fn scan_directory(
     path: String,
     on_event: Channel<ScanEvent>,
     state: tauri::State<'_, ScanState>,
+    estimates: tauri::State<'_, EstimateState>,
 ) -> Result<ScanResponse, String> {
+    estimates.cancel_active();
     let requested_path = PathBuf::from(path);
     let (scan_id, cancel) = state.begin();
     let _ = on_event.send(ScanEvent::Started {
@@ -346,10 +418,37 @@ async fn compression_state(
     node_id: u64,
     state: tauri::State<'_, ScanState>,
 ) -> Result<compression::CompressionState, String> {
-    let (path, kind) = state.compression_target(scan_id, node_id)?;
-    tauri::async_runtime::spawn_blocking(move || compression::inspect(&path, kind))
+    let target = state.compression_target(scan_id, node_id)?;
+    tauri::async_runtime::spawn_blocking(move || compression::inspect(&target.path, target.kind))
         .await
         .map_err(|error| format!("The compression-state task stopped unexpectedly: {error}"))
+}
+
+#[tauri::command]
+async fn estimate_compression_savings(
+    scan_id: u64,
+    node_id: u64,
+    request_id: u64,
+    scans: tauri::State<'_, ScanState>,
+    estimates: tauri::State<'_, EstimateState>,
+) -> Result<compression::SavingsEstimate, String> {
+    let target = scans.compression_target(scan_id, node_id)?;
+    let (token, cancel) = estimates.begin(request_id);
+    let task =
+        tauri::async_runtime::spawn_blocking(move || compression::estimate(&target, &cancel));
+    let result = task
+        .await
+        .map_err(|error| format!("The savings-estimation task stopped unexpectedly: {error}"));
+    estimates.finish(token);
+    result
+}
+
+#[tauri::command]
+fn cancel_compression_estimate(
+    request_id: u64,
+    estimates: tauri::State<'_, EstimateState>,
+) -> bool {
+    estimates.cancel(request_id)
 }
 
 #[tauri::command]
@@ -374,12 +473,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
+        .manage(EstimateState::default())
         .invoke_handler(tauri::generate_handler![
             scan_directory,
             cancel_scan,
             open_scan_directory,
             compression_capability,
             compression_state,
+            estimate_compression_savings,
+            cancel_compression_estimate,
             reveal_scan_item
         ])
         .run(tauri::generate_context!())
@@ -388,7 +490,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{ScanBackend, ScanState, benchmark_cancellation, scanner};
+    use super::{EstimateState, ScanBackend, ScanState, benchmark_cancellation, scanner};
     use std::fs;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
@@ -404,6 +506,34 @@ mod tests {
         assert!(!second_cancel.load(Ordering::Relaxed));
         assert!(state.cancel(second_id));
         assert!(second_cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn estimate_requests_cancel_superseded_work() {
+        let state = EstimateState::default();
+        let (_, first) = state.begin(10);
+        let (second_token, second) = state.begin(11);
+
+        assert!(first.load(Ordering::Relaxed));
+        assert!(!second.load(Ordering::Relaxed));
+        assert!(!state.cancel(10));
+        assert!(state.cancel(11));
+        assert!(second.load(Ordering::Relaxed));
+        state.finish(second_token);
+        assert!(!state.cancel(11));
+    }
+
+    #[test]
+    fn finishing_an_old_estimate_cannot_clear_a_reused_wire_id() {
+        let state = EstimateState::default();
+        let (first_token, first) = state.begin(20);
+        let (second_token, second) = state.begin(20);
+
+        assert!(first.load(Ordering::Relaxed));
+        state.finish(first_token);
+        assert!(state.cancel(20));
+        assert!(second.load(Ordering::Relaxed));
+        state.finish(second_token);
     }
 
     #[test]
@@ -458,7 +588,7 @@ mod tests {
             state
                 .compression_target(7, file_id)
                 .expect("resolve compression target")
-                .0,
+                .path,
             file.canonicalize().expect("canonical fixture file")
         );
         assert_eq!(

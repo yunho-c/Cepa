@@ -199,6 +199,14 @@ pub(crate) struct ScanSnapshot {
     nodes: Vec<InternalNode>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct CompressionTarget {
+    pub path: PathBuf,
+    pub kind: EntryKind,
+    pub logical_bytes: u64,
+    pub allocated_bytes: u64,
+}
+
 type NodeId = usize;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -784,12 +792,15 @@ impl ScanSnapshot {
         self.root_path.to_path_buf()
     }
 
-    pub(crate) fn compression_target(
-        &self,
-        requested: u64,
-    ) -> Result<(PathBuf, EntryKind), String> {
+    pub(crate) fn compression_target(&self, requested: u64) -> Result<CompressionTarget, String> {
         let node_id = self.valid_node_id(requested)?;
-        Ok((self.node_path(node_id), self.nodes[node_id].kind))
+        let node = &self.nodes[node_id];
+        Ok(CompressionTarget {
+            path: self.node_path(node_id),
+            kind: node.kind,
+            logical_bytes: node.logical_bytes,
+            allocated_bytes: node.allocated_bytes,
+        })
     }
 
     pub(crate) fn directory_view(
