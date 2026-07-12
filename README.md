@@ -52,6 +52,19 @@ layout work.
 
 Run `just` to list every available recipe.
 
+## Performance work
+
+Generate reproducible fixtures and run the complete portable scan pipeline in
+release mode with:
+
+```sh
+just benchmark-fixture /tmp/cepa-fixture 1000 100 0
+just benchmark-scan /tmp/cepa-fixture 9
+```
+
+See [`docs/performance.md`](docs/performance.md) for the measurement contract,
+current baseline, raw evidence, and interpretation limits.
+
 ## Checks and builds
 
 ```sh

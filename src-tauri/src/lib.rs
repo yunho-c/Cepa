@@ -1,11 +1,38 @@
 mod scanner;
 
-use scanner::{DirectoryView, ScanProgress, ScanResult, ScanSnapshot};
+use scanner::{DirectoryView, ScanProgress, ScanSnapshot};
 use serde::Serialize;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tauri::ipc::Channel;
+
+pub use scanner::ScanResult;
+
+/// A completed benchmark scan. Retaining the snapshot keeps benchmark timing
+/// aligned with the application, which stores it for interactive drill-down.
+pub struct BenchmarkScan {
+    pub result: ScanResult,
+    pub initial_view_ms: f64,
+    _snapshot: ScanSnapshot,
+    _initial_view: DirectoryView,
+}
+
+/// Runs the same portable scan and snapshot construction used by the desktop
+/// application while retaining the completed snapshot through measurement.
+pub fn benchmark_scan(path: &Path) -> Result<BenchmarkScan, String> {
+    let output = scanner::scan_path(path, Arc::new(AtomicBool::new(false)), |_| {})?;
+    let view_started_at = Instant::now();
+    let initial_view = output.snapshot.directory_view(0, &output.result.root)?;
+    Ok(BenchmarkScan {
+        result: output.result,
+        initial_view_ms: view_started_at.elapsed().as_secs_f64() * 1_000.0,
+        _snapshot: output.snapshot,
+        _initial_view: initial_view,
+    })
+}
 
 #[derive(Default)]
 struct ScanState {

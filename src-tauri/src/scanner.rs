@@ -95,6 +95,9 @@ pub struct ScanResult {
     pub skipped_entries: u64,
     pub skipped_filesystems: u64,
     pub duplicate_hard_links: u64,
+    pub traversal_ms: u64,
+    pub aggregation_ms: u64,
+    pub indexing_ms: u64,
     pub elapsed_ms: u64,
     pub allocated_size_is_estimate: bool,
     pub hard_link_deduplication_supported: bool,
@@ -352,6 +355,9 @@ where
         return Err("Scan cancelled.".to_string());
     }
 
+    let traversal_completed_at = Instant::now();
+    let traversal_ms = duration_ms(traversal_completed_at.duration_since(started_at));
+
     let mut paths_by_depth: Vec<_> = nodes
         .iter()
         .map(|(path, node)| (node.depth, path.clone()))
@@ -380,6 +386,10 @@ where
         }
     }
 
+    let aggregation_completed_at = Instant::now();
+    let aggregation_ms =
+        duration_ms(aggregation_completed_at.duration_since(traversal_completed_at));
+
     let root_totals = nodes
         .get(&root)
         .ok_or_else(|| "The scan did not produce a root result.".to_string())?;
@@ -387,18 +397,6 @@ where
     let allocated_bytes = root_totals.allocated_bytes;
     let file_count = root_totals.file_count;
     let directory_count = root_totals.directory_count.saturating_sub(1);
-
-    let elapsed_ms = elapsed_ms(started_at);
-    on_progress(ScanProgress {
-        entries_scanned: file_count + directory_count,
-        files_scanned: file_count,
-        directories_scanned: directory_count,
-        logical_bytes,
-        allocated_bytes,
-        skipped_entries,
-        current_path: root.to_string_lossy().into_owned(),
-        elapsed_ms,
-    });
 
     let mut children: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
     for (path, node) in &nodes {
@@ -410,9 +408,20 @@ where
         }
     }
 
-    for child_paths in children.values_mut() {
-        child_paths.sort_unstable_by(|left, right| compare_node_paths(&nodes, left, right));
-    }
+    let indexing_completed_at = Instant::now();
+    let indexing_ms = duration_ms(indexing_completed_at.duration_since(aggregation_completed_at));
+    let elapsed_ms = duration_ms(indexing_completed_at.duration_since(started_at));
+
+    on_progress(ScanProgress {
+        entries_scanned: file_count + directory_count,
+        files_scanned: file_count,
+        directories_scanned: directory_count,
+        logical_bytes,
+        allocated_bytes,
+        skipped_entries,
+        current_path: root.to_string_lossy().into_owned(),
+        elapsed_ms,
+    });
 
     let snapshot = ScanSnapshot {
         root: root.clone(),
@@ -436,6 +445,9 @@ where
             skipped_entries,
             skipped_filesystems,
             duplicate_hard_links,
+            traversal_ms,
+            aggregation_ms,
+            indexing_ms,
             elapsed_ms,
             allocated_size_is_estimate: !cfg!(unix),
             hard_link_deduplication_supported: cfg!(unix),
@@ -465,17 +477,13 @@ impl ScanSnapshot {
             return Err("Only folders can be opened in the scan map.".to_string());
         }
 
-        let child_paths = self
-            .children
-            .get(&path)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        let total_items = child_paths.len();
-        let items = child_paths
+        let total_items = self.children.get(&path).map(Vec::len).unwrap_or_default();
+        let ranked_paths = self.ranked_child_paths(&path, MAX_LIST_ITEMS);
+        let items = ranked_paths
             .iter()
-            .take(MAX_LIST_ITEMS)
-            .filter_map(|child| self.scan_item(child))
+            .filter_map(|child| self.scan_item(child.as_path()))
             .collect();
+        let chart_path_count = ranked_paths.len().min(MAX_CHART_ITEMS_PER_DIRECTORY);
 
         Ok(DirectoryView {
             scan_id,
@@ -488,7 +496,7 @@ impl ScanSnapshot {
             items_truncated: total_items > MAX_LIST_ITEMS,
             breadcrumbs: self.breadcrumbs(&path),
             items,
-            chart_items: self.chart_children(&path, 0),
+            chart_items: self.chart_items(&path, 0, &ranked_paths[..chart_path_count], total_items),
         })
     }
 
@@ -532,16 +540,22 @@ impl ScanSnapshot {
             return Vec::new();
         }
 
-        let child_paths = self
-            .children
-            .get(parent)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        let mut items: Vec<_> = child_paths
+        let total_items = self.children.get(parent).map(Vec::len).unwrap_or_default();
+        let ranked_paths = self.ranked_child_paths(parent, MAX_CHART_ITEMS_PER_DIRECTORY);
+        self.chart_items(parent, depth, &ranked_paths, total_items)
+    }
+
+    fn chart_items(
+        &self,
+        parent: &Path,
+        depth: usize,
+        ranked_paths: &[&PathBuf],
+        total_items: usize,
+    ) -> Vec<ChartItem> {
+        let mut items: Vec<_> = ranked_paths
             .iter()
-            .take(MAX_CHART_ITEMS_PER_DIRECTORY)
             .filter_map(|path| {
-                let node = self.nodes.get(path)?;
+                let node = self.nodes.get(path.as_path())?;
                 Some(ChartItem {
                     name: node.name.to_string_lossy().into_owned(),
                     path: Some(path.to_string_lossy().into_owned()),
@@ -555,10 +569,12 @@ impl ScanSnapshot {
             })
             .collect();
 
-        if child_paths.len() > MAX_CHART_ITEMS_PER_DIRECTORY {
-            let omitted = child_paths
-                .iter()
-                .skip(MAX_CHART_ITEMS_PER_DIRECTORY)
+        if total_items > ranked_paths.len() {
+            let total = self
+                .children
+                .get(parent)
+                .into_iter()
+                .flatten()
                 .filter_map(|path| self.nodes.get(path))
                 .fold((0_u64, 0_u64), |total, node| {
                     (
@@ -566,20 +582,42 @@ impl ScanSnapshot {
                         total.1.saturating_add(node.allocated_bytes),
                     )
                 });
+            let selected = ranked_paths
+                .iter()
+                .filter_map(|path| self.nodes.get(path.as_path()))
+                .fold((0_u64, 0_u64), |total, node| {
+                    (
+                        total.0.saturating_add(node.logical_bytes),
+                        total.1.saturating_add(node.allocated_bytes),
+                    )
+                });
             items.push(ChartItem {
-                name: format!(
-                    "{} more items",
-                    child_paths.len() - MAX_CHART_ITEMS_PER_DIRECTORY
-                ),
+                name: format!("{} more items", total_items - ranked_paths.len()),
                 path: None,
                 kind: EntryKind::Other,
-                logical_bytes: omitted.0,
-                allocated_bytes: omitted.1,
+                logical_bytes: total.0.saturating_sub(selected.0),
+                allocated_bytes: total.1.saturating_sub(selected.1),
                 children: Vec::new(),
             });
         }
 
         items
+    }
+
+    fn ranked_child_paths<'a>(&'a self, parent: &Path, limit: usize) -> Vec<&'a PathBuf> {
+        let Some(child_paths) = self.children.get(parent) else {
+            return Vec::new();
+        };
+        let mut ranked: Vec<_> = child_paths.iter().collect();
+
+        if ranked.len() > limit {
+            ranked.select_nth_unstable_by(limit, |left, right| {
+                compare_node_paths(&self.nodes, left, right)
+            });
+            ranked.truncate(limit);
+        }
+        ranked.sort_unstable_by(|left, right| compare_node_paths(&self.nodes, left, right));
+        ranked
     }
 }
 
@@ -598,7 +636,11 @@ fn compare_node_paths(
 }
 
 fn elapsed_ms(started_at: Instant) -> u64 {
-    started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+    duration_ms(started_at.elapsed())
+}
+
+fn duration_ms(duration: Duration) -> u64 {
+    duration.as_millis().min(u128::from(u64::MAX)) as u64
 }
 
 fn measure_metadata(metadata: &Metadata, is_file: bool) -> MeasuredMetadata {
@@ -782,6 +824,10 @@ mod tests {
         assert_eq!(view.total_items, MAX_LIST_ITEMS + 1);
         assert_eq!(view.items.len(), MAX_LIST_ITEMS);
         assert!(view.items_truncated);
+        assert_eq!(
+            view.items.last().expect("last listed item").name,
+            "file-0499.bin"
+        );
         assert_eq!(view.chart_items.len(), MAX_CHART_ITEMS_PER_DIRECTORY + 1);
         assert!(
             view.chart_items
@@ -789,6 +835,13 @@ mod tests {
                 .expect("aggregate item")
                 .path
                 .is_none()
+        );
+        assert_eq!(
+            view.chart_items
+                .iter()
+                .map(|item| item.logical_bytes)
+                .sum::<u64>(),
+            output.result.logical_bytes
         );
     }
 }
