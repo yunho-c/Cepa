@@ -27,6 +27,7 @@
     formatBytes,
     formatBackend,
     formatCompressionCapability,
+    formatCompressionState,
     formatCount,
     formatDuration,
     formatMetric,
@@ -36,6 +37,7 @@
     metricBytes,
     type ChartItem,
     type CompressionCapability,
+    type CompressionState,
     type DirectoryView,
     type ScanEvent,
     type ScanItem,
@@ -55,6 +57,7 @@
   let result = $state<ScanResult | null>(null);
   let view = $state<DirectoryView | null>(null);
   let selectedEntry = $state<ChartItem | ScanItem | null>(null);
+  let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
   let errorMessage = $state("");
   let navigationError = $state("");
@@ -63,6 +66,9 @@
   let revealingNodeId = $state<number | null>(null);
   let sizeMetric = $state<SizeMetric>("allocated");
   let compressionCapability = $state<CompressionCapability | null>(null);
+  let compressionState = $state<CompressionState | null>(null);
+  let isInspectingCompression = $state(false);
+  let inspectionSequence = 0;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -84,6 +90,7 @@
     },
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
+  const activeEntry = $derived(inspectedEntry ?? selectedEntry);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const headerLabel = $derived(
@@ -147,6 +154,7 @@
     result = null;
     view = null;
     selectedEntry = null;
+    clearInspection();
     scanId = null;
 
     const onEvent = new Channel<ScanEvent>();
@@ -208,6 +216,7 @@
     result = null;
     view = null;
     selectedEntry = null;
+    clearInspection();
     errorMessage = "";
     navigationError = "";
     navigationErrorTitle = "That folder could not be opened.";
@@ -240,6 +249,52 @@
     }
   }
 
+  function clearInspection() {
+    inspectionSequence += 1;
+    inspectedEntry = null;
+    compressionState = null;
+    isInspectingCompression = false;
+  }
+
+  async function inspectEntry(entry: ChartItem | ScanItem) {
+    if (scanId === null || entry.id === null) return;
+    const completedScanId = scanId;
+    const request = ++inspectionSequence;
+    inspectedEntry = entry;
+    compressionState = null;
+    isInspectingCompression = true;
+    try {
+      const state = await invoke<CompressionState>("compression_state", {
+        scanId: completedScanId,
+        nodeId: entry.id,
+      });
+      if (
+        inspectionSequence === request &&
+        scanId === completedScanId &&
+        inspectedEntry?.id === entry.id
+      ) {
+        compressionState = state;
+      }
+    } catch (error) {
+      if (
+        inspectionSequence === request &&
+        scanId === completedScanId &&
+        inspectedEntry?.id === entry.id
+      ) {
+        compressionState = {
+          state: "unavailable",
+          scope: "none",
+          format: null,
+          detail: `The state request failed: ${String(error)}`,
+        };
+      }
+    } finally {
+      if (inspectionSequence === request) {
+        isInspectingCompression = false;
+      }
+    }
+  }
+
   function itemPercent(bytes: number): number {
     if (bytes <= 0 || viewBytes <= 0) return 0;
     return Math.max(0.8, Math.min(100, (bytes / viewBytes) * 100));
@@ -263,6 +318,7 @@
       view = nextView;
       sizeMetric = metric;
       selectedEntry = null;
+      clearInspection();
       if (focusHeading) {
         await tick();
         viewHeading?.focus();
@@ -309,6 +365,7 @@
       void openDirectory(entry.id);
     } else {
       selectedEntry = entry;
+      void inspectEntry(entry);
     }
   }
 
@@ -663,7 +720,7 @@
                       d={segment.pathData}
                       data-depth={segment.depth}
                       data-color={segment.colorIndex}
-                      data-selected={selectedEntry?.id === segment.item.id}
+                      data-selected={activeEntry?.id === segment.item.id}
                     />
                   {/if}
                 {/each}
@@ -674,8 +731,8 @@
 
             <div class="chart-center" aria-live="polite">
               <span>{formatMetric(sizeMetric)}</span>
-              <strong>{formatBytes(selectedEntry ? metricBytes(selectedEntry, sizeMetric) : viewBytes)}</strong>
-              <em>{selectedEntry?.name ?? view.displayName}</em>
+              <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
+              <em>{activeEntry?.name ?? view.displayName}</em>
             </div>
           </div>
 
@@ -693,12 +750,40 @@
             </span>
           </div>
 
+          {#if inspectedEntry}
+            <section
+              class="selection-inspector"
+              aria-label={`Compression details for ${inspectedEntry.name}`}
+              aria-busy={isInspectingCompression}
+              aria-live="polite"
+            >
+              <div class="selection-name">
+                <span>Selected {inspectedEntry.kind === "file" ? "file" : "item"}</span>
+                <strong title={inspectedEntry.name}>{inspectedEntry.name}</strong>
+              </div>
+              <div class="selection-state">
+                <span>Compression</span>
+                <strong
+                  data-state={compressionState?.state ?? "loading"}
+                  title={compressionState?.detail}
+                >
+                  {isInspectingCompression
+                    ? "Reading metadata…"
+                    : compressionState
+                      ? formatCompressionState(compressionState)
+                      : "State unavailable"}
+                </strong>
+              </div>
+              {#if compressionState}<p>{compressionState.detail}</p>{/if}
+            </section>
+          {/if}
+
           {#if view.items.length > 0}
             <div class="item-list" class:is-navigating={isNavigating}>
               {#each view.items as item, index (item.id)}
                 <div
                   class="storage-row"
-                  data-selected={selectedEntry?.id === item.id}
+                  data-selected={activeEntry?.id === item.id}
                 >
                   <button
                     type="button"
@@ -709,7 +794,7 @@
                     onfocus={() => (selectedEntry = item)}
                     onmouseleave={() => (selectedEntry = null)}
                     onblur={() => (selectedEntry = null)}
-                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ""}`}
+                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", inspect compression state"}`}
                   >
                     <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
                     <span class="item-icon" data-kind={item.kind}>

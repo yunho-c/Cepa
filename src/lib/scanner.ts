@@ -15,6 +15,24 @@ export interface CompressionCapability {
   detail: string;
 }
 
+export type CompressionStateKind =
+  | "compressed"
+  | "notCompressed"
+  | "enabled"
+  | "disabled"
+  | "inherited"
+  | "notApplicable"
+  | "unsupported"
+  | "unavailable";
+export type CompressionStateScope = "existingData" | "futureWrites" | "none";
+
+export interface CompressionState {
+  state: CompressionStateKind;
+  scope: CompressionStateScope;
+  format: string | null;
+  detail: string;
+}
+
 export interface ScanProgress {
   entriesScanned: number;
   filesScanned: number;
@@ -156,6 +174,27 @@ export function formatCompressionCapability(
       return `Compression unavailable on ${capability.filesystem}`;
     case "unavailable":
       return "Compression status unavailable";
+  }
+}
+
+export function formatCompressionState(state: CompressionState): string {
+  switch (state.state) {
+    case "compressed":
+      return state.format ? `Compressed · ${state.format}` : "Compressed";
+    case "notCompressed":
+      return "Not compressed";
+    case "enabled":
+      return "Enabled for future writes";
+    case "disabled":
+      return "Disabled for future writes";
+    case "inherited":
+      return "Following filesystem policy";
+    case "notApplicable":
+      return "Not applicable";
+    case "unsupported":
+      return "Unsupported on this filesystem";
+    case "unavailable":
+      return "State unavailable";
   }
 }
 

@@ -16,9 +16,10 @@ The two primary product requirements are:
 Transparent filesystem compression is a future product capability. Its proposed
 semantics, platform coverage, safety model, and rollout gates are documented in
 `docs/compression.md`. A read-only, scan-authorized volume capability probe is
-implemented in `src-tauri/src/compression.rs`; per-file state inspection,
-estimation, and mutation are not. Preserve those evidence boundaries instead of
-presenting volume probing as writable compression support.
+implemented in `src-tauri/src/compression.rs`, along with no-follow per-item state
+inspection. Estimation, mutation-plan identity snapshots, and mutation are not.
+Preserve those evidence boundaries instead of presenting inspection as writable
+compression support.
 
 ## Current state and roadmap
 
@@ -42,6 +43,12 @@ After completion, the UI requests a volume compression capability using the
 retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
 and always reports that no writer exists. Do not accept a frontend path for this
 or infer compression state from logical-versus-allocated size.
+Selecting a non-directory item requests its compression state through the same
+retained scan/node boundary. macOS and Windows report existing-data metadata;
+Btrfs reports future-write inode policy because those flags do not prove that
+existing extents are compressed. The inspector opens or stats paths without
+following links. It does not create the stronger immutable identity/revision
+snapshot required by a future mutation plan.
 
 The intended scanning architecture is:
 
@@ -139,8 +146,8 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
-- `src-tauri/src/compression.rs`: read-only platform volume-capability probes and
-  the backend-neutral compression capability wire contract.
+- `src-tauri/src/compression.rs`: read-only platform volume-capability and
+  per-item state probes plus their backend-neutral wire contracts.
 - `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.

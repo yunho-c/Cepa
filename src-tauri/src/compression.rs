@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::path::Path;
 
+use crate::scanner::EntryKind;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum CompressionCapabilityStatus {
@@ -23,6 +25,95 @@ pub(crate) struct CompressionCapability {
     pub writer_available: bool,
     pub algorithms: Vec<String>,
     pub detail: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+// Each native target constructs only the states its filesystem API can report.
+#[allow(dead_code)]
+pub(crate) enum CompressionStateKind {
+    Compressed,
+    NotCompressed,
+    Enabled,
+    Disabled,
+    Inherited,
+    NotApplicable,
+    Unsupported,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub(crate) enum CompressionStateScope {
+    ExistingData,
+    FutureWrites,
+    None,
+}
+
+/// Current read-only compression metadata for one scan-authorized item.
+/// `scope` is explicit because Btrfs inode flags govern future writes while
+/// Windows and macOS report the state of existing file data.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompressionState {
+    pub state: CompressionStateKind,
+    pub scope: CompressionStateScope,
+    pub format: Option<String>,
+    pub detail: String,
+}
+
+impl CompressionState {
+    fn existing_data(compressed: bool, format: Option<&str>, detail: impl Into<String>) -> Self {
+        Self {
+            state: if compressed {
+                CompressionStateKind::Compressed
+            } else {
+                CompressionStateKind::NotCompressed
+            },
+            scope: CompressionStateScope::ExistingData,
+            format: format.map(str::to_owned),
+            detail: detail.into(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn future_writes(state: CompressionStateKind, detail: impl Into<String>) -> Self {
+        Self {
+            state,
+            scope: CompressionStateScope::FutureWrites,
+            format: None,
+            detail: detail.into(),
+        }
+    }
+
+    fn not_applicable(detail: impl Into<String>) -> Self {
+        Self {
+            state: CompressionStateKind::NotApplicable,
+            scope: CompressionStateScope::None,
+            format: None,
+            detail: detail.into(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn unsupported(detail: impl Into<String>) -> Self {
+        Self {
+            state: CompressionStateKind::Unsupported,
+            scope: CompressionStateScope::None,
+            format: None,
+            detail: detail.into(),
+        }
+    }
+
+    fn unavailable(detail: impl Into<String>) -> Self {
+        Self {
+            state: CompressionStateKind::Unavailable,
+            scope: CompressionStateScope::None,
+            format: None,
+            detail: detail.into(),
+        }
+    }
 }
 
 impl CompressionCapability {
@@ -68,9 +159,24 @@ pub(crate) fn probe(path: &Path) -> CompressionCapability {
     platform::probe(path)
 }
 
+pub(crate) fn inspect(path: &Path, kind: EntryKind) -> CompressionState {
+    match kind {
+        EntryKind::File => platform::inspect(path),
+        EntryKind::Directory => CompressionState::not_applicable(
+            "Folder compression defaults are not part of the current read-only file inspector.",
+        ),
+        EntryKind::Symlink => CompressionState::not_applicable(
+            "Symbolic links and reparse points are never followed for compression inspection.",
+        ),
+        EntryKind::Other => {
+            CompressionState::not_applicable("This filesystem entry is not a regular file.")
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::CompressionCapability;
+    use super::{CompressionCapability, CompressionState};
     use std::ffi::{CStr, CString};
     use std::mem::{self, MaybeUninit};
     use std::os::unix::ffi::OsStrExt;
@@ -107,6 +213,45 @@ mod platform {
                 filesystem,
                 format!("The volume capability query failed: {error}."),
             ),
+        }
+    }
+
+    pub(super) fn inspect(path: &Path) -> CompressionState {
+        let path = match CString::new(path.as_os_str().as_bytes()) {
+            Ok(path) => path,
+            Err(_) => {
+                return CompressionState::unavailable(
+                    "The scanned path contains a null byte and could not be inspected.",
+                );
+            }
+        };
+        let mut info = MaybeUninit::<libc::stat>::zeroed();
+        // SAFETY: path is null-terminated and lstat writes to valid storage.
+        if unsafe { libc::lstat(path.as_ptr(), info.as_mut_ptr()) } != 0 {
+            return CompressionState::unavailable(format!(
+                "The file metadata query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: lstat succeeded and initialized the output structure.
+        let info = unsafe { info.assume_init() };
+        if info.st_mode & libc::S_IFMT != libc::S_IFREG {
+            return CompressionState::unavailable(
+                "The scanned item is no longer a regular file and was not followed.",
+            );
+        }
+        if info.st_flags & libc::UF_COMPRESSED != 0 {
+            CompressionState::existing_data(
+                true,
+                Some("decmpfs"),
+                "macOS reports UF_COMPRESSED for this file. Cepa reads this metadata but does not modify it.",
+            )
+        } else {
+            CompressionState::existing_data(
+                false,
+                None,
+                "macOS does not report UF_COMPRESSED for this file.",
+            )
         }
     }
 
@@ -170,10 +315,11 @@ mod platform {
 
 #[cfg(target_os = "linux")]
 mod platform {
-    use super::CompressionCapability;
+    use super::{CompressionCapability, CompressionState, CompressionStateKind};
     use std::ffi::CString;
     use std::mem::MaybeUninit;
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
     use std::path::Path;
 
     pub(super) fn probe(path: &Path) -> CompressionCapability {
@@ -212,14 +358,107 @@ mod platform {
             )
         }
     }
+
+    pub(super) fn inspect(path: &Path) -> CompressionState {
+        let path = match CString::new(path.as_os_str().as_bytes()) {
+            Ok(path) => path,
+            Err(_) => {
+                return CompressionState::unavailable(
+                    "The scanned path contains a null byte and could not be inspected.",
+                );
+            }
+        };
+        // SAFETY: path is null-terminated. O_NOFOLLOW prevents resolving a
+        // replacement symlink, and OwnedFd closes the successful descriptor.
+        let raw_fd = unsafe {
+            libc::open(
+                path.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            )
+        };
+        if raw_fd < 0 {
+            return CompressionState::unavailable(format!(
+                "The file could not be opened without following links: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: raw_fd is a newly owned successful open result.
+        let file = unsafe { OwnedFd::from_raw_fd(raw_fd) };
+        let mut metadata = MaybeUninit::<libc::stat>::zeroed();
+        // SAFETY: the descriptor is open and metadata points to writable storage.
+        if unsafe { libc::fstat(file.as_raw_fd(), metadata.as_mut_ptr()) } != 0 {
+            return CompressionState::unavailable(format!(
+                "The opened file metadata query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: fstat succeeded and initialized the output structure.
+        if unsafe { metadata.assume_init() }.st_mode & libc::S_IFMT != libc::S_IFREG {
+            return CompressionState::unavailable(
+                "The scanned item is no longer a regular file and was not followed.",
+            );
+        }
+        let mut filesystem = MaybeUninit::<libc::statfs>::zeroed();
+        // SAFETY: the descriptor is open and filesystem points to writable storage.
+        if unsafe { libc::fstatfs(file.as_raw_fd(), filesystem.as_mut_ptr()) } != 0 {
+            return CompressionState::unavailable(format!(
+                "The opened file's filesystem query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: fstatfs succeeded and initialized the output structure.
+        if unsafe { filesystem.assume_init() }.f_type != libc::BTRFS_SUPER_MAGIC {
+            return CompressionState::unsupported(
+                "Per-file compression-state inspection is currently implemented only for Btrfs on Linux.",
+            );
+        }
+
+        let mut flags: libc::c_int = 0;
+        // SAFETY: FS_IOC_GETFLAGS expects an int pointer for an open inode.
+        if unsafe { libc::ioctl(file.as_raw_fd(), libc::FS_IOC_GETFLAGS, &mut flags) } != 0 {
+            return CompressionState::unavailable(format!(
+                "The Btrfs inode-flag query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        const FS_COMPR_FL: libc::c_int = 0x0000_0004;
+        const FS_NOCOMP_FL: libc::c_int = 0x0000_0400;
+        if flags & FS_COMPR_FL != 0 {
+            CompressionState::future_writes(
+                CompressionStateKind::Enabled,
+                "Btrfs has the compression inode flag set. This governs newly written data and does not prove that existing extents are compressed.",
+            )
+        } else if flags & FS_NOCOMP_FL != 0 {
+            CompressionState::future_writes(
+                CompressionStateKind::Disabled,
+                "Btrfs has the no-compression inode flag set for future writes.",
+            )
+        } else {
+            CompressionState::future_writes(
+                CompressionStateKind::Inherited,
+                "This file has no explicit Btrfs compression flag and follows the applicable mount or parent policy for future writes.",
+            )
+        }
+    }
 }
 
 #[cfg(windows)]
 mod platform {
-    use super::CompressionCapability;
+    use super::{CompressionCapability, CompressionState};
+    use std::fs::File;
+    use std::mem;
     use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
     use std::path::Path;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, COMPRESSION_FORMAT_LZNT1, COMPRESSION_FORMAT_NONE, CreateFileW,
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+        FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, GetFileInformationByHandle,
+        OPEN_EXISTING,
+    };
     use windows_sys::Win32::Storage::FileSystem::{GetVolumeInformationW, GetVolumePathNameW};
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::FSCTL_GET_COMPRESSION;
     use windows_sys::Win32::System::SystemServices::FILE_FILE_COMPRESSION;
 
     pub(super) fn probe(path: &Path) -> CompressionCapability {
@@ -291,11 +530,96 @@ mod platform {
             )
         }
     }
+
+    pub(super) fn inspect(path: &Path) -> CompressionState {
+        let mut path_wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        path_wide.push(0);
+        // SAFETY: path_wide is null-terminated. OPEN_REPARSE_POINT prevents
+        // following a replacement reparse point, and File owns the handle.
+        let handle = unsafe {
+            CreateFileW(
+                path_wide.as_ptr(),
+                FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+        if handle == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
+            return CompressionState::unavailable(format!(
+                "The file could not be opened without following reparse points: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: handle is a newly owned successful CreateFileW result.
+        let file = unsafe { File::from_raw_handle(handle) };
+        let mut metadata = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: the handle is open and metadata points to writable storage.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut metadata) } == 0 {
+            return CompressionState::unavailable(format!(
+                "The opened file metadata query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if metadata.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return CompressionState::not_applicable(
+                "Reparse points are never followed for compression inspection.",
+            );
+        }
+
+        let mut format = COMPRESSION_FORMAT_NONE;
+        let mut returned = 0_u32;
+        // SAFETY: the handle is open, no input buffer is supplied, and the
+        // output buffer is a writable 16-bit compression format as documented.
+        if unsafe {
+            DeviceIoControl(
+                file.as_raw_handle(),
+                FSCTL_GET_COMPRESSION,
+                std::ptr::null(),
+                0,
+                (&mut format as *mut u16).cast(),
+                mem::size_of::<u16>() as u32,
+                &mut returned,
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return CompressionState::unavailable(format!(
+                "The Windows compression-state query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if returned < mem::size_of::<u16>() as u32 {
+            return CompressionState::unavailable(
+                "The Windows compression-state response was shorter than expected.",
+            );
+        }
+        if format == COMPRESSION_FORMAT_NONE {
+            CompressionState::existing_data(
+                false,
+                None,
+                "Windows reports that this file is not compressed.",
+            )
+        } else {
+            let format_name = if format == COMPRESSION_FORMAT_LZNT1 {
+                "lznt1".to_string()
+            } else {
+                format!("format-0x{format:04x}")
+            };
+            CompressionState::existing_data(
+                true,
+                Some(&format_name),
+                "Windows reports the current per-stream compression format for this file.",
+            )
+        }
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod platform {
-    use super::CompressionCapability;
+    use super::{CompressionCapability, CompressionState};
     use std::path::Path;
 
     pub(super) fn probe(_path: &Path) -> CompressionCapability {
@@ -304,11 +628,22 @@ mod platform {
             "Cepa does not yet have a compression capability probe for this platform.",
         )
     }
+
+    pub(super) fn inspect(_path: &Path) -> CompressionState {
+        CompressionState::unsupported(
+            "Cepa does not yet have a compression-state inspector for this platform.",
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CompressionCapability, CompressionCapabilityStatus, probe};
+    use super::{
+        CompressionCapability, CompressionCapabilityStatus, CompressionState, CompressionStateKind,
+        CompressionStateScope, inspect, probe,
+    };
+    use crate::scanner::EntryKind;
+    use std::path::Path;
 
     #[test]
     fn wire_contract_separates_volume_support_from_writer_availability() {
@@ -324,6 +659,25 @@ mod tests {
         assert_eq!(wire["volumeSupportsTransparentCompression"], true);
         assert_eq!(wire["writerAvailable"], false);
         assert_eq!(wire["algorithms"][0], "test-algorithm");
+    }
+
+    #[test]
+    fn state_wire_contract_keeps_state_and_scope_orthogonal() {
+        let state =
+            CompressionState::future_writes(CompressionStateKind::Enabled, "future writes only");
+        let wire = serde_json::to_value(&state).expect("serialize state");
+
+        assert_eq!(wire["state"], "enabled");
+        assert_eq!(wire["scope"], "futureWrites");
+        assert!(wire["format"].is_null());
+    }
+
+    #[test]
+    fn non_files_are_rejected_before_platform_inspection() {
+        let state = inspect(Path::new("not-opened"), EntryKind::Symlink);
+
+        assert_eq!(state.state, CompressionStateKind::NotApplicable);
+        assert_eq!(state.scope, CompressionStateScope::None);
     }
 
     #[test]
@@ -345,6 +699,27 @@ mod tests {
         );
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[test]
+    fn inspects_a_real_regular_file_without_mutating_it() {
+        let temp = tempfile::tempdir().expect("create state fixture");
+        let file = temp.path().join("state.bin");
+        std::fs::write(&file, b"read-only state fixture").expect("write state fixture");
+
+        let state = inspect(&file, EntryKind::File);
+
+        assert_ne!(state.state, CompressionStateKind::Unavailable);
+        assert!(matches!(
+            state.state,
+            CompressionStateKind::Compressed
+                | CompressionStateKind::NotCompressed
+                | CompressionStateKind::Enabled
+                | CompressionStateKind::Disabled
+                | CompressionStateKind::Inherited
+                | CompressionStateKind::Unsupported
+        ));
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn reads_decmpfs_capability_from_the_local_temporary_volume() {
@@ -354,5 +729,48 @@ mod tests {
         assert_eq!(capability.status, CompressionCapabilityStatus::InspectOnly);
         assert!(capability.volume_supports_transparent_compression);
         assert!(!capability.writer_available);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn reads_uncompressed_and_compressed_decmpfs_file_state() {
+        let temp = tempfile::tempdir().expect("create compression fixture");
+        let source = temp.path().join("source.bin");
+        let compressed = temp.path().join("compressed.bin");
+        std::fs::write(&source, vec![0_u8; 1024 * 1024]).expect("write compressible fixture");
+
+        let uncompressed = inspect(&source, EntryKind::File);
+        assert_eq!(uncompressed.state, CompressionStateKind::NotCompressed);
+        assert_eq!(uncompressed.scope, CompressionStateScope::ExistingData);
+
+        let status = std::process::Command::new("/usr/bin/ditto")
+            .arg("--hfsCompression")
+            .arg(&source)
+            .arg(&compressed)
+            .status()
+            .expect("run ditto fixture compressor");
+        assert!(status.success(), "ditto should create compressed fixture");
+
+        let inspected = inspect(&compressed, EntryKind::File);
+        assert_eq!(inspected.state, CompressionStateKind::Compressed);
+        assert_eq!(inspected.scope, CompressionStateScope::ExistingData);
+        assert_eq!(inspected.format.as_deref(), Some("decmpfs"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_a_symlink_that_replaces_a_scanned_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().expect("create replacement fixture");
+        let target = temp.path().join("target.bin");
+        let replacement = temp.path().join("replacement.bin");
+        std::fs::write(&target, b"original").expect("write original");
+        std::fs::write(&replacement, b"replacement").expect("write replacement");
+        std::fs::remove_file(&target).expect("remove original");
+        symlink(&replacement, &target).expect("replace with symlink");
+
+        let state = inspect(&target, EntryKind::File);
+        assert_eq!(state.state, CompressionStateKind::Unavailable);
     }
 }

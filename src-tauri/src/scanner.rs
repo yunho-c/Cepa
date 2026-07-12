@@ -784,6 +784,14 @@ impl ScanSnapshot {
         self.root_path.to_path_buf()
     }
 
+    pub(crate) fn compression_target(
+        &self,
+        requested: u64,
+    ) -> Result<(PathBuf, EntryKind), String> {
+        let node_id = self.valid_node_id(requested)?;
+        Ok((self.node_path(node_id), self.nodes[node_id].kind))
+    }
+
     pub(crate) fn directory_view(
         &self,
         scan_id: u64,

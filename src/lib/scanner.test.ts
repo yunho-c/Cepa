@@ -4,6 +4,7 @@ import {
   formatBackend,
   formatBytes,
   formatCompressionCapability,
+  formatCompressionState,
   formatDuration,
   formatMetric,
   formatPercent,
@@ -33,6 +34,33 @@ describe("scanner presentation helpers", () => {
         detail: "Unsupported capability.",
       }),
     ).toBe("Compression unavailable on ext4");
+  });
+
+  test("labels existing-data state separately from future-write policy", () => {
+    expect(
+      formatCompressionState({
+        state: "compressed",
+        scope: "existingData",
+        format: "decmpfs",
+        detail: "Current data state.",
+      }),
+    ).toBe("Compressed · decmpfs");
+    expect(
+      formatCompressionState({
+        state: "enabled",
+        scope: "futureWrites",
+        format: null,
+        detail: "Future writes only.",
+      }),
+    ).toBe("Enabled for future writes");
+    expect(
+      formatCompressionState({
+        state: "inherited",
+        scope: "futureWrites",
+        format: null,
+        detail: "Inherited policy.",
+      }),
+    ).toBe("Following filesystem policy");
   });
 
   test("formats byte and duration boundaries", () => {

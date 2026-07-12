@@ -27,6 +27,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
 - Scan-authorized, read-only volume compression capability reporting on macOS,
   Windows, and Linux, with unsupported and unavailable states kept explicit
+- Selection-driven, no-follow compression-state inspection for regular files:
+  current decmpfs/NTFS data state and clearly separated Btrfs future-write policy
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   and completed states with visible backend/accounting semantics
@@ -45,11 +47,11 @@ the completed directory breakdown. See
 error, and concurrent-mutation semantics.
 
 MFT traversal on Windows, `statx` traversal on Linux, broader native-filesystem
-and cold-cache validation, per-file compression-state inspection, estimation,
-and compression mutation remain roadmap work. The result footer reports only a
-read-only volume capability; it never infers compression from allocated size and
-never claims a writer is available. The safety and backend contract is specified
-in [`docs/compression.md`](docs/compression.md).
+and cold-cache validation, compression-savings estimation, stronger mutation-plan
+identity snapshots, and compression mutation remain roadmap work. The result
+footer and selection inspector are read-only; they never infer compression from
+allocated size and never claim a writer is available. The safety and backend
+contract is specified in [`docs/compression.md`](docs/compression.md).
 
 ## Prerequisites
 

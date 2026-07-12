@@ -2,6 +2,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
   ChartItem,
   CompressionCapability,
+  CompressionState,
   DirectoryView,
   ScanProgress,
   ScanResponse,
@@ -72,6 +73,23 @@ export function installDevMock(requestedScenario: string) {
           detail:
             "This volume supports transparent decmpfs decompression. Cepa can only report the capability; compression changes are not implemented.",
         } satisfies CompressionCapability;
+      case "compression_state":
+        if (Number(args.nodeId) === 4) {
+          return {
+            state: "notApplicable",
+            scope: "none",
+            format: null,
+            detail:
+              "Symbolic links and reparse points are never followed for compression inspection.",
+          } satisfies CompressionState;
+        }
+        return {
+          state: "compressed",
+          scope: "existingData",
+          format: "decmpfs",
+          detail:
+            "macOS reports UF_COMPRESSED for this file. Cepa reads this metadata but does not modify it.",
+        } satisfies CompressionState;
       case "reveal_scan_item":
         if (scenario === "reveal-error") {
           throw "The mocked item disappeared after the scan completed.";

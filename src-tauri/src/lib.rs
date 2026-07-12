@@ -1,7 +1,7 @@
 mod compression;
 mod scanner;
 
-use scanner::{DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
+use scanner::{DirectoryView, EntryKind, ScanProgress, ScanSnapshot, SizeMetric};
 use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
@@ -239,6 +239,18 @@ impl ScanState {
             .ok_or_else(|| "That scan is no longer available.".to_string())?;
         Ok(scan.snapshot.root_path())
     }
+
+    fn compression_target(&self, id: u64, node_id: u64) -> Result<(PathBuf, EntryKind), String> {
+        let completed = self
+            .completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let scan = completed
+            .as_ref()
+            .filter(|scan| scan.id == id)
+            .ok_or_else(|| "That scan is no longer available.".to_string())?;
+        scan.snapshot.compression_target(node_id)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -329,6 +341,18 @@ async fn compression_capability(
 }
 
 #[tauri::command]
+async fn compression_state(
+    scan_id: u64,
+    node_id: u64,
+    state: tauri::State<'_, ScanState>,
+) -> Result<compression::CompressionState, String> {
+    let (path, kind) = state.compression_target(scan_id, node_id)?;
+    tauri::async_runtime::spawn_blocking(move || compression::inspect(&path, kind))
+        .await
+        .map_err(|error| format!("The compression-state task stopped unexpectedly: {error}"))
+}
+
+#[tauri::command]
 async fn reveal_scan_item(
     scan_id: u64,
     node_id: u64,
@@ -355,6 +379,7 @@ pub fn run() {
             cancel_scan,
             open_scan_directory,
             compression_capability,
+            compression_state,
             reveal_scan_item
         ])
         .run(tauri::generate_context!())
@@ -428,6 +453,25 @@ mod tests {
         assert_eq!(
             state.root_path(8).expect_err("reject stale scan root"),
             "That scan is no longer available."
+        );
+        assert_eq!(
+            state
+                .compression_target(7, file_id)
+                .expect("resolve compression target")
+                .0,
+            file.canonicalize().expect("canonical fixture file")
+        );
+        assert_eq!(
+            state
+                .compression_target(8, file_id)
+                .expect_err("reject stale compression target"),
+            "That scan is no longer available."
+        );
+        assert_eq!(
+            state
+                .compression_target(7, u64::MAX)
+                .expect_err("reject unknown compression target"),
+            "That item is not part of this scan."
         );
         assert_eq!(
             state

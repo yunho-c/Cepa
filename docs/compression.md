@@ -122,8 +122,8 @@ volumes. The public `copyfile(3)` interface documents clone, sparse-copy, and
 no-follow behavior, but the inspected SDK does not expose a supported in-place
 compression operation.
 
-Cepa can first add read-only volume and file-state inspection. A writer must not
-ship by manually constructing `com.apple.decmpfs` attributes or toggling
+Cepa provides read-only volume and file-state inspection. A writer must not ship
+by manually constructing `com.apple.decmpfs` attributes or toggling
 `UF_COMPRESSED`; those are implementation details, not a supported mutation
 contract. A copy-compress-replace prototype using `ditto` is not production-safe
 until it proves, on both APFS and HFS+:
@@ -228,17 +228,25 @@ infrastructure must record its filesystem and kernel/OS details with the result.
 
 ## Rollout order
 
-The volume-capability portion of step 1 is implemented. It is authorized by a
-completed scan ID and reports `inspectOnly`, `unsupported`, or `unavailable` as
-data. macOS queries `ATTR_VOL_CAPABILITIES`, Windows queries
-`GetVolumeInformationW`, and Linux identifies Btrfs with `statfs`. The macOS
-probe has been exercised against a real APFS temporary volume; Windows and Linux
-probe modules pass target-specific compile checks but still require native
-runtime evidence. Every platform reports `writerAvailable: false`.
+Step 1 is implemented at the protocol and backend level. Volume capability is
+authorized by a completed scan ID and reports `inspectOnly`, `unsupported`, or
+`unavailable` as data. Per-item inspection additionally requires an opaque node
+ID and rejects directories, links, and other non-regular entries without
+following them.
 
-Per-file read-only state is not implemented, so step 1 as a whole remains open.
-The probe does not inspect individual entries, estimate savings, infer state from
-logical and allocated bytes, or authorize mutation.
+macOS queries `ATTR_VOL_CAPABILITIES` and reads `UF_COMPRESSED`; Windows queries
+`GetVolumeInformationW` and `FSCTL_GET_COMPRESSION`; Linux identifies Btrfs with
+`statfs` and reads `FS_IOC_GETFLAGS`. Btrfs results are explicitly scoped to
+future writes because its inode flags do not prove existing extent state. The
+macOS probes have been exercised against real uncompressed and `ditto`-compressed
+APFS files plus a symlink-replacement fixture. Windows and Linux modules pass
+target-specific compile checks and have native-CI regular-file tests, but those
+native runs and a real Btrfs runtime fixture remain external evidence gates.
+
+Every platform reports `writerAvailable: false`. Inspection does not estimate
+savings, infer state from logical and allocated bytes, authorize mutation, or
+replace the immutable identity/revision snapshot required by a future
+`CompressionPlan`.
 
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.
