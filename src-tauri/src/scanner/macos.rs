@@ -1,6 +1,7 @@
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
-    PROGRESS_INTERVAL, ScanCounters, ScanOutput, ScanProgress, ScanSemantics, finish_scan,
+    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
+    finish_scan, observe_partial_file,
 };
 use crossbeam_channel::{self as channel, RecvTimeoutError};
 use libc::{self, attribute_set_t, attrlist, attrreference_t};
@@ -91,6 +92,7 @@ where
     let root_node_path: Arc<Path> = Arc::from(root.clone());
     let mut nodes = vec![InternalNode::root(&root)];
     let mut counters = ScanCounters::default();
+    let mut partial_ranking = PartialRanking::default();
     let mut pending_directories = Vec::new();
     let mut entries_since_progress = 0_u64;
     let mut last_progress_at = Instant::now();
@@ -109,6 +111,7 @@ where
                     0,
                     &mut nodes,
                     &mut counters,
+                    &mut partial_ranking,
                     &mut pending_directories,
                     &mut entries_since_progress,
                     &mut last_progress_at,
@@ -135,6 +138,7 @@ where
         &mut pending_directories,
         &mut nodes,
         &mut counters,
+        &mut partial_ranking,
         &mut entries_since_progress,
         &mut last_progress_at,
         started_at,
@@ -148,6 +152,7 @@ where
         root_node_path,
         nodes,
         counters,
+        partial_ranking,
         "getattrlistbulk",
         ScanSemantics {
             allocated_size_is_estimate: false,
@@ -167,6 +172,7 @@ fn traverse_directories<F>(
     pending_directories: &mut Vec<DirectoryTask>,
     nodes: &mut Vec<InternalNode>,
     counters: &mut ScanCounters,
+    partial_ranking: &mut PartialRanking,
     entries_since_progress: &mut u64,
     last_progress_at: &mut Instant,
     started_at: Instant,
@@ -255,6 +261,7 @@ where
                         parent_id,
                         nodes,
                         counters,
+                        partial_ranking,
                         pending_directories,
                         entries_since_progress,
                         last_progress_at,
@@ -375,6 +382,7 @@ fn ingest_entries<F>(
     parent_id: usize,
     nodes: &mut Vec<InternalNode>,
     counters: &mut ScanCounters,
+    partial_ranking: &mut PartialRanking,
     pending_directories: &mut Vec<DirectoryTask>,
     entries_since_progress: &mut u64,
     last_progress_at: &mut Instant,
@@ -403,6 +411,7 @@ where
         let child_path =
             matches!(entry.kind, EntryKind::Directory).then(|| directory_path.join(&entry.name));
         let node_id = counters.push_node(nodes, parent_id, entry.name, entry.kind, entry.measured);
+        observe_partial_file(partial_ranking, nodes, node_id);
 
         if matches!(entry.kind, EntryKind::Directory) {
             if entry.mount_point {
@@ -432,6 +441,7 @@ where
                 skipped_entries: counters.skipped_entries,
                 current_path: current_path.to_string_lossy().into_owned(),
                 elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+                largest_items: partial_ranking.items(nodes),
             });
             *entries_since_progress = 0;
             *last_progress_at = Instant::now();

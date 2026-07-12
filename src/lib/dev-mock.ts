@@ -76,6 +76,13 @@ function mockProgress(): ScanProgress {
     skippedEntries: 2,
     currentPath: `${ROOT}/Library/Application Support/Design Archive`,
     elapsedMs: 428,
+    largestItems: rootView().items
+      .filter((item) => item.kind === "file")
+      .map((item) => ({
+        ...item,
+        logicalBytes: Math.round(item.logicalBytes * 0.58),
+        allocatedBytes: Math.round(item.allocatedBytes * 0.58),
+      })),
   };
 }
 

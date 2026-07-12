@@ -68,6 +68,7 @@
       skippedEntries: 0,
       currentPath: path,
       elapsedMs: 0,
+      largestItems: [],
     },
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? []));
@@ -388,12 +389,30 @@
         </div>
       </section>
 
-      <div class="scan-pulse" aria-hidden="true">
-        <div class="pulse-disc"><ScanSearch /></div>
-        <span class="pulse-ring ring-one"></span>
-        <span class="pulse-ring ring-two"></span>
-        <span class="pulse-ring ring-three"></span>
-      </div>
+      {#if displayProgress.largestItems.length > 0}
+        <section class="partial-results" aria-label="Largest files observed so far">
+          <div class="partial-heading">
+            <span>Largest files so far</span>
+            <span>Observed space on disk</span>
+          </div>
+          <ol>
+            {#each displayProgress.largestItems.slice(0, 4) as item (item.id)}
+              <li>
+                <span class="partial-kind">File</span>
+                <strong title={item.name}>{item.name}</strong>
+                <span>{formatBytes(item.allocatedBytes)}</span>
+              </li>
+            {/each}
+          </ol>
+        </section>
+      {:else}
+        <div class="scan-pulse" aria-hidden="true">
+          <div class="pulse-disc"><ScanSearch /></div>
+          <span class="pulse-ring ring-one"></span>
+          <span class="pulse-ring ring-two"></span>
+          <span class="pulse-ring ring-three"></span>
+        </div>
+      {/if}
 
       <p class="scan-footnote">
         Symlinks stay closed · Mount boundaries are respected where available · Nothing leaves this device

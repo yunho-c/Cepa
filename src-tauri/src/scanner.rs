@@ -15,6 +15,7 @@ mod macos;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
+const MAX_PARTIAL_ITEMS: usize = 8;
 const MAX_LIST_ITEMS: usize = 500;
 const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
 const MAX_CHART_DEPTH: usize = 3;
@@ -30,6 +31,7 @@ pub struct ScanProgress {
     pub skipped_entries: u64,
     pub current_path: String,
     pub elapsed_ms: u64,
+    pub largest_items: Vec<ScanItem>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -216,6 +218,19 @@ struct ScanCounters {
     seen_files: HashSet<FileIdentity>,
 }
 
+#[derive(Debug, Default)]
+struct PartialRanking {
+    candidates: Vec<PartialCandidate>,
+    worst_index: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PartialCandidate {
+    node_id: NodeId,
+    logical_bytes: u64,
+    allocated_bytes: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ScanSemantics {
     allocated_size_is_estimate: bool,
@@ -304,6 +319,45 @@ impl ScanCounters {
     }
 }
 
+impl PartialRanking {
+    #[inline]
+    fn observe(&mut self, candidate: PartialCandidate) {
+        if self.candidates.len() < MAX_PARTIAL_ITEMS {
+            self.candidates.push(candidate);
+            if self.candidates.len() == MAX_PARTIAL_ITEMS {
+                self.refresh_worst();
+            }
+            return;
+        }
+
+        let worst_index = self
+            .worst_index
+            .expect("a full partial ranking has a worst item");
+        if compare_partial_candidates(&candidate, &self.candidates[worst_index]).is_lt() {
+            self.candidates[worst_index] = candidate;
+            self.refresh_worst();
+        }
+    }
+
+    fn refresh_worst(&mut self) {
+        self.worst_index = self
+            .candidates
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| compare_partial_candidates(left, right))
+            .map(|(index, _)| index);
+    }
+
+    fn items(&self, nodes: &[InternalNode]) -> Vec<ScanItem> {
+        let mut ranked = self.candidates.clone();
+        ranked.sort_unstable_by(compare_partial_candidates);
+        ranked
+            .into_iter()
+            .map(|candidate| scan_item(nodes, candidate.node_id))
+            .collect()
+    }
+}
+
 pub(crate) fn scan_path<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
@@ -389,6 +443,7 @@ where
     let mut ancestor_stack = vec![0];
 
     let mut counters = ScanCounters::default();
+    let mut partial_ranking = PartialRanking::default();
     let mut entries_since_progress = 0_u64;
     let mut last_progress_at = Instant::now();
 
@@ -508,6 +563,7 @@ where
             should_report_progress.then(|| entry.path().to_string_lossy().into_owned());
 
         let node_id = counters.push_node(&mut nodes, parent, entry.file_name, kind, measured);
+        observe_partial_file(&mut partial_ranking, &nodes, node_id);
         debug_assert_eq!(node_id, nodes.len() - 1);
         if matches!(kind, EntryKind::Directory) {
             ancestor_stack.push(node_id);
@@ -523,6 +579,7 @@ where
                 skipped_entries: counters.skipped_entries,
                 current_path,
                 elapsed_ms: elapsed_ms(started_at),
+                largest_items: partial_ranking.items(&nodes),
             });
             entries_since_progress = 0;
             last_progress_at = Instant::now();
@@ -539,6 +596,7 @@ where
         root_node_path,
         nodes,
         counters,
+        partial_ranking,
         "jwalk",
         ScanSemantics {
             allocated_size_is_estimate: !cfg!(unix),
@@ -558,6 +616,7 @@ fn finish_scan<F>(
     root_node_path: Arc<Path>,
     mut nodes: Vec<InternalNode>,
     counters: ScanCounters,
+    partial_ranking: PartialRanking,
     backend: &'static str,
     semantics: ScanSemantics,
     started_at: Instant,
@@ -614,6 +673,7 @@ where
         skipped_entries: counters.skipped_entries,
         current_path: root.to_string_lossy().into_owned(),
         elapsed_ms,
+        largest_items: partial_ranking.items(&nodes),
     });
 
     let snapshot = ScanSnapshot {
@@ -691,16 +751,7 @@ impl ScanSnapshot {
     }
 
     fn scan_item(&self, node_id: NodeId) -> ScanItem {
-        let node = &self.nodes[node_id];
-        ScanItem {
-            id: wire_id(node_id),
-            name: node.name().to_string_lossy().into_owned(),
-            kind: node.kind,
-            logical_bytes: node.logical_bytes,
-            allocated_bytes: node.allocated_bytes,
-            file_count: node.file_count,
-            directory_count: node.directory_count,
-        }
+        scan_item(&self.nodes, node_id)
     }
 
     fn breadcrumbs(&self, node_id: NodeId) -> Vec<Breadcrumb> {
@@ -828,6 +879,40 @@ fn wire_id(node_id: NodeId) -> u64 {
     u64::try_from(node_id).expect("scan node IDs fit in the wire representation")
 }
 
+fn scan_item(nodes: &[InternalNode], node_id: NodeId) -> ScanItem {
+    let node = &nodes[node_id];
+    ScanItem {
+        id: wire_id(node_id),
+        name: node.name().to_string_lossy().into_owned(),
+        kind: node.kind,
+        logical_bytes: node.logical_bytes,
+        allocated_bytes: node.allocated_bytes,
+        file_count: node.file_count,
+        directory_count: node.directory_count,
+    }
+}
+
+#[inline(always)]
+fn observe_partial_file(
+    partial_ranking: &mut PartialRanking,
+    nodes: &[InternalNode],
+    node_id: NodeId,
+) {
+    let node = &nodes[node_id];
+    // Empty files cannot contribute to a storage ranking. Skipping them is
+    // especially important for metadata-heavy trees where traversal can
+    // otherwise spend more time ranking than reading directory records.
+    if matches!(node.kind, EntryKind::File)
+        && (node.logical_bytes != 0 || node.allocated_bytes != 0)
+    {
+        partial_ranking.observe(PartialCandidate {
+            node_id,
+            logical_bytes: node.logical_bytes,
+            allocated_bytes: node.allocated_bytes,
+        });
+    }
+}
+
 fn compare_node_ids(nodes: &[InternalNode], left: NodeId, right: NodeId) -> std::cmp::Ordering {
     let left_node = &nodes[left];
     let right_node = &nodes[right];
@@ -836,6 +921,17 @@ fn compare_node_ids(nodes: &[InternalNode], left: NodeId, right: NodeId) -> std:
         .cmp(&left_node.allocated_bytes)
         .then_with(|| right_node.logical_bytes.cmp(&left_node.logical_bytes))
         .then_with(|| left_node.name().cmp(right_node.name()))
+}
+
+fn compare_partial_candidates(
+    left: &PartialCandidate,
+    right: &PartialCandidate,
+) -> std::cmp::Ordering {
+    right
+        .allocated_bytes
+        .cmp(&left.allocated_bytes)
+        .then_with(|| right.logical_bytes.cmp(&left.logical_bytes))
+        .then_with(|| left.node_id.cmp(&right.node_id))
 }
 
 fn elapsed_ms(started_at: Instant) -> u64 {
@@ -930,7 +1026,11 @@ mod tests {
         assert_eq!(result.logical_bytes, 48);
         assert_eq!(result.file_count, 2);
         assert_eq!(result.directory_count, 1);
-        assert_eq!(progress.last().expect("final progress").logical_bytes, 48);
+        let final_progress = progress.last().expect("final progress");
+        assert_eq!(final_progress.logical_bytes, 48);
+        assert_eq!(final_progress.largest_items.len(), 2);
+        assert_eq!(final_progress.largest_items[0].name, "child.bin");
+        assert_eq!(final_progress.largest_items[0].logical_bytes, 31);
         assert_arena_invariants(&output.snapshot);
 
         let view = output
@@ -984,6 +1084,34 @@ mod tests {
                 .expect_err("unknown node IDs must fail"),
             "That item is not part of this scan."
         );
+    }
+
+    #[test]
+    fn bounds_and_orders_partial_results() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        for size in 1..=12_u8 {
+            fs::write(
+                temp.path().join(format!("file-{size:02}.bin")),
+                vec![size; usize::from(size)],
+            )
+            .expect("write ranked fixture file");
+        }
+
+        let mut progress = Vec::new();
+        scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |update| {
+            progress.push(update)
+        })
+        .expect("scan ranked fixture");
+
+        let largest = &progress.last().expect("final progress").largest_items;
+        assert_eq!(largest.len(), MAX_PARTIAL_ITEMS);
+        assert!(
+            largest
+                .windows(2)
+                .all(|pair| pair[0].allocated_bytes >= pair[1].allocated_bytes)
+        );
+        assert_eq!(largest[0].logical_bytes, 12);
+        assert_eq!(largest.last().expect("eighth item").logical_bytes, 5);
     }
 
     #[test]

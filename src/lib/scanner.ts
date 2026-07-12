@@ -10,6 +10,7 @@ export interface ScanProgress {
   skippedEntries: number;
   currentPath: string;
   elapsedMs: number;
+  largestItems: ScanItem[];
 }
 
 export interface ScanItem {
