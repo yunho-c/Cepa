@@ -2,18 +2,24 @@ use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
     PROGRESS_INTERVAL, ScanCounters, ScanOutput, ScanProgress, ScanSemantics, finish_scan,
 };
+use crossbeam_channel::{self as channel, RecvTimeoutError};
 use libc::{self, attribute_set_t, attrlist, attrreference_t};
 use std::ffi::OsString;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const BUFFER_SIZE: usize = 256 * 1024;
+const MAX_WORKERS: usize = 8;
+const DEFAULT_PARALLELISM: usize = 4;
+const LARGE_DIRECTORY_FILE_COUNT: usize = 256;
+const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const ATTR_CMN_ERROR: u32 = 0x2000_0000;
 const SF_FIRMLINK: u32 = 0x0080_0000;
 const VREG: u32 = 1;
@@ -34,6 +40,30 @@ struct NativeEntry {
     mount_point: bool,
     firmlink: bool,
     can_enforce_mount_boundary: bool,
+}
+
+#[derive(Debug)]
+struct DirectoryTask {
+    path: Arc<Path>,
+    parent_id: usize,
+}
+
+#[derive(Debug)]
+enum DirectoryReadError {
+    Io(io::Error),
+    Parse(String),
+    Cancelled,
+}
+
+#[derive(Debug)]
+enum WorkerMessage {
+    Batch {
+        path: Arc<Path>,
+        parent_id: usize,
+        entries: Vec<NativeEntry>,
+    },
+    Complete,
+    Failed(DirectoryReadError),
 }
 
 pub(super) fn scan_path<F>(
@@ -61,127 +91,56 @@ where
     let root_node_path: Arc<Path> = Arc::from(root.clone());
     let mut nodes = vec![InternalNode::root(&root)];
     let mut counters = ScanCounters::default();
-    let mut pending_directories = vec![(root.clone(), 0_usize)];
+    let mut pending_directories = Vec::new();
     let mut entries_since_progress = 0_u64;
     let mut last_progress_at = Instant::now();
     let mut buffer = vec![0_u64; BUFFER_SIZE / size_of::<u64>()];
     let mut attribute_list = requested_attributes();
-    let mut first_root_call = true;
-
-    while let Some((directory_path, parent_id)) = pending_directories.pop() {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(fatal("Scan cancelled."));
-        }
-
-        let directory = match File::open(&directory_path) {
-            Ok(directory) => directory,
-            Err(error) if parent_id != 0 => {
-                counters.skipped_entries += 1;
-                let _ = error;
-                continue;
-            }
-            Err(error) => {
-                return Err(fatal(format!(
-                    "Could not open {}: {error}",
-                    directory_path.display()
-                )));
-            }
-        };
-
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(fatal("Scan cancelled."));
-            }
-
-            let entry_count = unsafe {
-                // SAFETY: `directory` owns a readable directory descriptor;
-                // both pointers reference writable, correctly sized values for
-                // the duration of the system call.
-                libc::getattrlistbulk(
-                    directory.as_raw_fd(),
-                    (&mut attribute_list as *mut attrlist).cast(),
-                    buffer.as_mut_ptr().cast(),
-                    BUFFER_SIZE,
-                    u64::from(libc::FSOPT_PACK_INVAL_ATTRS),
-                )
-            };
-
-            if entry_count < 0 {
-                let error = io::Error::last_os_error();
-                if parent_id == 0 && first_root_call && is_unavailable(&error) {
-                    return Err(NativeScanError::Unavailable);
-                }
-                counters.skipped_entries += 1;
-                break;
-            }
-            first_root_call = false;
-            if entry_count == 0 {
-                break;
-            }
-
-            let bytes = unsafe {
-                // SAFETY: the `u64` buffer is contiguous and initialized by
-                // the kernel for the returned record count. Parsing validates
-                // every record length before reading fields.
-                std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), BUFFER_SIZE)
-            };
-            let entries = parse_entries(bytes, entry_count as usize).map_err(fatal)?;
-
-            for entry in entries {
-                if entry.entry_error != 0 {
-                    counters.skipped_entries += 1;
-                    continue;
-                }
-                if entry.measured.metadata_error {
-                    counters.skipped_entries += 1;
-                }
-                if entry.name.as_bytes() == b"." || entry.name.as_bytes() == b".." {
-                    continue;
-                }
-
-                let child_path = matches!(entry.kind, EntryKind::Directory)
-                    .then(|| directory_path.join(&entry.name));
-                let node_id = counters.push_node(
+    let root_directory = open_directory(&root)
+        .map_err(|error| fatal(format!("Could not open {}: {error}", root.display())))?;
+    let mut root_returned_entries = false;
+    loop {
+        match read_directory_batch(&root_directory, &cancel, &mut attribute_list, &mut buffer) {
+            Ok(Some(entries)) => {
+                root_returned_entries = true;
+                ingest_entries(
+                    entries,
+                    &root,
+                    0,
                     &mut nodes,
-                    parent_id,
-                    entry.name,
-                    entry.kind,
-                    entry.measured,
-                );
-
-                if matches!(entry.kind, EntryKind::Directory) {
-                    if entry.mount_point {
-                        counters.skipped_filesystems += 1;
-                    } else if entry.firmlink || !entry.can_enforce_mount_boundary {
-                        counters.skipped_entries += 1;
-                    } else if let Some(child_path) = child_path.clone() {
-                        pending_directories.push((child_path, node_id));
-                    }
-                }
-
-                entries_since_progress += 1;
-                if entries_since_progress >= PROGRESS_ENTRY_INTERVAL
-                    || last_progress_at.elapsed() >= PROGRESS_INTERVAL
-                {
-                    let current_path =
-                        child_path.unwrap_or_else(|| directory_path.join(&nodes[node_id].name));
-                    on_progress(ScanProgress {
-                        entries_scanned: counters.files_scanned + counters.directories_scanned,
-                        files_scanned: counters.files_scanned,
-                        directories_scanned: counters.directories_scanned,
-                        logical_bytes: counters.observed_logical_bytes,
-                        allocated_bytes: counters.observed_allocated_bytes,
-                        skipped_entries: counters.skipped_entries,
-                        current_path: current_path.to_string_lossy().into_owned(),
-                        elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX))
-                            as u64,
-                    });
-                    entries_since_progress = 0;
-                    last_progress_at = Instant::now();
-                }
+                    &mut counters,
+                    &mut pending_directories,
+                    &mut entries_since_progress,
+                    &mut last_progress_at,
+                    started_at,
+                    &cancel,
+                    on_progress,
+                )?;
             }
+            Ok(None) => break,
+            Err(DirectoryReadError::Io(error))
+                if !root_returned_entries && is_unavailable(&error) =>
+            {
+                return Err(NativeScanError::Unavailable);
+            }
+            Err(DirectoryReadError::Io(error)) => {
+                return Err(fatal(format!("Could not scan {}: {error}", root.display())));
+            }
+            Err(DirectoryReadError::Parse(error)) => return Err(fatal(error)),
+            Err(DirectoryReadError::Cancelled) => return Err(fatal("Scan cancelled.")),
         }
     }
+
+    traverse_directories(
+        &mut pending_directories,
+        &mut nodes,
+        &mut counters,
+        &mut entries_since_progress,
+        &mut last_progress_at,
+        started_at,
+        &cancel,
+        on_progress,
+    )?;
 
     let traversal_completed_at = Instant::now();
     finish_scan(
@@ -201,6 +160,339 @@ where
         on_progress,
     )
     .map_err(fatal)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn traverse_directories<F>(
+    pending_directories: &mut Vec<DirectoryTask>,
+    nodes: &mut Vec<InternalNode>,
+    counters: &mut ScanCounters,
+    entries_since_progress: &mut u64,
+    last_progress_at: &mut Instant,
+    started_at: Instant,
+    cancel: &AtomicBool,
+    on_progress: &mut F,
+) -> Result<(), NativeScanError>
+where
+    F: FnMut(ScanProgress),
+{
+    if pending_directories.is_empty() {
+        return Ok(());
+    }
+
+    let max_workers = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1)
+        .min(MAX_WORKERS);
+    let initial_workers = max_workers.min(DEFAULT_PARALLELISM);
+    let queue_capacity = max_workers.saturating_mul(2).max(1);
+    let (task_sender, task_receiver) = channel::bounded::<DirectoryTask>(queue_capacity);
+    let (result_sender, result_receiver) = channel::bounded::<WorkerMessage>(queue_capacity);
+    let abort = AtomicBool::new(false);
+
+    std::thread::scope(|scope| {
+        for _ in 0..initial_workers {
+            spawn_worker(
+                scope,
+                task_receiver.clone(),
+                result_sender.clone(),
+                &abort,
+                cancel,
+            );
+        }
+
+        let mut outstanding = 0_usize;
+        // Four concurrent small-directory calls avoided APFS contention in
+        // metadata-heavy trees. Large file batches amortize the syscall and
+        // channel costs, so they can profitably use the full worker pool.
+        let mut parallelism = initial_workers;
+        let mut spawned_workers = initial_workers;
+        let mut result = Ok(());
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                result = Err(fatal("Scan cancelled."));
+                break;
+            }
+
+            while outstanding < parallelism {
+                let Some(task) = pending_directories.pop() else {
+                    break;
+                };
+                if task_sender.send(task).is_err() {
+                    result = Err(fatal(
+                        "The native scanner worker pool stopped unexpectedly.",
+                    ));
+                    break;
+                }
+                outstanding += 1;
+            }
+            if result.is_err() || outstanding == 0 {
+                break;
+            }
+
+            match result_receiver.recv_timeout(WORKER_POLL_INTERVAL) {
+                Ok(WorkerMessage::Batch {
+                    path,
+                    parent_id,
+                    entries,
+                }) => {
+                    if contains_large_file_batch(&entries) {
+                        for _ in spawned_workers..max_workers {
+                            spawn_worker(
+                                scope,
+                                task_receiver.clone(),
+                                result_sender.clone(),
+                                &abort,
+                                cancel,
+                            );
+                        }
+                        spawned_workers = max_workers;
+                        parallelism = max_workers;
+                    }
+                    if let Err(error) = ingest_entries(
+                        entries,
+                        &path,
+                        parent_id,
+                        nodes,
+                        counters,
+                        pending_directories,
+                        entries_since_progress,
+                        last_progress_at,
+                        started_at,
+                        cancel,
+                        on_progress,
+                    ) {
+                        result = Err(error);
+                        break;
+                    }
+                }
+                Ok(WorkerMessage::Complete) => outstanding -= 1,
+                Ok(WorkerMessage::Failed(read_error)) => {
+                    outstanding -= 1;
+                    match read_error {
+                        DirectoryReadError::Io(_) => counters.skipped_entries += 1,
+                        DirectoryReadError::Parse(error) => {
+                            result = Err(fatal(error));
+                            break;
+                        }
+                        DirectoryReadError::Cancelled => {
+                            result = Err(fatal("Scan cancelled."));
+                            break;
+                        }
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => {
+                    result = Err(fatal(
+                        "The native scanner worker pool stopped unexpectedly.",
+                    ));
+                    break;
+                }
+            }
+        }
+
+        abort.store(true, Ordering::Relaxed);
+        drop(task_sender);
+        drop(result_receiver);
+        result
+    })
+}
+
+fn spawn_worker<'scope, 'env: 'scope>(
+    scope: &'scope std::thread::Scope<'scope, 'env>,
+    task_receiver: channel::Receiver<DirectoryTask>,
+    result_sender: channel::Sender<WorkerMessage>,
+    abort: &'scope AtomicBool,
+    cancel: &'scope AtomicBool,
+) {
+    scope.spawn(move || {
+        let mut buffer = vec![0_u64; BUFFER_SIZE / size_of::<u64>()];
+        let mut attribute_list = requested_attributes();
+        loop {
+            if abort.load(Ordering::Relaxed) || cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let task = match task_receiver.recv_timeout(WORKER_POLL_INTERVAL) {
+                Ok(task) => task,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
+            process_directory(
+                task,
+                cancel,
+                &mut attribute_list,
+                &mut buffer,
+                &result_sender,
+            );
+        }
+    });
+}
+
+fn process_directory(
+    task: DirectoryTask,
+    cancel: &AtomicBool,
+    attribute_list: &mut attrlist,
+    buffer: &mut [u64],
+    result_sender: &channel::Sender<WorkerMessage>,
+) {
+    let directory = match open_directory(&task.path) {
+        Ok(directory) => directory,
+        Err(error) => {
+            let _ = result_sender.send(WorkerMessage::Failed(DirectoryReadError::Io(error)));
+            return;
+        }
+    };
+    loop {
+        match read_directory_batch(&directory, cancel, attribute_list, buffer) {
+            Ok(Some(entries)) => {
+                if result_sender
+                    .send(WorkerMessage::Batch {
+                        path: task.path.clone(),
+                        parent_id: task.parent_id,
+                        entries,
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            Ok(None) => {
+                let _ = result_sender.send(WorkerMessage::Complete);
+                return;
+            }
+            Err(error) => {
+                let _ = result_sender.send(WorkerMessage::Failed(error));
+                return;
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ingest_entries<F>(
+    entries: Vec<NativeEntry>,
+    directory_path: &Path,
+    parent_id: usize,
+    nodes: &mut Vec<InternalNode>,
+    counters: &mut ScanCounters,
+    pending_directories: &mut Vec<DirectoryTask>,
+    entries_since_progress: &mut u64,
+    last_progress_at: &mut Instant,
+    started_at: Instant,
+    cancel: &AtomicBool,
+    on_progress: &mut F,
+) -> Result<(), NativeScanError>
+where
+    F: FnMut(ScanProgress),
+{
+    for entry in entries {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(fatal("Scan cancelled."));
+        }
+        if entry.entry_error != 0 {
+            counters.skipped_entries += 1;
+            continue;
+        }
+        if entry.measured.metadata_error {
+            counters.skipped_entries += 1;
+        }
+        if entry.name.as_bytes() == b"." || entry.name.as_bytes() == b".." {
+            continue;
+        }
+
+        let child_path =
+            matches!(entry.kind, EntryKind::Directory).then(|| directory_path.join(&entry.name));
+        let node_id = counters.push_node(nodes, parent_id, entry.name, entry.kind, entry.measured);
+
+        if matches!(entry.kind, EntryKind::Directory) {
+            if entry.mount_point {
+                counters.skipped_filesystems += 1;
+            } else if entry.firmlink || !entry.can_enforce_mount_boundary {
+                counters.skipped_entries += 1;
+            } else if let Some(child_path) = child_path.clone() {
+                pending_directories.push(DirectoryTask {
+                    path: Arc::from(child_path),
+                    parent_id: node_id,
+                });
+            }
+        }
+
+        *entries_since_progress += 1;
+        if *entries_since_progress >= PROGRESS_ENTRY_INTERVAL
+            || last_progress_at.elapsed() >= PROGRESS_INTERVAL
+        {
+            let current_path =
+                child_path.unwrap_or_else(|| directory_path.join(&nodes[node_id].name));
+            on_progress(ScanProgress {
+                entries_scanned: counters.files_scanned + counters.directories_scanned,
+                files_scanned: counters.files_scanned,
+                directories_scanned: counters.directories_scanned,
+                logical_bytes: counters.observed_logical_bytes,
+                allocated_bytes: counters.observed_allocated_bytes,
+                skipped_entries: counters.skipped_entries,
+                current_path: current_path.to_string_lossy().into_owned(),
+                elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+            });
+            *entries_since_progress = 0;
+            *last_progress_at = Instant::now();
+        }
+    }
+    Ok(())
+}
+
+fn contains_large_file_batch(entries: &[NativeEntry]) -> bool {
+    entries
+        .iter()
+        .filter(|entry| matches!(entry.kind, EntryKind::File))
+        .nth(LARGE_DIRECTORY_FILE_COUNT - 1)
+        .is_some()
+}
+
+fn open_directory(path: &Path) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+}
+
+fn read_directory_batch(
+    directory: &File,
+    cancel: &AtomicBool,
+    attribute_list: &mut attrlist,
+    buffer: &mut [u64],
+) -> Result<Option<Vec<NativeEntry>>, DirectoryReadError> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(DirectoryReadError::Cancelled);
+    }
+
+    let entry_count = unsafe {
+        // SAFETY: `directory` owns a readable directory descriptor; both
+        // pointers reference writable, correctly sized values for the
+        // duration of the system call.
+        libc::getattrlistbulk(
+            directory.as_raw_fd(),
+            (attribute_list as *mut attrlist).cast(),
+            buffer.as_mut_ptr().cast(),
+            std::mem::size_of_val(buffer),
+            u64::from(libc::FSOPT_PACK_INVAL_ATTRS),
+        )
+    };
+    if entry_count < 0 {
+        return Err(DirectoryReadError::Io(io::Error::last_os_error()));
+    }
+    if entry_count == 0 {
+        return Ok(None);
+    }
+
+    let bytes = unsafe {
+        // SAFETY: the `u64` buffer is contiguous and initialized by the kernel
+        // for the returned record count. Parsing validates every record length
+        // before reading fields.
+        std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), std::mem::size_of_val(buffer))
+    };
+    parse_entries(bytes, entry_count as usize)
+        .map(Some)
+        .map_err(DirectoryReadError::Parse)
 }
 
 fn requested_attributes() -> attrlist {
@@ -374,4 +666,20 @@ fn is_unavailable(error: &io::Error) -> bool {
 
 fn fatal(error: impl Into<String>) -> NativeScanError {
     NativeScanError::Fatal(error.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_entries;
+
+    #[test]
+    fn rejects_truncated_attribute_records() {
+        let error = parse_entries(&4_u32.to_ne_bytes(), 1)
+            .expect_err("a length-only record must be rejected");
+
+        assert_eq!(
+            error,
+            "getattrlistbulk returned a truncated attribute record"
+        );
+    }
 }

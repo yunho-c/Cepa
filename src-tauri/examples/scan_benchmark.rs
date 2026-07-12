@@ -1,4 +1,4 @@
-use cepa_lib::{ScanResult, benchmark_scan};
+use cepa_lib::{ScanBackend, ScanResult, benchmark_scan_with_backend};
 use serde::Serialize;
 use std::env;
 use std::ffi::OsString;
@@ -77,10 +77,14 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let (path, iterations) = parse_args()?;
+    let (path, iterations, backend) = parse_args()?;
 
-    eprintln!("warming filesystem cache with {}", path.display());
-    let warmup_scan = benchmark_scan(&path)?;
+    eprintln!(
+        "warming filesystem cache with {} using {}",
+        path.display(),
+        backend_name(backend)
+    );
+    let warmup_scan = benchmark_scan_with_backend(&path, backend)?;
     let warmup = warmup_scan.result.clone();
     let expected = ResultIdentity::from(&warmup);
     drop(warmup_scan);
@@ -88,7 +92,7 @@ fn run() -> Result<(), String> {
     let mut runs = Vec::with_capacity(iterations);
     for iteration in 1..=iterations {
         let started_at = Instant::now();
-        let scan = benchmark_scan(&path)?;
+        let scan = benchmark_scan_with_backend(&path, backend)?;
         let wall = started_at.elapsed();
         let result = &scan.result;
         expected.verify(result)?;
@@ -155,7 +159,7 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn parse_args() -> Result<(PathBuf, usize), String> {
+fn parse_args() -> Result<(PathBuf, usize, ScanBackend), String> {
     let mut args = env::args_os().skip(1);
     let path = args.next().map(PathBuf::from).ok_or_else(usage)?;
     let iterations = args
@@ -163,6 +167,11 @@ fn parse_args() -> Result<(PathBuf, usize), String> {
         .map(|value| parse_positive_usize(value, "iterations"))
         .transpose()?
         .unwrap_or(DEFAULT_ITERATIONS);
+    let backend = args
+        .next()
+        .map(parse_backend)
+        .transpose()?
+        .unwrap_or(ScanBackend::Jwalk);
 
     if args.next().is_some() {
         return Err(usage());
@@ -171,7 +180,30 @@ fn parse_args() -> Result<(PathBuf, usize), String> {
         return Err(format!("{} does not exist", path.display()));
     }
 
-    Ok((path, iterations))
+    Ok((path, iterations, backend))
+}
+
+fn parse_backend(value: OsString) -> Result<ScanBackend, String> {
+    match value
+        .into_string()
+        .map_err(|_| "backend must be valid UTF-8".to_string())?
+        .as_str()
+    {
+        "auto" => Ok(ScanBackend::Auto),
+        "jwalk" => Ok(ScanBackend::Jwalk),
+        "getattrlistbulk" => Ok(ScanBackend::Getattrlistbulk),
+        value => Err(format!(
+            "unknown backend {value:?}; expected auto, jwalk, or getattrlistbulk"
+        )),
+    }
+}
+
+fn backend_name(backend: ScanBackend) -> &'static str {
+    match backend {
+        ScanBackend::Auto => "auto",
+        ScanBackend::Jwalk => "jwalk",
+        ScanBackend::Getattrlistbulk => "getattrlistbulk",
+    }
 }
 
 fn parse_positive_usize(value: OsString, name: &str) -> Result<usize, String> {
@@ -188,7 +220,7 @@ fn parse_positive_usize(value: OsString, name: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-    "usage: scan_benchmark <directory> [iterations]".to_string()
+    "usage: scan_benchmark <directory> [iterations] [auto|jwalk|getattrlistbulk]".to_string()
 }
 
 fn duration_ms(duration: Duration) -> f64 {
@@ -275,11 +307,29 @@ impl ResultIdentity {
 
 #[cfg(test)]
 mod tests {
-    use super::median;
+    use super::{ScanBackend, median, parse_backend};
+    use std::ffi::OsString;
 
     #[test]
     fn calculates_median_for_odd_and_even_samples() {
         assert_eq!(median([3.0, 1.0, 2.0].into_iter()), 2.0);
         assert_eq!(median([4.0, 1.0, 3.0, 2.0].into_iter()), 2.5);
+    }
+
+    #[test]
+    fn parses_supported_backends() {
+        assert_eq!(
+            parse_backend(OsString::from("auto")).expect("parse auto"),
+            ScanBackend::Auto
+        );
+        assert_eq!(
+            parse_backend(OsString::from("jwalk")).expect("parse jwalk"),
+            ScanBackend::Jwalk
+        );
+        assert_eq!(
+            parse_backend(OsString::from("getattrlistbulk")).expect("parse native"),
+            ScanBackend::Getattrlistbulk
+        );
+        assert!(parse_backend(OsString::from("unknown")).is_err());
     }
 }

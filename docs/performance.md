@@ -1,7 +1,7 @@
 # Scanner performance
 
 Cepa treats performance as measured behavior, not a design claim. This document
-defines the portable scanner benchmark, records the first reproducible baseline,
+defines the scanner benchmark, records reproducible portable and native results,
 and identifies what the numbers do and do not prove.
 
 ## Running the benchmark
@@ -22,8 +22,13 @@ file.
 Run the complete portable pipeline in release mode:
 
 ```sh
-just benchmark-scan /tmp/cepa-fixture 9 > /tmp/cepa-report.json
+just benchmark-scan /tmp/cepa-fixture 9 jwalk > /tmp/cepa-report.json
 ```
+
+On macOS, pass `getattrlistbulk` instead of `jwalk` to compare the native
+backend on the identical fixture. `auto` measures the backend selected by the
+desktop application. The default remains `jwalk` so historical portable
+baselines stay directly reproducible.
 
 The harness performs one unmeasured warmup followed by the requested measured
 runs. Progress is written to stderr and schema-versioned JSON to stdout. It
@@ -31,7 +36,8 @@ verifies that counts and byte totals stay identical across runs.
 
 Each run measures:
 
-- `traversalUs`: `jwalk`, metadata reads, arena insertion, and path indexing.
+- `traversalUs`: backend traversal, metadata reads, arena insertion, and path
+  indexing.
 - `aggregationUs`: bottom-up propagation of file and directory totals.
 - `indexingUs`: post-aggregation index finalization. This is currently zero
   because the arena builds its indexes incrementally during traversal.
@@ -56,6 +62,34 @@ was at 95% capacity during measurement. Results are medians of nine warmed runs.
 
 The raw runs are preserved in
 [`performance-results/2026-07-11-m4-pro-basename.csv`](performance-results/2026-07-11-m4-pro-basename.csv).
+
+## 2026-07-11 macOS native comparison
+
+The same machine, fixtures, release profile, one-run warmup, and nine-run
+methodology were used to compare the portable and macOS-native backends. Counts,
+logical bytes, allocated bytes, and skipped-entry counts matched exactly across
+both implementations and every measured run.
+
+The native traversal uses a bounded worker pool. It begins with four workers to
+avoid APFS contention in trees dominated by small directories, then expands to
+at most eight after observing a directory batch with at least 256 files. At
+most twice the maximum worker count can be queued in either direction.
+
+| Workload | Backend | Wall time | Entries/s | Traversal | Aggregation | Initial view |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Directory-rich | `jwalk` | 141.95 ms | 775,646 | 140.79 ms | 1.00 ms | 0.18 ms |
+| Directory-rich | `getattrlistbulk` | 86.01 ms | 1,280,164 | 85.14 ms | 0.69 ms | 0.17 ms |
+| Wide | `jwalk` | 90.65 ms | 1,104,318 | 89.82 ms | 0.67 ms | 0.13 ms |
+| Wide | `getattrlistbulk` | 14.49 ms | 6,909,682 | 13.70 ms | 0.64 ms | 0.13 ms |
+
+Against `jwalk`, median native wall time was 39.4% lower on the
+directory-rich fixture and 84.0% lower on the wide fixture. Median throughput
+was respectively 65.0% and 525.7% higher. Native wide runs varied from 13.43 to
+45.69 ms, but the slowest native run remained faster than the fastest portable
+run in this sample.
+
+The raw runs are preserved in
+[`performance-results/2026-07-11-m4-pro-native-comparison.csv`](performance-results/2026-07-11-m4-pro-native-comparison.csv).
 
 ### Snapshot memory
 
@@ -142,10 +176,11 @@ systems. The RSS measurements include the benchmark process and allocator, not
 just snapshot-owned bytes. These results are a regression baseline, not a
 universal speed claim.
 
-Before declaring a backend faster, compare identical semantics and add:
+Before generalizing these results beyond the measured workloads, add:
 
 - representative real directory trees and cold-cache runs;
 - snapshot-owned bytes per entry and scaling beyond 100,000 entries;
 - cancellation latency under traversal and aggregation load;
 - IPC serialization and first-render timing;
-- portable-versus-native parity and throughput on each target platform.
+- portable-versus-native parity and throughput on Windows and Linux once their
+  native backends exist.

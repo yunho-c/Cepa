@@ -41,9 +41,9 @@ test:
 benchmark-fixture path directories="100" files_per_directory="100" logical_bytes_per_file="0":
     {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example generate_scan_fixture -- "{{path}}" "{{directories}}" "{{files_per_directory}}" "{{logical_bytes_per_file}}"
 
-# Benchmark the complete portable scan and snapshot pipeline (one warmup plus N runs).
-benchmark-scan path iterations="5":
-    {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_benchmark -- "{{path}}" "{{iterations}}"
+# Benchmark a complete scan and snapshot pipeline (one warmup plus N runs).
+benchmark-scan path iterations="5" backend="jwalk":
+    {{ cargo_env }} cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_benchmark -- "{{path}}" "{{iterations}}" "{{backend}}"
 
 # Build the frontend and native executable without packaging it.
 build:

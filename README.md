@@ -10,8 +10,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 ## Current capabilities
 
 - Parallel portable traversal with `jwalk`
-- Batched `getattrlistbulk` traversal on macOS, with automatic fallback to
-  `jwalk` when the native API is unavailable for the selected filesystem
+- Batched, bounded-parallel `getattrlistbulk` traversal on macOS, with automatic
+  fallback to `jwalk` when the native API is unavailable for the selected
+  filesystem
 - Native directory picker on supported desktop platforms
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
@@ -60,8 +61,10 @@ release mode with:
 
 ```sh
 just benchmark-fixture /tmp/cepa-fixture 1000 100 0
-just benchmark-scan /tmp/cepa-fixture 9
+just benchmark-scan /tmp/cepa-fixture 9 jwalk
 ```
+
+The optional third argument selects `jwalk`, `getattrlistbulk`, or `auto`.
 
 See [`docs/performance.md`](docs/performance.md) for the measurement contract,
 current baseline, raw evidence, and interpretation limits.

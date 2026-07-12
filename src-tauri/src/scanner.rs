@@ -1094,6 +1094,29 @@ mod tests {
         assert_eq!(portable_items, native_items);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_backend_cancels_during_result_ingestion() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let nested = temp.path().join("nested");
+        fs::create_dir(&nested).expect("create nested directory");
+        for index in 0..=PROGRESS_ENTRY_INTERVAL {
+            fs::write(nested.join(format!("file-{index}")), []).expect("write fixture file");
+        }
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_from_progress = cancel.clone();
+        let error = scan_path_with_backend(
+            temp.path(),
+            cancel,
+            ScanBackend::Getattrlistbulk,
+            move |_| cancel_from_progress.store(true, Ordering::Relaxed),
+        )
+        .expect_err("scan should stop after progress callback cancels it");
+
+        assert_eq!(error, "Scan cancelled.");
+    }
+
     #[test]
     fn bounds_large_directory_views() {
         let temp = tempfile::tempdir().expect("create fixture directory");
