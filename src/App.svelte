@@ -92,7 +92,9 @@
     },
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
-  const activeEntry = $derived(inspectedEntry ?? selectedEntry);
+  // Hover and keyboard focus should always coordinate the chart and list. A
+  // clicked inspection remains the fallback when there is no transient target.
+  const activeEntry = $derived(selectedEntry ?? inspectedEntry);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const canEstimateSavings = $derived(
@@ -768,7 +770,9 @@
             </div>
           </div>
 
-          <p class="chart-help">Select a segment to explore it</p>
+          {#if sunburstSegments.length > 0}
+            <p class="chart-help">Select a segment to explore it</p>
+          {/if}
         </div>
 
         <div class="directory-pane">
@@ -875,6 +879,7 @@
                 <div
                   class="storage-row"
                   data-selected={activeEntry?.id === item.id}
+                  data-inspected={inspectedEntry?.id === item.id}
                 >
                   <button
                     type="button"
