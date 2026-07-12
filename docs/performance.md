@@ -296,6 +296,64 @@ The raw reports are preserved in
 and
 [`performance-results/2026-07-11-linux-container-statx-cancellation.json`](performance-results/2026-07-11-linux-container-statx-cancellation.json).
 
+### 2026-07-12 native Linux ext4 validation and throughput
+
+The current scanner module graph was compiled and run natively through the
+isolated release harness on a 13th-generation Intel Core i9-13900K workstation
+with 32 logical CPUs, 125 GiB RAM, Linux 6.8.0, Rust 1.97.0, and NVMe-backed
+ext4. The harness passed all 38 scanner, compression, and plan tests. This is a
+native backend result, but it excludes the Tauri shell and frontend.
+
+The adversarial parity fixture contained 4,099 files, 33 directories, one hard
+link, and a directory symlink outside the root. `jwalk` and `statx` agreed on
+every accounting field. A separate user/mount namespace bound `/etc` beneath
+the fixture on the same ext4 device; `statx` retained the mount-point node,
+reported one skipped filesystem, and did not traverse it. The exact counters are
+preserved in
+[`performance-results/2026-07-12-linux-ext4-validation.csv`](performance-results/2026-07-12-linux-ext4-validation.csv).
+
+The canonical fixtures received one warmup and nine measured release runs per
+backend. The real-tree workload was the quiescent remote Cepa checkout after the
+harness build, including Rust artifacts. Values below are medians.
+
+| Workload | Entries | Backend | Wall time | Entries/s | Traversal |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Directory-rich | 110,101 | `jwalk` | 26.19 ms | 4,205,000 | 25.58 ms |
+| Directory-rich | 110,101 | `statx` | 33.66 ms | 3,271,000 | 33.02 ms |
+| Wide | 100,102 | `jwalk` | 14.11 ms | 7,092,000 | 13.65 ms |
+| Wide | 100,102 | `statx` | 19.34 ms | 5,177,000 | 18.78 ms |
+| Real tree | 3,133 | `jwalk` | 2.45 ms | 1,280,000 | 2.43 ms |
+| Real tree | 3,133 | `statx` | 2.75 ms | 1,141,000 | 2.71 ms |
+
+On this warm ext4 sample, native wall time was 28.5% higher for the
+directory-rich fixture, 37.0% higher for the wide fixture, and 12.2% higher for
+the real tree. No Linux speedup is claimed. The raw runs are preserved in
+[`performance-results/2026-07-12-linux-ext4-statx.csv`](performance-results/2026-07-12-linux-ext4-statx.csv).
+
+Cancellation after the first progress boundary at or beyond 2,048 entries had
+a 200 us median and 249 us maximum on the directory-rich fixture, and a 205 us
+median and 233 us maximum on the wide fixture. Cancellation remained bounded
+despite the native throughput deficit.
+
+Two interleaved tuning experiments were rejected rather than optimized for one
+shape. Expanding from eight to sixteen workers after a 256-entry result batch
+reduced wide median wall time from 22.45 ms to 15.37 ms, but increased the
+directory-rich median from 43.35 ms to 50.49 ms. Combining each small
+directory's final result batch and completion message improved the wide median
+by 3.2% but regressed the directory-rich median by 8.2%. The production
+eight-worker scheduler remains unchanged. Raw trials are preserved in
+[`performance-results/2026-07-12-linux-worker-scaling.csv`](performance-results/2026-07-12-linux-worker-scaling.csv)
+and
+[`performance-results/2026-07-12-linux-message-collapse.csv`](performance-results/2026-07-12-linux-message-collapse.csv).
+
+An instrumented `strace -f -c` diagnostic is not valid for wall-time comparison,
+but its call counts show where to investigate next. Both backends issued about
+120,000 metadata syscalls on the directory-rich fixture. Native traversal made
+28,266 `sched_yield` calls versus 6,950 for `jwalk`, consistent with scheduler
+and channel coordination—not fewer metadata queries—being the next architectural
+target. The counts are preserved in
+[`performance-results/2026-07-12-linux-strace-counts.csv`](performance-results/2026-07-12-linux-strace-counts.csv).
+
 ### 2026-07-12 Windows NTFS MFT validation
 
 The Windows backend was compiled and run natively over SSH on an AMD64 Windows
@@ -346,6 +404,7 @@ Before generalizing these results beyond the measured workloads, add:
 - snapshot-owned bytes per entry and scaling beyond 100,000 entries;
 - cancellation latency during deliberately long aggregation work;
 - IPC serialization and first-render timing;
-- portable-versus-native throughput and real-tree parity on Linux;
+- broader Linux filesystem/hardware coverage, cold-cache throughput, and
+  scheduler profiling without restricted performance counters;
 - broader portable-versus-native parity, cold-cache throughput, and peak-memory
   scaling on representative Windows system volumes.

@@ -54,9 +54,12 @@ the completed directory breakdown. See
 [`docs/accounting.md`](docs/accounting.md) for the complete size, link, mount,
 error, and concurrent-mutation semantics.
 
-Broader native-filesystem and cold-cache validation, representative Windows and
-Linux native measurements, and compression mutation remain roadmap work. Cepa
-can prepare and revalidate an immutable, scan-authorized single-file plan preview,
+Broader native-filesystem and cold-cache validation, additional Windows and
+Linux hardware measurements, and compression mutation remain roadmap work. The
+first native Linux ext4 comparison found exact accounting parity and responsive
+cancellation, but `statx` was slower than `jwalk` on all three warm workloads;
+Cepa does not claim a Linux speedup. The app can prepare and revalidate an
+immutable, scan-authorized single-file plan preview,
 but every preview is blocked because no writer exists. This dormant protocol has
 no UI action and does not authorize mutation; scan-to-plan identity retention and
 content-integrity gating remain required before an apply command can exist. The

@@ -85,8 +85,10 @@ The intended scanning architecture is:
   performance, and cancellation; broader real-volume and cold-cache evidence
   remains required.
 - `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
-  to run parity and cancellation fixtures; representative Linux throughput,
-  cold-cache, and real-tree measurements remain required before performance claims.
+  to run parity and cancellation fixtures. The first native warm ext4 comparison
+  found exact parity and bounded cancellation but slower traversal than `jwalk`;
+  do not claim a Linux speedup. Broader filesystem/hardware coverage, cold-cache
+  measurements, and scheduler profiling remain required.
 
 Keep roadmap items described as planned until the code and validation exist.
 Do not present compilation, UI wiring, or a mocked scan as proof of real

@@ -1,0 +1,14 @@
+backend,syscall,calls,errors
+statx,statx,120205,0
+statx,getdents64,20202,0
+statx,openat,10110,3
+statx,close,10108,0
+statx,sched_yield,28266,0
+statx,futex,2634,623
+jwalk,statx,110107,0
+jwalk,newfstatat,10105,0
+jwalk,getdents64,20202,0
+jwalk,openat,10111,3
+jwalk,close,10108,0
+jwalk,sched_yield,6950,0
+jwalk,futex,908,158

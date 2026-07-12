@@ -1,0 +1,6 @@
+workload,backend,file_count,directory_count,logical_bytes,allocated_bytes,duplicate_hard_links,skipped_filesystems,result
+adversarial,jwalk,4099,33,16777411,8192,1,0,parity
+adversarial,statx,4099,33,16777411,8192,1,0,parity
+bind-mount,statx,4099,34,16777411,8192,1,1,boundary-enforced
+real-tree,jwalk,2223,910,643093916,649945088,63,0,parity
+real-tree,statx,2223,910,643093916,649945088,63,0,parity
