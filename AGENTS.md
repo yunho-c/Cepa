@@ -17,10 +17,11 @@ Transparent filesystem compression is a future product capability. Its proposed
 semantics, platform coverage, safety model, and rollout gates are documented in
 `docs/compression.md`. A read-only, scan-authorized volume capability probe is
 implemented in `src-tauri/src/compression.rs`, along with no-follow per-item state
-inspection. Bounded savings estimation is implemented separately and remains
-read-only; mutation-plan identity snapshots and mutation are not. Preserve those
-evidence boundaries instead of presenting inspection or estimation as writable
-compression support.
+inspection. Bounded savings estimation and immutable single-file plan previews
+are implemented separately and remain read-only. Every plan is blocked because
+no writer exists; mutation is not implemented. Preserve those evidence boundaries
+instead of presenting inspection, estimation, or planning as writable compression
+support.
 
 ## Current state and roadmap
 
@@ -62,6 +63,14 @@ uses LZNT1, Btrfs uses 128 KiB-chunked Zstd level 3, and macOS uses a clearly
 labeled zlib proxy because no writer algorithm has been selected. Do not turn a
 proxy estimate into a guaranteed savings number or run estimation automatically
 on hover/selection.
+Compression-plan preparation is also scan-authorized: the frontend supplies a
+completed scan ID, opaque node ID, and operation, never a path. Rust opens the
+file without following links, snapshots platform identity and revision metadata,
+and can revalidate that immutable plan. A new scan or newer plan invalidates the
+old plan. The current snapshot is metadata-based, not a content fingerprint, and
+the scanner does not retain scan-time identity for every node. These are explicit
+writer gates: do not add an apply command or expose a dead-end plan UI until a
+held-handle/content-integrity design and scan-to-plan identity contract exist.
 
 The intended scanning architecture is:
 

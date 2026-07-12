@@ -182,14 +182,15 @@ pub(crate) fn estimate(target: &CompressionTarget, cancel: &AtomicBool) -> Savin
             "The file size changed after the scan; rescan before estimating savings.",
         );
     }
-    if let Some(current_allocated_bytes) = current_allocated_bytes(&metadata)
-        && current_allocated_bytes != target.allocated_bytes
-    {
-        return SavingsEstimate::terminal(
-            EstimateStatus::Unavailable,
-            target,
-            "The file's allocation changed after the scan; rescan before estimating savings.",
-        );
+    match current_allocated_bytes(&metadata) {
+        Some(current_allocated_bytes) if current_allocated_bytes != target.allocated_bytes => {
+            return SavingsEstimate::terminal(
+                EstimateStatus::Unavailable,
+                target,
+                "The file's allocation changed after the scan; rescan before estimating savings.",
+            );
+        }
+        _ => {}
     }
 
     let codec = match platform_codec(&file) {
@@ -506,6 +507,7 @@ mod tests {
             kind: EntryKind::File,
             logical_bytes,
             allocated_bytes,
+            allocated_size_is_estimate: !cfg!(unix),
         }
     }
 

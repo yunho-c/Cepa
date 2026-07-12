@@ -259,26 +259,45 @@ macOS queries `ATTR_VOL_CAPABILITIES` and reads `UF_COMPRESSED`; Windows queries
 future writes because its inode flags do not prove existing extent state. The
 macOS probes have been exercised against real uncompressed and `ditto`-compressed
 APFS files plus a symlink-replacement fixture. Windows and Linux modules pass
-target-specific compile checks and have native-CI regular-file tests, but those
-native runs and a real Btrfs runtime fixture remain external evidence gates.
+target-specific compile checks and native regular-file harnesses, but a real
+Btrfs runtime fixture remains an external evidence gate.
 
 Every platform reports `writerAvailable: false`. Inspection does not estimate
 savings or infer state from logical and allocated bytes. Estimation is a separate
-explicit request and neither operation authorizes mutation or replaces the
-immutable identity/revision snapshot required by a future `CompressionPlan`.
+explicit request and neither operation authorizes mutation.
+
+Step 1.5 implements a dormant, read-only `CompressionPlan` protocol. Preparation
+accepts only a completed scan ID, opaque node ID, and requested operation. It
+reopens regular files without following links, checks scan size and exact
+allocation where the scan backend provides it, and records an immutable
+platform-specific metadata revision. Unix revisions include device, inode, size,
+allocation, modification/change timestamps, and link count. Windows revisions
+include volume serial, file ID, exact size/allocation, last-write/change times,
+and link count. Revalidation returns `valid`, `changed`, or `unavailable`; a new
+scan or newer plan invalidates the previous plan.
+
+Every preview currently contains a `writerUnavailable` blocker, no apply command
+exists, and the UI intentionally exposes no dead-end planning action. The
+metadata revision is not a content fingerprint, and the retained scan snapshot
+does not yet carry scan-time identity for every node. Consequently an
+identical-size replacement between scan and planning, or a same-clock-tick data
+rewrite on a coarse-timestamp filesystem, is not fully distinguishable. A future
+writer must close both gaps with a measured scan identity design and a
+held-handle/content-integrity strategy; this preview is not mutation authority.
 
 Step 2 is implemented as a bounded, cancellable per-file estimator and candidate
 UI. Deterministic tests cover sampling bounds, full small-file coverage,
 compressible versus pseudo-random data, sparse-file conservatism, wire semantics,
 and cancellation ownership. macOS runs the real proxy codec locally; the Windows
-module and Linux platform code pass isolated target checks. Linux's bundled Zstd
-C dependency, native estimator accuracy, and Btrfs runtime fixtures remain CI or
-external evidence gates.
+module and Linux platform code pass native isolated harnesses. Native estimator
+accuracy on Btrfs and Btrfs runtime fixtures remain CI or external evidence
+gates.
 
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.
 2. Add bounded local estimation and candidate UX without mutation.
-3. Pilot explicit regular-file NTFS compression/decompression behind an
+3. Complete scan-to-plan identity and held-handle/content-integrity gates, then
+   pilot explicit regular-file NTFS compression/decompression behind an
    experimental flag.
 4. Add Btrfs future-write policy, then separately gate existing-extent rewrite.
 5. Revisit a macOS writer only after the copy/replace research gates above pass.

@@ -55,10 +55,13 @@ the completed directory breakdown. See
 error, and concurrent-mutation semantics.
 
 Broader native-filesystem and cold-cache validation, representative Windows and
-Linux native measurements, stronger mutation-plan identity snapshots, and
-compression mutation remain roadmap work. The scan-details disclosure,
-selection inspector, and bounded estimator are read-only; they never infer
-compression state from allocated size and never claim a writer is available.
+Linux native measurements, and compression mutation remain roadmap work. Cepa
+can prepare and revalidate an immutable, scan-authorized single-file plan preview,
+but every preview is blocked because no writer exists. This dormant protocol has
+no UI action and does not authorize mutation; scan-to-plan identity retention and
+content-integrity gating remain required before an apply command can exist. The
+scan-details disclosure, selection inspector, and bounded estimator are likewise
+read-only and never infer compression state from allocated size.
 The safety and backend contract is specified in
 [`docs/compression.md`](docs/compression.md).
 

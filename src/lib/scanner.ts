@@ -56,6 +56,47 @@ export interface SavingsEstimate {
   detail: string;
 }
 
+export type CompressionOperation = "compress" | "decompress";
+export type CompressionPlanStatus = "prepared" | "blocked";
+export type CompressionPlanBlockerCode =
+  | "writerUnavailable"
+  | "capabilityUnavailable"
+  | "stateUnavailable"
+  | "alreadyInRequestedState"
+  | "fileTooLarge";
+
+export interface CompressionPlanBlocker {
+  code: CompressionPlanBlockerCode;
+  detail: string;
+}
+
+export interface CompressionPlanPreview {
+  planId: number;
+  scanId: number;
+  nodeId: number;
+  operation: CompressionOperation;
+  status: CompressionPlanStatus;
+  filesystem: string;
+  algorithm: string | null;
+  logicalBytes: number;
+  allocatedBytes: number;
+  allocatedSizeIsEstimate: boolean;
+  estimatedReadBytes: number;
+  estimatedWriteBytes: number;
+  requiredFreeSpaceBytes: number | null;
+  linkCount: number;
+  warnings: string[];
+  blockers: CompressionPlanBlocker[];
+}
+
+export type PlanValidationStatus = "valid" | "changed" | "unavailable";
+
+export interface PlanValidation {
+  planId: number;
+  status: PlanValidationStatus;
+  detail: string;
+}
+
 export interface ScanProgress {
   entriesScanned: number;
   filesScanned: number;

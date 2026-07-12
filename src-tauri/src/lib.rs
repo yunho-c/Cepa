@@ -151,6 +151,88 @@ struct ActiveEstimate {
     cancel: Arc<AtomicBool>,
 }
 
+#[derive(Default)]
+struct CompressionPlanState {
+    next_id: AtomicU64,
+    generation: AtomicU64,
+    active: Mutex<Option<ActiveCompressionPlan>>,
+}
+
+struct ActiveCompressionPlan {
+    generation: u64,
+    plan: compression::PreparedCompressionPlan,
+}
+
+impl CompressionPlanState {
+    fn begin(&self) -> (u64, u64) {
+        let plan_id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        *self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = None;
+        (plan_id, generation)
+    }
+
+    fn finish(
+        &self,
+        generation: u64,
+        plan: compression::PreparedCompressionPlan,
+    ) -> Result<compression::CompressionPlanPreview, String> {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.generation.load(Ordering::Acquire) != generation {
+            return Err("That compression plan was superseded by a newer request.".into());
+        }
+        let preview = plan.preview().clone();
+        *active = Some(ActiveCompressionPlan { generation, plan });
+        Ok(preview)
+    }
+
+    fn fail(&self, generation: u64) {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.generation.load(Ordering::Acquire) == generation {
+            *active = None;
+        }
+    }
+
+    fn get(&self, plan_id: u64) -> Result<(u64, compression::PreparedCompressionPlan), String> {
+        let active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        active
+            .as_ref()
+            .filter(|active| active.plan.preview().plan_id == plan_id)
+            .map(|active| (active.generation, active.plan.clone()))
+            .ok_or_else(|| "That compression plan is no longer available.".to_string())
+    }
+
+    fn is_current(&self, generation: u64, plan_id: u64) -> bool {
+        let active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        self.generation.load(Ordering::Acquire) == generation
+            && active
+                .as_ref()
+                .is_some_and(|active| active.plan.preview().plan_id == plan_id)
+    }
+
+    fn clear(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        *self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = None;
+    }
+}
+
 impl EstimateState {
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
         let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
@@ -350,8 +432,10 @@ async fn scan_directory(
     on_event: Channel<ScanEvent>,
     state: tauri::State<'_, ScanState>,
     estimates: tauri::State<'_, EstimateState>,
+    plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<ScanResponse, String> {
     estimates.cancel_active();
+    plans.clear();
     let requested_path = PathBuf::from(path);
     let (scan_id, cancel) = state.begin();
     let _ = on_event.send(ScanEvent::Started {
@@ -452,6 +536,50 @@ fn cancel_compression_estimate(
 }
 
 #[tauri::command]
+async fn prepare_compression_plan(
+    scan_id: u64,
+    node_id: u64,
+    operation: compression::CompressionOperation,
+    scans: tauri::State<'_, ScanState>,
+    plans: tauri::State<'_, CompressionPlanState>,
+) -> Result<compression::CompressionPlanPreview, String> {
+    let target = scans.compression_target(scan_id, node_id)?;
+    let (plan_id, generation) = plans.begin();
+    let task = tauri::async_runtime::spawn_blocking(move || {
+        compression::prepare_plan(plan_id, scan_id, node_id, target, operation)
+    });
+    match task.await {
+        Ok(Ok(plan)) => plans.finish(generation, plan),
+        Ok(Err(error)) => {
+            plans.fail(generation);
+            Err(error)
+        }
+        Err(error) => {
+            plans.fail(generation);
+            Err(format!(
+                "The compression-planning task stopped unexpectedly: {error}"
+            ))
+        }
+    }
+}
+
+#[tauri::command]
+async fn revalidate_compression_plan(
+    plan_id: u64,
+    plans: tauri::State<'_, CompressionPlanState>,
+) -> Result<compression::PlanValidation, String> {
+    let (generation, plan) = plans.get(plan_id)?;
+    let validation =
+        tauri::async_runtime::spawn_blocking(move || compression::revalidate_plan(&plan))
+            .await
+            .map_err(|error| format!("The plan-validation task stopped unexpectedly: {error}"))?;
+    if !plans.is_current(generation, plan_id) {
+        return Err("That compression plan is no longer available.".into());
+    }
+    Ok(validation)
+}
+
+#[tauri::command]
 async fn reveal_scan_item(
     scan_id: u64,
     node_id: u64,
@@ -474,6 +602,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
         .manage(EstimateState::default())
+        .manage(CompressionPlanState::default())
         .invoke_handler(tauri::generate_handler![
             scan_directory,
             cancel_scan,
@@ -482,6 +611,8 @@ pub fn run() {
             compression_state,
             estimate_compression_savings,
             cancel_compression_estimate,
+            prepare_compression_plan,
+            revalidate_compression_plan,
             reveal_scan_item
         ])
         .run(tauri::generate_context!())
@@ -490,7 +621,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{EstimateState, ScanBackend, ScanState, benchmark_cancellation, scanner};
+    use super::{
+        CompressionPlanState, EstimateState, ScanBackend, ScanState, benchmark_cancellation,
+        compression, scanner,
+    };
     use std::fs;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
@@ -534,6 +668,61 @@ mod tests {
         assert!(state.cancel(20));
         assert!(second.load(Ordering::Relaxed));
         state.finish(second_token);
+    }
+
+    #[test]
+    fn compression_plan_generations_reject_superseded_and_cleared_plans() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, vec![1_u8; 4096]).expect("write fixture file");
+        let metadata = fs::metadata(&path).expect("read fixture metadata");
+        #[cfg(unix)]
+        let allocated_bytes = {
+            use std::os::unix::fs::MetadataExt;
+            metadata.blocks() * 512
+        };
+        #[cfg(not(unix))]
+        let allocated_bytes = metadata.len();
+        let target = scanner::CompressionTarget {
+            path,
+            kind: scanner::EntryKind::File,
+            logical_bytes: metadata.len(),
+            allocated_bytes,
+            allocated_size_is_estimate: !cfg!(unix),
+        };
+
+        let state = CompressionPlanState::default();
+        let (first_id, first_generation) = state.begin();
+        let first = compression::prepare_plan(
+            first_id,
+            1,
+            1,
+            target.clone(),
+            compression::CompressionOperation::Compress,
+        )
+        .expect("prepare first plan");
+        let (second_id, second_generation) = state.begin();
+        let second = compression::prepare_plan(
+            second_id,
+            1,
+            1,
+            target,
+            compression::CompressionOperation::Compress,
+        )
+        .expect("prepare second plan");
+
+        assert!(state.finish(first_generation, first).is_err());
+        assert_eq!(
+            state
+                .finish(second_generation, second)
+                .expect("store current plan")
+                .plan_id,
+            second_id
+        );
+        assert!(state.get(first_id).is_err());
+        assert!(state.get(second_id).is_ok());
+        state.clear();
+        assert!(state.get(second_id).is_err());
     }
 
     #[test]

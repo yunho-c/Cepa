@@ -213,6 +213,7 @@ pub(crate) struct ScanSnapshot {
     root: NodeId,
     root_path: Arc<Path>,
     nodes: Vec<InternalNode>,
+    allocated_size_is_estimate: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -221,6 +222,7 @@ pub(crate) struct CompressionTarget {
     pub kind: EntryKind,
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
+    pub allocated_size_is_estimate: bool,
 }
 
 type NodeId = usize;
@@ -843,6 +845,7 @@ where
         root: 0,
         root_path: root_node_path,
         nodes,
+        allocated_size_is_estimate: semantics.allocated_size_is_estimate,
     };
 
     Ok(ScanOutput {
@@ -886,6 +889,7 @@ impl ScanSnapshot {
             kind: node.kind,
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
+            allocated_size_is_estimate: self.allocated_size_is_estimate,
         })
     }
 
@@ -1119,8 +1123,8 @@ fn observe_partial_file(
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
         };
-        if let Some(replaced_owner) = replaced_owner
-            && partial_ranking.replace(replaced_owner, candidate)
+        if replaced_owner
+            .is_some_and(|replaced_owner| partial_ranking.replace(replaced_owner, candidate))
         {
             return;
         }
@@ -1846,6 +1850,7 @@ mod tests {
             root: 0,
             root_path: Arc::from(root_path),
             nodes,
+            allocated_size_is_estimate: false,
         };
         let allocated = snapshot
             .directory_view_with_metric(1, 0, SizeMetric::Allocated)

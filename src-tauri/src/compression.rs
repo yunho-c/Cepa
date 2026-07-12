@@ -5,8 +5,27 @@ use crate::scanner::EntryKind;
 
 #[path = "compression/estimator.rs"]
 mod estimator;
+#[path = "compression/plan.rs"]
+mod plan;
 
 pub(crate) use estimator::SavingsEstimate;
+pub(crate) use plan::{
+    CompressionOperation, CompressionPlanPreview, PlanValidation, PreparedCompressionPlan,
+};
+
+pub(crate) fn prepare_plan(
+    plan_id: u64,
+    scan_id: u64,
+    node_id: u64,
+    target: crate::scanner::CompressionTarget,
+    operation: CompressionOperation,
+) -> Result<PreparedCompressionPlan, String> {
+    plan::prepare(plan_id, scan_id, node_id, target, operation)
+}
+
+pub(crate) fn revalidate_plan(plan: &PreparedCompressionPlan) -> PlanValidation {
+    plan::revalidate(plan)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
