@@ -60,7 +60,11 @@ Broader native-filesystem and cold-cache validation, additional Windows and
 Linux hardware measurements, and compression mutation remain roadmap work. The
 first native Linux ext4 comparison found exact accounting parity and responsive
 cancellation, but `statx` was slower than `jwalk` on all three warm workloads;
-Cepa does not claim a Linux speedup. The app can prepare and revalidate an
+Cepa does not claim a Linux speedup. It remains the automatic Linux backend
+because the measured native process uses less than half the peak RSS and has a
+substantially tighter cancellation tail on the canonical 100k-entry fixtures.
+Lazy path construction has since reduced native median traversal by 6–11%
+without changing those semantics. The app can prepare and revalidate an
 immutable, scan-authorized single-file plan preview,
 but every preview is blocked because no writer exists. This dormant protocol has
 no UI action and does not authorize mutation. Planning now requires an exact

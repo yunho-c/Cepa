@@ -88,10 +88,11 @@ The intended scanning architecture is:
 - `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
   to run parity and cancellation fixtures. The first native warm ext4 comparison
   found exact parity and bounded cancellation but slower traversal than `jwalk`;
-  do not claim a Linux speedup. A measured bounded result-queue increase improved
-  both canonical warm fixtures without a measured RSS or cancellation regression.
-  Broader filesystem/hardware coverage, cold-cache measurements, and scheduler
-  profiling remain required.
+  do not claim a Linux speedup. It remains the automatic backend because current
+  measurements show materially lower peak RSS and tighter cancellation tails.
+  Measured queue tuning and lazy path/name construction improved both canonical
+  warm fixtures without weakening the existing bounds. Broader filesystem and
+  hardware coverage, cold-cache measurements, and scheduler redesign remain.
 
 Keep roadmap items described as planned until the code and validation exist.
 Do not present compilation, UI wiring, or a mocked scan as proof of real

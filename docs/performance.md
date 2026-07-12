@@ -404,6 +404,44 @@ Raw evidence is preserved in
 and
 [`performance-results/2026-07-12-linux-result-queue-strace.csv`](performance-results/2026-07-12-linux-result-queue-strace.csv).
 
+#### Automatic-backend tradeoff and lazy paths
+
+A fresh 15-round interleaved comparison on the same native ext4 workstation
+confirmed that `jwalk` still has the warm traversal advantage. Its median was
+17.62 ms versus 26.48 ms for `statx` on the 101,011-entry directory-rich fixture,
+and 16.78 ms versus 18.63 ms on the 100,102-entry wide fixture. Accounting was
+identical, so wall time alone would favor the portable backend.
+
+That is not the whole production tradeoff. Five warmed process observations
+put median `jwalk` peak RSS at 48,964 KiB and 43,196 KiB on the two fixtures,
+versus 18,348 KiB and 19,992 KiB for `statx`. Across 21 cancellation runs,
+`jwalk` median/p95/max latency was 543/2,883/2,951 us on the directory-rich
+fixture and 2,706/4,425/4,697 us on the wide fixture. Native medians were
+190 and 203 us, with maxima of 235 and 241 us. Linux automatic selection
+therefore remains `statx`: switching for warm throughput would more than double
+peak RSS and materially loosen cancellation on these large synthetic trees.
+
+Profiling the native ingest path then exposed avoidable work independent of the
+scheduler. Every file name was cloned and joined to its parent path even though
+only child directories and bounded progress reports need a full path. File names
+now move directly into the retained arena; directory names are cloned once for
+their traversal task, and ordinary file paths are built only when a progress
+update is emitted.
+
+Fifteen interleaved A/B rounds found median native traversal falling from 22.56
+to 21.13 ms (-6.3%) on the directory-rich fixture and from 20.06 to 17.88 ms
+(-10.9%) on the wide fixture. Median wall time improved by 5.5% and 9.7%.
+Five post-change RSS observations remained 18.0–18.8 MiB for the directory-rich
+fixture and 19.0–22.5 MiB for the wide fixture. Median cancellation remained
+193 and 187 us; one directory-rich run reached 1,038 us, while the other 20
+were at or below 237 us.
+
+A separate 15-round prototype doubled result batches from 512 to 1,024 entries.
+It regressed median traversal by 2.9% and 5.9%, so the production bound remains
+512. Raw samples for the backend decision, rejected batch size, lazy-path A/B,
+RSS, and cancellation are preserved in
+[`performance-results/2026-07-12-linux-lazy-paths.csv`](performance-results/2026-07-12-linux-lazy-paths.csv).
+
 ### 2026-07-12 scan-time revision retention
 
 Compression planning now retains a 32-byte file identity/revision field in each
@@ -419,7 +457,8 @@ throughput regression: median native wall time changed from 140.24 to 134.14 ms
 on the directory-rich fixture and from 172.74 to 171.82 ms on the wide fixture.
 Five paired process-RSS observations on the directory-rich fixture increased
 from a 34,668,544-byte median to 38,010,880 bytes, a 3,342,336-byte increase
-consistent with the intentional 32-byte revision per file plus allocator noise.
+consistent with the intentional 32-byte revision field per scanner node plus
+allocator noise.
 
 The native Linux release harness passed 44 tests. On a fresh ext4 fixture with
 100,001 files and 1,010 directories, nine warm `statx` runs had a 23.86 ms median

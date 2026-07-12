@@ -518,13 +518,17 @@ where
             counters.skipped_entries += 1;
         }
 
-        let child_path = directory_path.join(&entry.name);
-        let task_name = entry.name.clone();
+        let is_directory = matches!(entry.kind, EntryKind::Directory);
+        // File names move directly into the retained arena. Only directories
+        // need a second owned name and full path for a later traversal task;
+        // ordinary files build a path only at the bounded progress boundary.
+        let task_name = is_directory.then(|| entry.name.clone());
         let (node_id, replaced_owner) =
             counters.push_node(nodes, parent_id, entry.name, entry.kind, entry.measured);
         observe_partial_file(partial_ranking, nodes, node_id, replaced_owner);
 
-        if matches!(entry.kind, EntryKind::Directory) {
+        let child_path = if let Some(task_name) = task_name {
+            let path: Arc<Path> = Arc::from(directory_path.join(&task_name));
             if entry.mount_boundary {
                 counters.skipped_filesystems += 1;
             } else if let Some(expected) = entry.directory_identity {
@@ -534,17 +538,29 @@ where
                         name: task_name,
                         expected,
                     },
-                    path: Arc::from(child_path.clone()),
+                    path: path.clone(),
                     parent_id: node_id,
                     root_mount_id,
                 });
             }
-        }
+            Some(path)
+        } else {
+            None
+        };
 
         *entries_since_progress += 1;
         if *entries_since_progress >= PROGRESS_ENTRY_INTERVAL
             || last_progress_at.elapsed() >= PROGRESS_INTERVAL
         {
+            let current_path = child_path.as_deref().map_or_else(
+                || {
+                    directory_path
+                        .join(&nodes[node_id].name)
+                        .to_string_lossy()
+                        .into_owned()
+                },
+                |path| path.to_string_lossy().into_owned(),
+            );
             on_progress(ScanProgress {
                 entries_scanned: counters.files_scanned + counters.directories_scanned,
                 files_scanned: counters.files_scanned,
@@ -552,7 +568,7 @@ where
                 logical_bytes: counters.observed_logical_bytes,
                 allocated_bytes: counters.observed_allocated_bytes,
                 skipped_entries: counters.skipped_entries,
-                current_path: child_path.to_string_lossy().into_owned(),
+                current_path,
                 elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
                 largest_items: partial_ranking.items(nodes),
             });
