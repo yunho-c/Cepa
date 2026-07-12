@@ -10,34 +10,34 @@ the form invokes the typed `greet` command in Rust and renders its response.
 
 - [Bun](https://bun.sh/)
 - A Rust toolchain managed by [rustup](https://rustup.rs/)
+- [just](https://just.systems/) for the repository workflows
 - The [Tauri system dependencies](https://v2.tauri.app/start/prerequisites/)
   for your desktop platform
 
 ## Development
 
 ```sh
-bun install
-bun run desktop:dev
+just install
+just dev
 ```
 
-`bun run dev` starts only the Vite frontend. Use `bun run desktop:dev` for the
-native application and Rust command bridge.
+`just web` starts only the Vite frontend. Use `just dev` for the native
+application and Rust command bridge. Run `just` to list every available recipe.
 
 ## Checks and builds
 
 ```sh
-bun run check
-bun run build
-cargo check --manifest-path src-tauri/Cargo.toml
-bun run tauri build --no-bundle
+just check
+just build
 ```
 
-If this machine's configured `sccache` wrapper blocks Cargo, clear it for the
-command:
+`just check` runs Svelte diagnostics, Rust formatting checks, `cargo check`, and
+the Rust tests. Native recipes clear the machine's configured `sccache` wrapper
+for the command so it cannot block Cargo.
 
 ```sh
-RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WRAPPER= cargo check --manifest-path src-tauri/Cargo.toml
+just bundle
 ```
 
-Desktop bundle generation is available through `bun run tauri build`. Mobile
-targets are intentionally not initialized or configured.
+`just bundle` generates the platform desktop bundles. Mobile targets are
+intentionally not initialized or configured.
