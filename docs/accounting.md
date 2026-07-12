@@ -17,6 +17,12 @@ them before it can replace `jwalk` for a platform.
 - A directory's totals are the saturating sum of its accounted descendants.
   File and directory counts describe directory entries, not unique inodes.
 
+The explorer defaults to space on disk. Switching to logical size requests a
+new directory view from the retained Rust snapshot; ranking, the bounded top-500
+list, recursive chart selection, aggregate remainder, percentages, and geometry
+all use the selected metric. The summary retains both totals so the distinction
+remains visible.
+
 ## Hard links
 
 When `(filesystem, file ID)` identity is available, Cepa charges a hard-linked

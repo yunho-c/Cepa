@@ -5,13 +5,14 @@ import { createSunburst } from "./sunburst";
 function item(
   id: number,
   allocatedBytes: number,
+  logicalBytes = allocatedBytes,
   children: ChartItem[] = [],
 ): ChartItem {
   return {
     id,
     name: `item-${id}`,
     kind: "directory",
-    logicalBytes: allocatedBytes,
+    logicalBytes,
     allocatedBytes,
     children,
   };
@@ -20,7 +21,7 @@ function item(
 describe("sunburst geometry", () => {
   test("creates finite paths for nested weighted items", () => {
     const segments = createSunburst([
-      item(1, 75, [item(3, 25)]),
+      item(1, 75, 75, [item(3, 25)]),
       item(2, 25),
     ]);
 
@@ -38,5 +39,14 @@ describe("sunburst geometry", () => {
 
   test("returns no segments for an empty view", () => {
     expect(createSunburst([])).toEqual([]);
+  });
+
+  test("changes geometry with the selected metric", () => {
+    const items = [item(1, 90, 10), item(2, 10, 90)];
+    const allocated = createSunburst(items, "allocated");
+    const logical = createSunburst(items, "logical");
+
+    expect(allocated[0].pathData).not.toBe(logical[0].pathData);
+    expect(allocated[1].pathData).not.toBe(logical[1].pathData);
   });
 });

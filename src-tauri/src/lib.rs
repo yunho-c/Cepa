@@ -1,6 +1,6 @@
 mod scanner;
 
-use scanner::{DirectoryView, ScanProgress, ScanSnapshot};
+use scanner::{DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
 use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
@@ -197,7 +197,12 @@ impl ScanState {
         Ok(view)
     }
 
-    fn directory_view(&self, id: u64, node_id: u64) -> Result<DirectoryView, String> {
+    fn directory_view(
+        &self,
+        id: u64,
+        node_id: u64,
+        metric: SizeMetric,
+    ) -> Result<DirectoryView, String> {
         let completed = self
             .completed
             .lock()
@@ -206,7 +211,8 @@ impl ScanState {
             .as_ref()
             .filter(|scan| scan.id == id)
             .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        scan.snapshot.directory_view(id, node_id)
+        scan.snapshot
+            .directory_view_with_metric(id, node_id, metric)
     }
 
     fn reveal_path(&self, id: u64, node_id: u64) -> Result<PathBuf, String> {
@@ -292,9 +298,10 @@ fn cancel_scan(scan_id: u64, state: tauri::State<'_, ScanState>) -> bool {
 fn open_scan_directory(
     scan_id: u64,
     node_id: u64,
+    metric: SizeMetric,
     state: tauri::State<'_, ScanState>,
 ) -> Result<DirectoryView, String> {
-    state.directory_view(scan_id, node_id)
+    state.directory_view(scan_id, node_id, metric)
 }
 
 #[tauri::command]

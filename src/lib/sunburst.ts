@@ -1,4 +1,4 @@
-import type { ChartItem } from "$lib/scanner";
+import { metricBytes, type ChartItem, type SizeMetric } from "$lib/scanner";
 
 const CENTER = 170;
 const INNER_RADIUS = 47;
@@ -13,21 +13,25 @@ export interface SunburstSegment {
   colorIndex: number;
 }
 
-export function createSunburst(items: ChartItem[]): SunburstSegment[] {
+export function createSunburst(
+  items: ChartItem[],
+  metric: SizeMetric = "allocated",
+): SunburstSegment[] {
   const segments: SunburstSegment[] = [];
-  appendSegments(segments, items, 0, -Math.PI / 2, Math.PI * 1.5, 0);
+  appendSegments(segments, items, metric, 0, -Math.PI / 2, Math.PI * 1.5, 0);
   return segments;
 }
 
 function appendSegments(
   output: SunburstSegment[],
   items: ChartItem[],
+  metric: SizeMetric,
   depth: number,
   startAngle: number,
   endAngle: number,
   colorSeed: number,
 ) {
-  const weights = items.map(itemWeight);
+  const weights = items.map((item) => itemWeight(item, metric));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   if (total <= 0) return;
 
@@ -57,6 +61,7 @@ function appendSegments(
       appendSegments(
         output,
         item.children,
+        metric,
         depth + 1,
         itemStart,
         itemEnd,
@@ -66,8 +71,8 @@ function appendSegments(
   });
 }
 
-function itemWeight(item: ChartItem): number {
-  return Math.max(item.allocatedBytes, item.logicalBytes, 1);
+function itemWeight(item: ChartItem, metric: SizeMetric): number {
+  return Math.max(metricBytes(item, metric), 1);
 }
 
 function ringArc(

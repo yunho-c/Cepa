@@ -1,5 +1,11 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
-import type { DirectoryView, ScanProgress, ScanResponse } from "./scanner";
+import type {
+  ChartItem,
+  DirectoryView,
+  ScanProgress,
+  ScanResponse,
+  SizeMetric,
+} from "./scanner";
 
 type DevScenario =
   | "complete"
@@ -51,7 +57,10 @@ export function installDevMock(requestedScenario: string) {
         if (scenario === "navigation-error") {
           throw "The mocked snapshot is no longer available.";
         }
-        return mockDirectoryView(Number(args.nodeId));
+        return metricView(
+          mockDirectoryView(Number(args.nodeId)),
+          args.metric === "logical" ? "logical" : "allocated",
+        );
       case "reveal_scan_item":
         if (scenario === "reveal-error") {
           throw "The mocked item disappeared after the scan completed.";
@@ -124,7 +133,28 @@ function mockResponse(): ScanResponse {
       hardLinkDeduplicationSupported: true,
       sameFilesystemEnforced: true,
     },
-    view: rootView(),
+    view: metricView(rootView(), "allocated"),
+  };
+}
+
+function metricView(view: DirectoryView, metric: SizeMetric): DirectoryView {
+  const bytes =
+    metric === "logical"
+      ? (item: { logicalBytes: number }) => item.logicalBytes
+      : (item: { allocatedBytes: number }) => item.allocatedBytes;
+  const compare = (
+    left: { name: string; logicalBytes: number; allocatedBytes: number },
+    right: { name: string; logicalBytes: number; allocatedBytes: number },
+  ) => bytes(right) - bytes(left) || left.name.localeCompare(right.name);
+  const rankChart = (items: ChartItem[]): ChartItem[] =>
+    items
+      .map((item) => ({ ...item, children: rankChart(item.children) }))
+      .sort(compare);
+
+  return {
+    ...view,
+    items: [...view.items].sort(compare),
+    chartItems: rankChart(view.chartItems),
   };
 }
 

@@ -32,6 +32,9 @@ relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
 command that validates the retained scan and opaque node ID before reconstructing
 the path; do not replace that boundary with a frontend-supplied arbitrary path.
+Directory views can switch between allocated and logical size. The selected
+metric is applied in Rust before bounded list and chart selection, not merely to
+frontend labels, so sparse or compressed entries cannot be truncated incorrectly.
 
 The intended scanning architecture is:
 

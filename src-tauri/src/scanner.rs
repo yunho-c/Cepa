@@ -1,5 +1,5 @@
 use jwalk::{Parallelism, WalkDirGeneric};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -88,6 +88,13 @@ pub enum EntryKind {
     File,
     Symlink,
     Other,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum SizeMetric {
+    Allocated,
+    Logical,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -778,6 +785,15 @@ impl ScanSnapshot {
         scan_id: u64,
         requested: u64,
     ) -> Result<DirectoryView, String> {
+        self.directory_view_with_metric(scan_id, requested, SizeMetric::Allocated)
+    }
+
+    pub(crate) fn directory_view_with_metric(
+        &self,
+        scan_id: u64,
+        requested: u64,
+        metric: SizeMetric,
+    ) -> Result<DirectoryView, String> {
         let node_id = self.valid_node_id(requested)?;
         let node = &self.nodes[node_id];
 
@@ -786,7 +802,7 @@ impl ScanSnapshot {
         }
 
         let total_items = node.children.len();
-        let ranked_ids = self.ranked_child_ids(node_id, MAX_LIST_ITEMS);
+        let ranked_ids = self.ranked_child_ids(node_id, MAX_LIST_ITEMS, metric);
         let items = ranked_ids
             .iter()
             .map(|child| self.scan_item(*child))
@@ -805,7 +821,13 @@ impl ScanSnapshot {
             items_truncated: total_items > MAX_LIST_ITEMS,
             breadcrumbs: self.breadcrumbs(node_id),
             items,
-            chart_items: self.chart_items(node_id, 0, &ranked_ids[..chart_item_count], total_items),
+            chart_items: self.chart_items(
+                node_id,
+                0,
+                &ranked_ids[..chart_item_count],
+                total_items,
+                metric,
+            ),
         })
     }
 
@@ -848,14 +870,14 @@ impl ScanSnapshot {
         breadcrumbs
     }
 
-    fn chart_children(&self, parent: NodeId, depth: usize) -> Vec<ChartItem> {
+    fn chart_children(&self, parent: NodeId, depth: usize, metric: SizeMetric) -> Vec<ChartItem> {
         if depth >= MAX_CHART_DEPTH {
             return Vec::new();
         }
 
         let total_items = self.nodes[parent].children.len();
-        let ranked_ids = self.ranked_child_ids(parent, MAX_CHART_ITEMS_PER_DIRECTORY);
-        self.chart_items(parent, depth, &ranked_ids, total_items)
+        let ranked_ids = self.ranked_child_ids(parent, MAX_CHART_ITEMS_PER_DIRECTORY, metric);
+        self.chart_items(parent, depth, &ranked_ids, total_items, metric)
     }
 
     fn chart_items(
@@ -864,6 +886,7 @@ impl ScanSnapshot {
         depth: usize,
         ranked_ids: &[NodeId],
         total_items: usize,
+        metric: SizeMetric,
     ) -> Vec<ChartItem> {
         let mut items: Vec<_> = ranked_ids
             .iter()
@@ -876,7 +899,7 @@ impl ScanSnapshot {
                     logical_bytes: node.logical_bytes,
                     allocated_bytes: node.allocated_bytes,
                     children: matches!(node.kind, EntryKind::Directory)
-                        .then(|| self.chart_children(*node_id, depth + 1))
+                        .then(|| self.chart_children(*node_id, depth + 1, metric))
                         .unwrap_or_default(),
                 }
             })
@@ -914,16 +937,18 @@ impl ScanSnapshot {
         items
     }
 
-    fn ranked_child_ids(&self, parent: NodeId, limit: usize) -> Vec<NodeId> {
+    fn ranked_child_ids(&self, parent: NodeId, limit: usize, metric: SizeMetric) -> Vec<NodeId> {
         let mut ranked = self.nodes[parent].children.clone();
 
         if ranked.len() > limit {
             ranked.select_nth_unstable_by(limit, |left, right| {
-                compare_node_ids(&self.nodes, *left, *right)
+                compare_node_ids_by_metric(&self.nodes, *left, *right, metric)
             });
             ranked.truncate(limit);
         }
-        ranked.sort_unstable_by(|left, right| compare_node_ids(&self.nodes, *left, *right));
+        ranked.sort_unstable_by(|left, right| {
+            compare_node_ids_by_metric(&self.nodes, *left, *right, metric)
+        });
         ranked
     }
 
@@ -1015,14 +1040,39 @@ fn relative_node_path(nodes: &[InternalNode], mut node_id: NodeId) -> Vec<&OsStr
     components
 }
 
-fn compare_node_ids(nodes: &[InternalNode], left: NodeId, right: NodeId) -> std::cmp::Ordering {
+fn compare_node_ids_by_metric(
+    nodes: &[InternalNode],
+    left: NodeId,
+    right: NodeId,
+    metric: SizeMetric,
+) -> std::cmp::Ordering {
     let left_node = &nodes[left];
     let right_node = &nodes[right];
-    right_node
-        .allocated_bytes
-        .cmp(&left_node.allocated_bytes)
-        .then_with(|| right_node.logical_bytes.cmp(&left_node.logical_bytes))
+    metric
+        .bytes(right_node)
+        .cmp(&metric.bytes(left_node))
+        .then_with(|| {
+            metric
+                .secondary_bytes(right_node)
+                .cmp(&metric.secondary_bytes(left_node))
+        })
         .then_with(|| left_node.name().cmp(right_node.name()))
+}
+
+impl SizeMetric {
+    fn bytes(self, node: &InternalNode) -> u64 {
+        match self {
+            Self::Allocated => node.allocated_bytes,
+            Self::Logical => node.logical_bytes,
+        }
+    }
+
+    fn secondary_bytes(self, node: &InternalNode) -> u64 {
+        match self {
+            Self::Allocated => node.logical_bytes,
+            Self::Logical => node.allocated_bytes,
+        }
+    }
 }
 
 fn compare_partial_candidates(
@@ -1531,6 +1581,108 @@ mod tests {
                 .sum::<u64>(),
             output.result.logical_bytes
         );
+    }
+
+    #[test]
+    fn metric_controls_ranking_and_bounded_selection() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let root_path = temp.path().canonicalize().expect("canonical fixture root");
+        let mut root = InternalNode::root(&root_path);
+        let mut nodes = Vec::with_capacity(MAX_LIST_ITEMS + 3);
+        nodes.push(InternalNode::root(&root_path));
+
+        for index in 0..=MAX_LIST_ITEMS {
+            let node_id = nodes.len();
+            root.children.push(node_id);
+            nodes.push(InternalNode {
+                name: OsString::from(format!("dense-{index:04}.bin")),
+                parent: Some(0),
+                children: Vec::new(),
+                kind: EntryKind::File,
+                logical_bytes: 10,
+                allocated_bytes: 100,
+                file_count: 1,
+                directory_count: 0,
+            });
+        }
+        let sparse_id = nodes.len();
+        root.children.push(sparse_id);
+        nodes.push(InternalNode {
+            name: OsString::from("sparse.bin"),
+            parent: Some(0),
+            children: Vec::new(),
+            kind: EntryKind::File,
+            logical_bytes: 10_000,
+            allocated_bytes: 0,
+            file_count: 1,
+            directory_count: 0,
+        });
+        root.logical_bytes = (MAX_LIST_ITEMS as u64 + 1) * 10 + 10_000;
+        root.allocated_bytes = (MAX_LIST_ITEMS as u64 + 1) * 100;
+        root.file_count = MAX_LIST_ITEMS as u64 + 2;
+        nodes[0] = root;
+
+        let snapshot = ScanSnapshot {
+            root: 0,
+            root_path: Arc::from(root_path),
+            nodes,
+        };
+        let allocated = snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Allocated)
+            .expect("build allocated view");
+        let logical = snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Logical)
+            .expect("build logical view");
+
+        assert!(allocated.items_truncated);
+        assert_eq!(allocated.items.len(), MAX_LIST_ITEMS);
+        assert!(
+            !allocated
+                .items
+                .iter()
+                .any(|item| item.id == wire_id(sparse_id))
+        );
+        assert_eq!(logical.items[0].id, wire_id(sparse_id));
+        assert_eq!(logical.chart_items[0].id, Some(wire_id(sparse_id)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserves_sparse_file_semantics_across_metrics() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let sparse_path = temp.path().join("sparse.bin");
+        fs::File::create(&sparse_path)
+            .expect("create sparse file")
+            .set_len(8 * 1024 * 1024)
+            .expect("extend sparse file");
+        fs::write(temp.path().join("dense.bin"), vec![0x5a; 1024 * 1024])
+            .expect("write dense file");
+
+        let output = scan_path_with_backend(
+            temp.path(),
+            Arc::new(AtomicBool::new(false)),
+            ScanBackend::Jwalk,
+            |_| {},
+        )
+        .expect("scan sparse fixture");
+        let allocated = output
+            .snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Allocated)
+            .expect("build allocated view");
+        let logical = output
+            .snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Logical)
+            .expect("build logical view");
+        let sparse = logical
+            .items
+            .iter()
+            .find(|item| item.name == "sparse.bin")
+            .expect("find sparse file");
+
+        assert_eq!(sparse.logical_bytes, 8 * 1024 * 1024);
+        assert!(sparse.allocated_bytes < sparse.logical_bytes);
+        assert_eq!(logical.items[0].name, "sparse.bin");
+        assert_eq!(allocated.items[0].name, "dense.bin");
     }
 
     fn assert_arena_invariants(snapshot: &ScanSnapshot) {

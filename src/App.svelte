@@ -28,9 +28,11 @@
     formatBackend,
     formatCount,
     formatDuration,
+    formatMetric,
     formatPercent,
     describeEntry,
     isCancellationError,
+    metricBytes,
     type ChartItem,
     type DirectoryView,
     type ScanEvent,
@@ -38,6 +40,7 @@
     type ScanProgress,
     type ScanResponse,
     type ScanResult,
+    type SizeMetric,
   } from "$lib/scanner";
   import { createSunburst } from "$lib/sunburst";
 
@@ -53,8 +56,10 @@
   let isNavigating = $state(false);
   let errorMessage = $state("");
   let navigationError = $state("");
+  let navigationErrorTitle = $state("That folder could not be opened.");
   let revealError = $state("");
   let revealingNodeId = $state<number | null>(null);
+  let sizeMetric = $state<SizeMetric>("allocated");
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -75,7 +80,8 @@
       largestItems: [],
     },
   );
-  const sunburstSegments = $derived(createSunburst(view?.chartItems ?? []));
+  const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
+  const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const headerLabel = $derived(
     status === "scanning"
@@ -129,8 +135,10 @@
     path = requestedPath;
     errorMessage = "";
     navigationError = "";
+    navigationErrorTitle = "That folder could not be opened.";
     revealError = "";
     revealingNodeId = null;
+    sizeMetric = "allocated";
     progress = null;
     result = null;
     view = null;
@@ -197,35 +205,59 @@
     selectedEntry = null;
     errorMessage = "";
     navigationError = "";
+    navigationErrorTitle = "That folder could not be opened.";
     revealError = "";
     revealingNodeId = null;
+    sizeMetric = "allocated";
   }
 
   function itemPercent(bytes: number): number {
-    if (!view || bytes <= 0 || view.allocatedBytes <= 0) return 0;
-    return Math.max(0.8, Math.min(100, (bytes / view.allocatedBytes) * 100));
+    if (bytes <= 0 || viewBytes <= 0) return 0;
+    return Math.max(0.8, Math.min(100, (bytes / viewBytes) * 100));
   }
 
-  async function openDirectory(nodeId: number | null) {
-    if (scanId === null || nodeId === null || isNavigating) return;
+  async function loadDirectory(
+    nodeId: number,
+    metric: SizeMetric,
+    focusHeading: boolean,
+  ) {
+    if (scanId === null || isNavigating) return;
     isNavigating = true;
     navigationError = "";
     revealError = "";
     try {
-      view = await invoke<DirectoryView>("open_scan_directory", {
+      const nextView = await invoke<DirectoryView>("open_scan_directory", {
         scanId,
         nodeId,
+        metric,
       });
+      view = nextView;
+      sizeMetric = metric;
       selectedEntry = null;
-      await tick();
-      viewHeading?.focus();
+      if (focusHeading) {
+        await tick();
+        viewHeading?.focus();
+      }
     } catch (error) {
-      navigationError = `Could not open that folder: ${String(error)}`;
+      navigationErrorTitle = focusHeading
+        ? "That folder could not be opened."
+        : "The size metric could not be changed.";
+      navigationError = String(error);
       await tick();
       navigationNotice?.focus();
     } finally {
       isNavigating = false;
     }
+  }
+
+  async function openDirectory(nodeId: number | null) {
+    if (nodeId === null) return;
+    await loadDirectory(nodeId, sizeMetric, true);
+  }
+
+  async function setSizeMetric(metric: SizeMetric) {
+    if (!view || metric === sizeMetric) return;
+    await loadDirectory(view.nodeId, metric, false);
   }
 
   async function revealItem(nodeId: number) {
@@ -492,17 +524,34 @@
         </div>
       </section>
 
-      <nav class="breadcrumbs" aria-label="Current scan path">
-        {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
-          {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
+      <div class="explorer-toolbar">
+        <nav class="breadcrumbs" aria-label="Current scan path">
+          {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
+            {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
+            <button
+              type="button"
+              disabled={isNavigating}
+              aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
+              onclick={() => openDirectory(breadcrumb.id)}
+            >{breadcrumb.name}</button>
+          {/each}
+        </nav>
+        <div class="metric-switch" role="group" aria-label="Size metric">
+          <span>Measure</span>
           <button
             type="button"
-            disabled={isNavigating}
-            aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
-            onclick={() => openDirectory(breadcrumb.id)}
-          >{breadcrumb.name}</button>
-        {/each}
-      </nav>
+            aria-pressed={sizeMetric === "allocated"}
+            aria-disabled={isNavigating}
+            onclick={() => setSizeMetric("allocated")}
+          >On disk</button>
+          <button
+            type="button"
+            aria-pressed={sizeMetric === "logical"}
+            aria-disabled={isNavigating}
+            onclick={() => setSizeMetric("logical")}
+          >Logical</button>
+        </div>
+      </div>
 
       {#if navigationError}
         <div
@@ -513,7 +562,7 @@
         >
           <AlertCircle />
           <div>
-            <strong>That folder could not be opened.</strong>
+            <strong>{navigationErrorTitle}</strong>
             <span>{navigationError}</span>
           </div>
         </div>
@@ -559,13 +608,13 @@
 
           <div class="sunburst-wrap">
             {#if sunburstSegments.length > 0}
-              <svg class="sunburst" viewBox="0 0 340 340" role="img" aria-label={`Storage map for ${view.displayName}`}>
+              <svg class="sunburst" viewBox="0 0 340 340" role="img" aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}>
                 {#each sunburstSegments as segment (`${segment.item.id ?? segment.item.name}-${segment.depth}`)}
                   {#if segment.item.id !== null}
                     <g
                       role="button"
                       tabindex="0"
-                      aria-label={`${segment.item.name}, ${formatBytes(segment.item.allocatedBytes)}`}
+                      aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}
                       onmouseenter={() => (selectedEntry = segment.item)}
                       onfocus={() => (selectedEntry = segment.item)}
                       onmouseleave={() => (selectedEntry = null)}
@@ -595,13 +644,13 @@
             {/if}
 
             <div class="chart-center" aria-live="polite">
-              <span>{selectedEntry ? "Selected" : "This folder"}</span>
-              <strong>{formatBytes(selectedEntry?.allocatedBytes ?? view.allocatedBytes)}</strong>
+              <span>{formatMetric(sizeMetric)}</span>
+              <strong>{formatBytes(selectedEntry ? metricBytes(selectedEntry, sizeMetric) : viewBytes)}</strong>
               <em>{selectedEntry?.name ?? view.displayName}</em>
             </div>
           </div>
 
-          <p class="chart-help">Select a ring or row to inspect · Open a folder to drill down</p>
+          <p class="chart-help">Ranked by {formatMetric(sizeMetric).toLowerCase()} · Select to inspect · Open folders to drill down</p>
         </div>
 
         <div class="directory-pane">
@@ -631,7 +680,7 @@
                     onfocus={() => (selectedEntry = item)}
                     onmouseleave={() => (selectedEntry = null)}
                     onblur={() => (selectedEntry = null)}
-                    aria-label={`${item.name}, ${formatBytes(item.allocatedBytes)}${item.kind === "directory" ? ", open folder" : ""}`}
+                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ""}`}
                   >
                     <span class="item-index">{String(index + 1).padStart(2, "0")}</span>
                     <span class="item-icon" data-kind={item.kind}>
@@ -649,12 +698,12 @@
                         {describeEntry(item)}
                       </span>
                       <span class="item-bar" aria-hidden="true">
-                        <span style:width={`${itemPercent(item.allocatedBytes)}%`}></span>
+                        <span style:width={`${itemPercent(metricBytes(item, sizeMetric))}%`}></span>
                       </span>
                     </span>
                     <span class="item-size">
-                      <strong>{formatBytes(item.allocatedBytes)}</strong>
-                      <span>{formatPercent(item.allocatedBytes, view.allocatedBytes)}</span>
+                      <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
+                      <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
                     </span>
                     {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
                   </button>

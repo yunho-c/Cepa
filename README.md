@@ -17,6 +17,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
   currently an estimate elsewhere)
+- Metric-aware directory ranking and charts switchable between space on disk
+  and logical size
 - Deterministic Unix hard-link deduplication and same-filesystem traversal
   boundaries
 - Permission and traversal-error accounting without aborting the whole scan
@@ -40,8 +42,9 @@ the completed directory breakdown. See
 [`docs/accounting.md`](docs/accounting.md) for the complete size, link, mount,
 error, and concurrent-mutation semantics.
 
-MFT traversal on Windows, `statx` traversal on Linux, native-backend performance
-measurement, and transparent filesystem compression remain roadmap work.
+MFT traversal on Windows, `statx` traversal on Linux, broader native-filesystem
+and cold-cache validation, and transparent filesystem compression remain roadmap
+work.
 
 ## Prerequisites
 

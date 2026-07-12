@@ -1,5 +1,6 @@
 export type EntryKind = "directory" | "file" | "symlink" | "other";
 export type ScanBackend = "jwalk" | "getattrlistbulk";
+export type SizeMetric = "allocated" | "logical";
 
 export interface ScanProgress {
   entriesScanned: number;
@@ -119,6 +120,17 @@ export function formatPercent(part: number, total: number): string {
 
 export function formatBackend(backend: ScanBackend): string {
   return backend === "getattrlistbulk" ? "macOS native" : "Portable";
+}
+
+export function metricBytes(
+  entry: Pick<ScanItem, "allocatedBytes" | "logicalBytes">,
+  metric: SizeMetric,
+): number {
+  return metric === "logical" ? entry.logicalBytes : entry.allocatedBytes;
+}
+
+export function formatMetric(metric: SizeMetric): string {
+  return metric === "logical" ? "Logical size" : "Space on disk";
 }
 
 export function isCancellationError(error: unknown): boolean {

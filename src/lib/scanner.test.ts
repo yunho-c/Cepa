@@ -4,8 +4,10 @@ import {
   formatBackend,
   formatBytes,
   formatDuration,
+  formatMetric,
   formatPercent,
   isCancellationError,
+  metricBytes,
 } from "./scanner";
 
 describe("scanner presentation helpers", () => {
@@ -27,6 +29,14 @@ describe("scanner presentation helpers", () => {
   test("labels native and portable backends accurately", () => {
     expect(formatBackend("jwalk")).toBe("Portable");
     expect(formatBackend("getattrlistbulk")).toBe("macOS native");
+  });
+
+  test("selects and labels the requested size metric", () => {
+    const entry = { allocatedBytes: 12, logicalBytes: 48 };
+    expect(metricBytes(entry, "allocated")).toBe(12);
+    expect(metricBytes(entry, "logical")).toBe(48);
+    expect(formatMetric("allocated")).toBe("Space on disk");
+    expect(formatMetric("logical")).toBe("Logical size");
   });
 
   test("recognizes cancellation errors without matching case", () => {
