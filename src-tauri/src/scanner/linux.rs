@@ -19,6 +19,11 @@ use std::time::{Duration, Instant};
 const DIRECTORY_BUFFER_SIZE: usize = 64 * 1024;
 const RESULT_BATCH_SIZE: usize = 512;
 const MAX_WORKERS: usize = 8;
+const TASK_QUEUE_PER_WORKER: usize = 2;
+// Result production is burstier than directory scheduling. This measured bound
+// keeps workers off the channel's backpressure path without changing the entry
+// batch limit or allowing memory growth with the size of the scanned tree.
+const RESULT_QUEUE_PER_WORKER: usize = 16;
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const STATX_REQUEST: StatxFlags = StatxFlags::BASIC_STATS.union(StatxFlags::MNT_ID);
 const STATX_AT_FLAGS: AtFlags = AtFlags::NO_AUTOMOUNT.union(AtFlags::SYMLINK_NOFOLLOW);
@@ -193,9 +198,10 @@ where
         .map(usize::from)
         .unwrap_or(1)
         .clamp(1, MAX_WORKERS);
-    let queue_capacity = worker_count.saturating_mul(2).max(1);
-    let (task_sender, task_receiver) = channel::bounded::<DirectoryTask>(queue_capacity);
-    let (result_sender, result_receiver) = channel::bounded::<WorkerMessage>(queue_capacity);
+    let task_queue_capacity = queue_capacity(worker_count, TASK_QUEUE_PER_WORKER);
+    let result_queue_capacity = queue_capacity(worker_count, RESULT_QUEUE_PER_WORKER);
+    let (task_sender, task_receiver) = channel::bounded::<DirectoryTask>(task_queue_capacity);
+    let (result_sender, result_receiver) = channel::bounded::<WorkerMessage>(result_queue_capacity);
     let abort = AtomicBool::new(false);
 
     std::thread::scope(|scope| {
@@ -297,6 +303,10 @@ where
         drop(result_receiver);
         result
     })
+}
+
+fn queue_capacity(worker_count: usize, slots_per_worker: usize) -> usize {
+    worker_count.saturating_mul(slots_per_worker).max(1)
 }
 
 fn spawn_worker<'scope, 'env: 'scope>(
@@ -658,7 +668,7 @@ fn fatal(error: impl Into<String>) -> NativeScanError {
 
 #[cfg(test)]
 mod tests {
-    use super::{device_id, entry_kind};
+    use super::{device_id, entry_kind, queue_capacity};
     use crate::scanner::EntryKind;
     use rustix::fs::FileType;
 
@@ -682,5 +692,12 @@ mod tests {
             device_id(&stat),
             (u64::from(stat.stx_dev_major) << 32) | u64::from(stat.stx_dev_minor)
         );
+    }
+
+    #[test]
+    fn queue_capacity_is_bounded_by_workers_and_never_zero() {
+        assert_eq!(queue_capacity(8, 2), 16);
+        assert_eq!(queue_capacity(8, 16), 128);
+        assert_eq!(queue_capacity(0, 16), 1);
     }
 }

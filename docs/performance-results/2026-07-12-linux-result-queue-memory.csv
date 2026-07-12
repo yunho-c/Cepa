@@ -1,0 +1,5 @@
+variant,workload,peak_rss_kib
+q2,directory-rich,16384
+q2,wide,15360
+q16,directory-rich,15616
+q16,wide,16128

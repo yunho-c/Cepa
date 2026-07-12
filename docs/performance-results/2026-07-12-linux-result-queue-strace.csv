@@ -1,0 +1,5 @@
+variant,syscall,calls
+q2,sched_yield,28165
+q2,futex,2674
+q16,sched_yield,28203
+q16,futex,2449

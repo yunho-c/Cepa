@@ -254,8 +254,9 @@ Linux `auto` first attempts the native backend and falls back to `jwalk` when
 `statx` is unavailable or does not report both basic metadata and mount IDs. The
 native traversal reads 64 KiB `getdents64` buffers through `rustix::fs::RawDir`,
 requests no-follow `statx` metadata relative to open directory descriptors, and
-passes at most 512 entries per result batch. Worker and result queues are bounded
-to twice a pool capped at eight workers.
+passes at most 512 entries per result batch. The task queue is bounded to twice
+the worker count and the result queue to sixteen times the worker count, with the
+pool capped at eight workers. Neither queue grows with the scanned tree.
 
 Directories are opened relative to a retained parent descriptor only when a
 worker schedules them. The opened descriptor's device, inode, and mount ID must
@@ -353,6 +354,55 @@ but its call counts show where to investigate next. Both backends issued about
 and channel coordination—not fewer metadata queries—being the next architectural
 target. The counts are preserved in
 [`performance-results/2026-07-12-linux-strace-counts.csv`](performance-results/2026-07-12-linux-strace-counts.csv).
+
+#### Bounded result-queue backpressure
+
+The native workers originally shared the same two-slots-per-worker bound for
+directory tasks and result messages. Results are substantially burstier: every
+small directory emits an entry batch and completion, while the main thread also
+performs arena insertion, hard-link ownership, progress ranking, and child-task
+scheduling. A capacity sweep compared two, four, eight, and sixteen result slots
+per worker while keeping eight workers, the two-slots-per-worker task queue, and
+512-entry batches unchanged.
+
+The selected bound is sixteen result messages per worker: at most 128 queued
+messages with the current eight-worker cap. A longer 15-round interleaved A/B
+against the original bound produced these medians:
+
+| Workload | Two slots/worker | Sixteen slots/worker | Change |
+| --- | ---: | ---: | ---: |
+| Directory-rich | 47.35 ms | 40.85 ms | -13.7% |
+| Wide | 20.41 ms | 20.24 ms | -0.9% |
+
+One warmed `/usr/bin/time -v` observation per variant found 15.0–16.0 MiB peak
+RSS, with no monotonic increase from the larger queue and at most 768 KiB between
+paired observations. This is process RSS rather than queue-owned memory, but it
+rules out an obvious fixture-scale memory regression. The theoretical backlog
+remains bounded to 65,536 entries before names and vector overhead, independent
+of total scan size.
+
+Twenty-one interleaved cancellation runs per workload also remained responsive:
+
+| Workload | Bound | Median | p95 | Maximum |
+| --- | --- | ---: | ---: | ---: |
+| Directory-rich | Two | 223 us | 272 us | 302 us |
+| Directory-rich | Sixteen | 208 us | 253 us | 267 us |
+| Wide | Two | 209 us | 246 us | 246 us |
+| Wide | Sixteen | 205 us | 252 us | 266 us |
+
+Native release tests, adversarial `jwalk` parity, and same-device bind-mount
+enforcement passed again with the selected bound. Instrumented syscall counts
+showed `futex` calls falling from 2,674 to 2,449 while `sched_yield` calls were
+effectively unchanged, so broader scheduler redesign remains separate future
+work rather than a claim attached to this tuning.
+
+Raw evidence is preserved in
+[`performance-results/2026-07-12-linux-result-queue-scaling.csv`](performance-results/2026-07-12-linux-result-queue-scaling.csv),
+[`performance-results/2026-07-12-linux-result-queue-final.csv`](performance-results/2026-07-12-linux-result-queue-final.csv),
+[`performance-results/2026-07-12-linux-result-queue-cancellation.csv`](performance-results/2026-07-12-linux-result-queue-cancellation.csv),
+[`performance-results/2026-07-12-linux-result-queue-memory.csv`](performance-results/2026-07-12-linux-result-queue-memory.csv),
+and
+[`performance-results/2026-07-12-linux-result-queue-strace.csv`](performance-results/2026-07-12-linux-result-queue-strace.csv).
 
 ### 2026-07-12 Windows NTFS MFT validation
 
