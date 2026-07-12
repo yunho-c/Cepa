@@ -19,14 +19,14 @@ those have been designed and documented.
 
 ## Current state and roadmap
 
-The repository currently contains a small frontend-to-native greeting example.
-It proves that the Svelte frontend can invoke a typed Tauri command implemented
-in Rust; it is not yet a disk scanner.
+The repository contains the first portable scanner milestone. It can select and
+scan a directory with `jwalk`, stream bounded progress over a Tauri channel,
+cancel active work, retain an in-memory result snapshot for drill-down, and
+render coordinated radial and list views in Svelte.
 
 The intended scanning architecture is:
 
-- `jwalk` as the portable fallback and behavioral reference implementation.
-  It is planned but is not currently a dependency.
+- `jwalk` as the implemented portable fallback and behavioral reference.
 - `getattrlistbulk` for an optimized macOS implementation.
 - Master File Table (MFT) traversal for an optimized Windows implementation.
 - `statx`-based traversal for an optimized Linux implementation.
@@ -88,25 +88,35 @@ Build on the existing shadcn-svelte components and neutral design tokens in
 clear hierarchy, and information-dense layouts that remain calm under large or
 rapidly changing datasets.
 
+Use DaisyDisk's primary exploration pattern as the layout direction: a
+hierarchical pie chart on the left and an interactive file-and-directory list
+on the right. Treat the two views as one coordinated navigator—hover,
+selection, drill-down, breadcrumbs, and the current path should stay in sync so
+users can move fluidly between spatial and textual exploration.
+
 Every workflow should have intentional empty, loading, partial-result, error,
 cancelled, and completed states. Preserve keyboard navigation, visible focus,
 semantic controls, readable contrast, and reduced-motion usability. Progressive
 updates should feel smooth without hiding freshness or blocking interaction.
 
 Avoid decorative complexity, excessive animation, generic dashboard layouts,
-and bespoke controls when an existing shadcn-svelte primitive fits. Add UI
-components through the repository's configured shadcn-svelte setup and preserve
-the aliases and styling conventions in `components.json`.
+and bespoke controls when an existing shadcn-svelte primitive fits. Any
+shadcn-svelte component may be used where it improves the experience, including
+the shadcn-svelte LayerChart integration for the hierarchical visualization.
+Add UI components through the repository's configured shadcn-svelte setup and
+preserve the aliases and styling conventions in `components.json`.
 
 ## Repository map
 
 Start with these files:
 
 - `README.md`: current setup and developer workflow.
-- `src/App.svelte`: frontend entry screen and Tauri invocation example.
+- `src/App.svelte`: scan workflow and coordinated storage explorer.
+- `src/lib/scanner.ts`: frontend scan protocol types and formatters.
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
-- `src-tauri/src/lib.rs`: native library entry point and Tauri commands.
+- `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
+- `src-tauri/src/scanner.rs`: portable traversal, aggregation, and view snapshots.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
 

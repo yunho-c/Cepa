@@ -1,16 +1,41 @@
 # Cepa
 
-Cepa is a desktop-only application foundation built with Bun, Tauri 2, Rust,
+Cepa is a fast, cross-platform disk space analyzer built with Tauri 2, Rust,
 Svelte 5, Tailwind CSS 4, and shadcn-svelte.
 
-The starter screen contains one complete frontend-to-native example: submitting
-the form invokes the typed `greet` command in Rust and renders its response.
+The current milestone is a usable portable scanner: choose a folder, watch
+bounded progress updates, and explore the result through a coordinated radial
+storage map and size-ranked directory list. All scanning happens locally.
+
+## Current capabilities
+
+- Parallel portable traversal with `jwalk`
+- Native directory picker on supported desktop platforms
+- Responsive cancellation and automatic cancellation of superseded scans
+- Logical and allocated byte accounting (allocated size is exact on Unix and
+  currently an estimate elsewhere)
+- Unix hard-link deduplication and same-filesystem traversal boundaries
+- Permission and traversal-error accounting without aborting the whole scan
+- Bounded progress updates over a Tauri channel
+- On-demand directory views backed by the completed in-memory scan snapshot
+- Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+
+Symlinks are reported but never followed. Mounted filesystems are not traversed
+when the portable backend can identify filesystem boundaries. The result view
+returns at most 500 rows for a directory, while the radial chart is bounded to
+16 segments per directory and three visible levels; omitted chart segments are
+combined into an aggregate. These bounds keep bridge and rendering costs
+predictable even when a scan contains millions of entries.
+
+Platform-native scanners (`getattrlistbulk` on macOS, MFT traversal on Windows,
+and `statx` on Linux) and transparent filesystem compression remain roadmap
+work.
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/)
 - A Rust toolchain managed by [rustup](https://rustup.rs/)
-- [just](https://just.systems/) for the repository workflows
+- [just](https://just.systems/)
 - The [Tauri system dependencies](https://v2.tauri.app/start/prerequisites/)
   for your desktop platform
 
@@ -21,8 +46,11 @@ just install
 just dev
 ```
 
-`just web` starts only the Vite frontend. Use `just dev` for the native
-application and Rust command bridge. Run `just` to list every available recipe.
+`just web` runs only the Vite frontend. Folder selection and scanning require
+the native Tauri application, so the web-only mode is intended for frontend
+layout work.
+
+Run `just` to list every available recipe.
 
 ## Checks and builds
 
@@ -32,12 +60,16 @@ just build
 ```
 
 `just check` runs Svelte diagnostics, Rust formatting checks, `cargo check`, and
-the Rust tests. Native recipes clear the machine's configured `sccache` wrapper
-for the command so it cannot block Cargo.
+the Rust tests. The scanner tests use real temporary filesystem fixtures for
+aggregation, cancellation, invalid roots, nested directory views, and hard-link
+accounting, plus symlink and result-bound behavior.
+
+Native recipes clear the machine's configured `sccache` wrapper so it cannot
+block Cargo.
 
 ```sh
 just bundle
 ```
 
-`just bundle` generates the platform desktop bundles. Mobile targets are
-intentionally not initialized or configured.
+`just bundle` generates the platform desktop bundles. Mobile targets are not
+initialized or configured.
