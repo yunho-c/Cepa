@@ -509,6 +509,34 @@ and
 [`FindFirstFileNameW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-findfirstfilenamew)
 documentation.
 
+## Current-folder search
+
+Search operates on a completed in-memory snapshot and scans every direct child
+before retaining the metric-ranked top 500 in a bounded heap. Regex compilation,
+Unicode-aware case-insensitive matching, ranking, and conversion of retained
+items are included in the reported time. The Tauri command runs this work on a
+blocking worker, and the frontend waits 180 ms after the latest keystroke before
+issuing a request. A replacement query, cleared field, navigation, or new scan
+actively cancels the backend search; the retained-snapshot loop checks for
+cancellation at bounded intervals. Sequence checks still prevent a stale result
+from replacing newer UI state if cancellation races with completion.
+
+On the same Apple M4 Pro development machine, a generated APFS directory with
+100,000 direct empty files was scanned once and then searched nine times after
+one warmup. A query matching every file had a 16.48 ms median and returned the
+bounded top 500. A selective query matching one file had a 1.82 ms median. These
+numbers exclude IPC and rendering, but the browser workflow separately verified
+loading, below-cutoff results, no-match and error states, stale-response
+suppression, metric changes, navigation reset, keyboard dismissal, and the
+620-pixel responsive layout. Raw runs are preserved in
+[`performance-results/2026-07-12-directory-search.csv`](performance-results/2026-07-12-directory-search.csv).
+
+Use the checked-in benchmark against other directory shapes with:
+
+```sh
+just benchmark-search /path/to/folder query 9 auto allocated
+```
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;

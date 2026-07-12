@@ -21,6 +21,7 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jwalk = "0.8.1"
+regex = "1"
 tauri-plugin-dialog = "2.7.1"
 tauri-plugin-opener = "2.5.4"
 

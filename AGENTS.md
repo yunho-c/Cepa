@@ -46,6 +46,10 @@ the path; do not replace that boundary with a frontend-supplied arbitrary path.
 Directory views can switch between allocated and logical size. The selected
 metric is applied in Rust before bounded list and chart selection, not merely to
 frontend labels, so sparse or compressed entries cannot be truncated incorrectly.
+Completed directory views also support debounced, current-folder name search.
+Rust matches every direct child before retaining the metric-ranked top 500, so
+items below the ordinary list cutoff remain discoverable without expanding IPC
+or rendering bounds. Search is scan-authorized and never accepts a path.
 After completion, the UI requests a volume compression capability using the
 retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
 and always reports that no writer exists. Do not accept a frontend path for this

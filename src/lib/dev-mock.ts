@@ -4,6 +4,7 @@ import type {
   CompressionCapability,
   CompressionState,
   DirectoryView,
+  DirectorySearchResult,
   ScanProgress,
   ScanResponse,
   SavingsEstimate,
@@ -26,6 +27,7 @@ export function installDevMock(requestedScenario: string) {
     : "complete";
   let rejectPendingScan: ((reason: string) => void) | null = null;
   const cancelledEstimateRequests = new Set<number>();
+  const cancelledSearchRequests = new Set<number>();
 
   mockIPC(async (command, payload = {}) => {
     const args = payload as unknown as Record<string, unknown>;
@@ -65,6 +67,46 @@ export function installDevMock(requestedScenario: string) {
           mockDirectoryView(Number(args.nodeId)),
           args.metric === "logical" ? "logical" : "allocated",
         );
+      case "search_scan_directory": {
+        const query = String(args.query).trim();
+        await delay(90);
+        if (cancelledSearchRequests.delete(Number(args.requestId))) {
+          throw "Folder search cancelled.";
+        }
+        if (query.toLocaleLowerCase() === "fail") {
+          throw "The mocked folder search could not be completed.";
+        }
+        const metric = args.metric === "logical" ? "logical" : "allocated";
+        const source = mockDirectoryView(Number(args.nodeId));
+        const hidden: DirectorySearchResult["items"][number] = {
+          id: 99,
+          name: "hidden-recording.mov",
+          kind: "file",
+          logicalBytes: 24_696_061_952,
+          allocatedBytes: 24_696_061_952,
+          fileCount: 1,
+          directoryCount: 0,
+        };
+        const matches = [...source.items, hidden]
+          .filter((item) => item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+          .sort((left, right) =>
+            metric === "logical"
+              ? right.logicalBytes - left.logicalBytes
+              : right.allocatedBytes - left.allocatedBytes,
+          );
+        return {
+          scanId,
+          nodeId: source.nodeId,
+          query,
+          metric,
+          totalMatches: matches.length,
+          itemsTruncated: false,
+          items: matches,
+        } satisfies DirectorySearchResult;
+      }
+      case "cancel_directory_search":
+        cancelledSearchRequests.add(Number(args.requestId));
+        return true;
       case "compression_capability":
         return {
           status: "inspectOnly",

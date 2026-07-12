@@ -1,5 +1,7 @@
 use jwalk::{Parallelism, WalkDirGeneric};
+use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -31,6 +33,7 @@ const MAX_PARTIAL_ITEMS: usize = 8;
 const MAX_LIST_ITEMS: usize = 500;
 const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
 const MAX_CHART_DEPTH: usize = 3;
+const MAX_SEARCH_QUERY_CHARS: usize = 128;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,6 +94,18 @@ pub struct DirectoryView {
     pub breadcrumbs: Vec<Breadcrumb>,
     pub items: Vec<ScanItem>,
     pub chart_items: Vec<ChartItem>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DirectorySearchResult {
+    pub scan_id: u64,
+    pub node_id: u64,
+    pub query: String,
+    pub metric: SizeMetric,
+    pub total_matches: usize,
+    pub items_truncated: bool,
+    pub items: Vec<ScanItem>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -973,6 +988,76 @@ impl ScanSnapshot {
         Ok(self.node_path(node_id))
     }
 
+    pub(crate) fn search_directory(
+        &self,
+        scan_id: u64,
+        requested: u64,
+        metric: SizeMetric,
+        query: &str,
+        cancel: &AtomicBool,
+    ) -> Result<DirectorySearchResult, String> {
+        let node_id = self.valid_node_id(requested)?;
+        let node = &self.nodes[node_id];
+        if !matches!(node.kind, EntryKind::Directory) {
+            return Err("Only folders can be searched.".to_string());
+        }
+
+        let query = query.trim();
+        if query.is_empty() {
+            return Err("Enter a file or folder name to search for.".to_string());
+        }
+        if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
+            return Err(format!(
+                "Search terms are limited to {MAX_SEARCH_QUERY_CHARS} characters."
+            ));
+        }
+        let matcher = RegexBuilder::new(&regex::escape(query))
+            .case_insensitive(true)
+            .build()
+            .map_err(|_| "That search term could not be prepared.".to_string())?;
+
+        let mut matches = BinaryHeap::with_capacity(MAX_LIST_ITEMS + 1);
+        let mut total_matches = 0_usize;
+        for (index, child_id) in node.children.iter().enumerate() {
+            if index % PROGRESS_ENTRY_INTERVAL as usize == 0 && cancel.load(Ordering::Relaxed) {
+                return Err("Folder search cancelled.".to_string());
+            }
+            if !matcher.is_match(&self.nodes[*child_id].name().to_string_lossy()) {
+                continue;
+            }
+            total_matches += 1;
+            matches.push(RankedNode {
+                node_id: *child_id,
+                nodes: &self.nodes,
+                metric,
+            });
+            if matches.len() > MAX_LIST_ITEMS {
+                matches.pop();
+            }
+        }
+
+        let mut ranked_ids = matches
+            .into_iter()
+            .map(|candidate| candidate.node_id)
+            .collect::<Vec<_>>();
+        ranked_ids.sort_unstable_by(|left, right| {
+            compare_node_ids_by_metric(&self.nodes, *left, *right, metric)
+        });
+
+        Ok(DirectorySearchResult {
+            scan_id,
+            node_id: wire_id(node_id),
+            query: query.to_string(),
+            metric,
+            total_matches,
+            items_truncated: total_matches > MAX_LIST_ITEMS,
+            items: ranked_ids
+                .into_iter()
+                .map(|child_id| self.scan_item(child_id))
+                .collect(),
+        })
+    }
+
     fn valid_node_id(&self, requested: u64) -> Result<NodeId, String> {
         usize::try_from(requested)
             .ok()
@@ -1191,6 +1276,36 @@ fn compare_node_ids_by_metric(
                 .cmp(&metric.secondary_bytes(left_node))
         })
         .then_with(|| left_node.name().cmp(right_node.name()))
+        .then_with(|| left.cmp(&right))
+}
+
+#[derive(Clone, Copy)]
+struct RankedNode<'a> {
+    node_id: NodeId,
+    nodes: &'a [InternalNode],
+    metric: SizeMetric,
+}
+
+impl PartialEq for RankedNode<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.node_id == other.node_id
+    }
+}
+
+impl Eq for RankedNode<'_> {}
+
+impl PartialOrd for RankedNode<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RankedNode<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        debug_assert!(std::ptr::eq(self.nodes, other.nodes));
+        debug_assert_eq!(self.metric, other.metric);
+        compare_node_ids_by_metric(self.nodes, self.node_id, other.node_id, self.metric)
+    }
 }
 
 impl SizeMetric {
@@ -1419,6 +1534,130 @@ mod tests {
         );
         assert_eq!(largest[0].logical_bytes, 12);
         assert_eq!(largest.last().expect("eighth item").logical_bytes, 5);
+    }
+
+    #[test]
+    fn searches_all_direct_children_before_bounding_results() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        for index in 0..=MAX_LIST_ITEMS {
+            fs::write(temp.path().join(format!("ordinary-{index:03}.bin")), b"xx")
+                .expect("write ordinary fixture file");
+        }
+        fs::write(temp.path().join("hidden-needle.bin"), b"x")
+            .expect("write below-cutoff fixture file");
+        fs::write(temp.path().join("Résumé.txt"), b"x").expect("write Unicode fixture file");
+        let nested = temp.path().join("nested");
+        fs::create_dir(&nested).expect("create nested fixture directory");
+        fs::write(nested.join("child-needle.bin"), b"x").expect("write nested fixture file");
+
+        let output =
+            scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
+        let view = output
+            .snapshot
+            .directory_view(7, 0)
+            .expect("build bounded root view");
+        assert_eq!(view.items.len(), MAX_LIST_ITEMS);
+        assert!(view.items_truncated);
+        assert!(
+            !view
+                .items
+                .iter()
+                .any(|item| item.name == "hidden-needle.bin")
+        );
+
+        let needle = output
+            .snapshot
+            .search_directory(
+                7,
+                0,
+                SizeMetric::Allocated,
+                " NEEDLE ",
+                &AtomicBool::new(false),
+            )
+            .expect("search below the normal list cutoff");
+        assert_eq!(needle.query, "NEEDLE");
+        assert_eq!(needle.total_matches, 1);
+        assert_eq!(needle.items[0].name, "hidden-needle.bin");
+        assert!(!needle.items_truncated);
+
+        let bounded = output
+            .snapshot
+            .search_directory(
+                7,
+                0,
+                SizeMetric::Logical,
+                "ordinary",
+                &AtomicBool::new(false),
+            )
+            .expect("search a large matching set");
+        assert_eq!(bounded.total_matches, MAX_LIST_ITEMS + 1);
+        assert_eq!(bounded.items.len(), MAX_LIST_ITEMS);
+        assert!(bounded.items_truncated);
+        assert_eq!(bounded.metric, SizeMetric::Logical);
+        assert_eq!(
+            bounded.items.first().expect("first match").name,
+            "ordinary-000.bin"
+        );
+        assert_eq!(
+            bounded.items.last().expect("last retained match").name,
+            "ordinary-499.bin"
+        );
+
+        let unicode = output
+            .snapshot
+            .search_directory(
+                7,
+                0,
+                SizeMetric::Allocated,
+                "RÉSUMÉ",
+                &AtomicBool::new(false),
+            )
+            .expect("search Unicode names case-insensitively");
+        assert_eq!(unicode.total_matches, 1);
+        assert_eq!(unicode.items[0].name, "Résumé.txt");
+
+        let nested_only = output
+            .snapshot
+            .search_directory(
+                7,
+                0,
+                SizeMetric::Allocated,
+                "child-needle",
+                &AtomicBool::new(false),
+            )
+            .expect("search only direct children");
+        assert_eq!(nested_only.total_matches, 0);
+        assert!(nested_only.items.is_empty());
+
+        assert_eq!(
+            output
+                .snapshot
+                .search_directory(7, 0, SizeMetric::Allocated, "  ", &AtomicBool::new(false),)
+                .expect_err("reject an empty query"),
+            "Enter a file or folder name to search for."
+        );
+        assert_eq!(
+            output
+                .snapshot
+                .search_directory(
+                    7,
+                    0,
+                    SizeMetric::Allocated,
+                    &"x".repeat(MAX_SEARCH_QUERY_CHARS + 1),
+                    &AtomicBool::new(false),
+                )
+                .expect_err("reject an oversized query"),
+            "Search terms are limited to 128 characters."
+        );
+
+        let cancelled = AtomicBool::new(true);
+        assert_eq!(
+            output
+                .snapshot
+                .search_directory(7, 0, SizeMetric::Allocated, "ordinary", &cancelled)
+                .expect_err("cancel before matching"),
+            "Folder search cancelled."
+        );
     }
 
     #[test]

@@ -23,6 +23,17 @@ list, recursive chart selection, aggregate remainder, percentages, and geometry
 all use the selected metric. The summary retains both totals so the distinction
 remains visible.
 
+Current-folder search runs against the retained snapshot and never rereads the
+filesystem. It trims the query, limits it to 128 Unicode characters, and performs
+a Unicode-aware case-insensitive literal substring match against every direct
+child name. It is intentionally not recursive: opening a matching directory
+moves the coordinated chart and list into that directory, where a new search can
+be made. Matching happens before the selected size metric ranks and bounds the
+top 500 results, so an item omitted from the ordinary list can still be found.
+The chart continues to represent the complete current folder while the list is
+filtered. Names that were not valid Unicode at scan time use the same lossy
+display representation for matching and presentation.
+
 ## Hard links
 
 When `(filesystem, file ID)` identity is available, Cepa charges a hard-linked

@@ -29,6 +29,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Permission and traversal-error accounting without aborting the whole scan
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
+- Case-insensitive current-folder search across every retained direct child,
+  bounded to 500 metric-ranked results after matching
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
 - Compact scan-time file identity and revision retention across native and
   portable backends, used to reject changed files before compression planning
@@ -116,12 +118,16 @@ release mode with:
 ```sh
 just benchmark-fixture /tmp/cepa-fixture 1000 100 0
 just benchmark-scan /tmp/cepa-fixture 9 jwalk
+just benchmark-search /path/to/wide-folder file- 9 auto allocated
 ```
 
 The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
 or `auto`. Platform-specific backends reject explicit use on the wrong OS. MFT
 is deliberately limited to an NTFS volume root because whole-volume enumeration
 has a fixed cost that is unsuitable for arbitrary subfolders.
+
+The search benchmark scans once, warms one current-folder query, then reports
+repeat latency and bounded result counts without rescanning between runs.
 
 Validate aggregate parity on a quiescent tree and measure asynchronous
 cancellation latency with:

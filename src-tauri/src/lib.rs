@@ -21,8 +21,45 @@ pub use scanner::{ScanBackend, ScanResult};
 pub struct BenchmarkScan {
     pub result: ScanResult,
     pub initial_view_ms: f64,
-    _snapshot: ScanSnapshot,
-    _initial_view: DirectoryView,
+    snapshot: ScanSnapshot,
+    initial_view: DirectoryView,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchMeasurement {
+    pub elapsed_us: u64,
+    pub total_matches: usize,
+    pub returned_items: usize,
+    pub items_truncated: bool,
+}
+
+impl BenchmarkScan {
+    pub fn root_item_count(&self) -> usize {
+        self.initial_view.total_items
+    }
+
+    pub fn search_root(
+        &self,
+        query: &str,
+        logical_size: bool,
+    ) -> Result<SearchMeasurement, String> {
+        let metric = if logical_size {
+            SizeMetric::Logical
+        } else {
+            SizeMetric::Allocated
+        };
+        let started_at = Instant::now();
+        let result =
+            self.snapshot
+                .search_directory(0, 0, metric, query, &AtomicBool::new(false))?;
+        Ok(SearchMeasurement {
+            elapsed_us: saturating_duration_us(started_at.elapsed()),
+            total_matches: result.total_matches,
+            returned_items: result.items.len(),
+            items_truncated: result.items_truncated,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -51,8 +88,8 @@ pub fn benchmark_scan_with_backend(
     Ok(BenchmarkScan {
         result: output.result,
         initial_view_ms: view_started_at.elapsed().as_secs_f64() * 1_000.0,
-        _snapshot: output.snapshot,
-        _initial_view: initial_view,
+        snapshot: output.snapshot,
+        initial_view,
     })
 }
 
@@ -137,7 +174,7 @@ struct ActiveScan {
 
 struct CompletedScan {
     id: u64,
-    snapshot: ScanSnapshot,
+    snapshot: Arc<ScanSnapshot>,
 }
 
 #[derive(Default)]
@@ -147,6 +184,18 @@ struct EstimateState {
 }
 
 struct ActiveEstimate {
+    token: u64,
+    request_id: u64,
+    cancel: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct SearchState {
+    next_token: AtomicU64,
+    active: Mutex<Option<ActiveSearch>>,
+}
+
+struct ActiveSearch {
     token: u64,
     request_id: u64,
     cancel: Arc<AtomicBool>,
@@ -292,6 +341,61 @@ impl EstimateState {
     }
 }
 
+impl SearchState {
+    fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
+        let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(previous) = active.replace(ActiveSearch {
+            token,
+            request_id,
+            cancel: cancel.clone(),
+        }) {
+            previous.cancel.store(true, Ordering::Relaxed);
+        }
+        (token, cancel)
+    }
+
+    fn cancel(&self, request_id: u64) -> bool {
+        let active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        active.as_ref().is_some_and(|search| {
+            if search.request_id == request_id {
+                search.cancel.store(true, Ordering::Relaxed);
+                true
+            } else {
+                false
+            }
+        })
+    }
+
+    fn cancel_active(&self) {
+        if let Some(active) = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take()
+        {
+            active.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn finish(&self, token: u64) {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if active.as_ref().is_some_and(|search| search.token == token) {
+            *active = None;
+        }
+    }
+}
+
 impl ScanState {
     fn begin(&self) -> (u64, Arc<AtomicBool>) {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
@@ -344,11 +448,27 @@ impl ScanState {
         let view = snapshot.directory_view(id, 0);
         self.finish(id);
         let view = view?;
+        let completed = CompletedScan {
+            id,
+            snapshot: Arc::new(snapshot),
+        };
         *self
             .completed
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(CompletedScan { id, snapshot });
+            .unwrap_or_else(|error| error.into_inner()) = Some(completed);
         Ok(view)
+    }
+
+    fn snapshot(&self, id: u64) -> Result<Arc<ScanSnapshot>, String> {
+        let completed = self
+            .completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        completed
+            .as_ref()
+            .filter(|scan| scan.id == id)
+            .map(|scan| scan.snapshot.clone())
+            .ok_or_else(|| "That scan is no longer available.".to_string())
     }
 
     fn directory_view(
@@ -357,52 +477,20 @@ impl ScanState {
         node_id: u64,
         metric: SizeMetric,
     ) -> Result<DirectoryView, String> {
-        let completed = self
-            .completed
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        let scan = completed
-            .as_ref()
-            .filter(|scan| scan.id == id)
-            .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        scan.snapshot
+        self.snapshot(id)?
             .directory_view_with_metric(id, node_id, metric)
     }
 
     fn reveal_path(&self, id: u64, node_id: u64) -> Result<PathBuf, String> {
-        let completed = self
-            .completed
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        let scan = completed
-            .as_ref()
-            .filter(|scan| scan.id == id)
-            .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        scan.snapshot.reveal_path(node_id)
+        self.snapshot(id)?.reveal_path(node_id)
     }
 
     fn root_path(&self, id: u64) -> Result<PathBuf, String> {
-        let completed = self
-            .completed
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        let scan = completed
-            .as_ref()
-            .filter(|scan| scan.id == id)
-            .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        Ok(scan.snapshot.root_path())
+        Ok(self.snapshot(id)?.root_path())
     }
 
     fn compression_target(&self, id: u64, node_id: u64) -> Result<CompressionTarget, String> {
-        let completed = self
-            .completed
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        let scan = completed
-            .as_ref()
-            .filter(|scan| scan.id == id)
-            .ok_or_else(|| "That scan is no longer available.".to_string())?;
-        scan.snapshot.compression_target(node_id)
+        self.snapshot(id)?.compression_target(node_id)
     }
 }
 
@@ -433,9 +521,11 @@ async fn scan_directory(
     on_event: Channel<ScanEvent>,
     state: tauri::State<'_, ScanState>,
     estimates: tauri::State<'_, EstimateState>,
+    searches: tauri::State<'_, SearchState>,
     plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<ScanResponse, String> {
     estimates.cancel_active();
+    searches.cancel_active();
     plans.clear();
     let requested_path = PathBuf::from(path);
     let (scan_id, cancel) = state.begin();
@@ -484,6 +574,33 @@ fn open_scan_directory(
     state: tauri::State<'_, ScanState>,
 ) -> Result<DirectoryView, String> {
     state.directory_view(scan_id, node_id, metric)
+}
+
+#[tauri::command]
+async fn search_scan_directory(
+    scan_id: u64,
+    node_id: u64,
+    metric: SizeMetric,
+    query: String,
+    request_id: u64,
+    state: tauri::State<'_, ScanState>,
+    searches: tauri::State<'_, SearchState>,
+) -> Result<scanner::DirectorySearchResult, String> {
+    let snapshot = state.snapshot(scan_id)?;
+    let (token, cancel) = searches.begin(request_id);
+    let task = tauri::async_runtime::spawn_blocking(move || {
+        snapshot.search_directory(scan_id, node_id, metric, &query, &cancel)
+    });
+    let result = task
+        .await
+        .map_err(|error| format!("The folder search stopped unexpectedly: {error}"));
+    searches.finish(token);
+    result?
+}
+
+#[tauri::command]
+fn cancel_directory_search(request_id: u64, searches: tauri::State<'_, SearchState>) -> bool {
+    searches.cancel(request_id)
 }
 
 #[tauri::command]
@@ -603,11 +720,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
         .manage(EstimateState::default())
+        .manage(SearchState::default())
         .manage(CompressionPlanState::default())
         .invoke_handler(tauri::generate_handler![
             scan_directory,
             cancel_scan,
             open_scan_directory,
+            search_scan_directory,
+            cancel_directory_search,
             compression_capability,
             compression_state,
             estimate_compression_savings,
@@ -623,8 +743,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        CompressionPlanState, EstimateState, ScanBackend, ScanState, benchmark_cancellation,
-        compression, scanner,
+        CompressionPlanState, EstimateState, ScanBackend, ScanState, SearchState,
+        benchmark_cancellation, compression, scanner,
     };
     use std::fs;
     use std::sync::Arc;
@@ -669,6 +789,21 @@ mod tests {
         assert!(state.cancel(20));
         assert!(second.load(Ordering::Relaxed));
         state.finish(second_token);
+    }
+
+    #[test]
+    fn search_requests_cancel_superseded_and_explicitly_cancelled_work() {
+        let state = SearchState::default();
+        let (_, first) = state.begin(30);
+        let (second_token, second) = state.begin(31);
+
+        assert!(first.load(Ordering::Relaxed));
+        assert!(!second.load(Ordering::Relaxed));
+        assert!(!state.cancel(30));
+        assert!(state.cancel(31));
+        assert!(second.load(Ordering::Relaxed));
+        state.finish(second_token);
+        assert!(!state.cancel(31));
     }
 
     #[test]

@@ -2,9 +2,13 @@ use std::io;
 use std::num::NonZeroU64;
 use std::path::Path;
 
+#[cfg(unix)]
 const UNIX_NANOSECOND_BITS: u32 = 30;
+#[cfg(unix)]
 const UNIX_MIN_SECONDS: i64 = -(1_i64 << 33);
+#[cfg(unix)]
 const UNIX_MAX_SECONDS: i64 = (1_i64 << 33) - 1;
+#[cfg(unix)]
 const UNIX_NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
 
 /// Compact, exact metadata retained from the scan for mutation planning.

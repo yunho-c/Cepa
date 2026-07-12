@@ -12,6 +12,7 @@
     FolderOpen,
     FolderSearch,
     Link2,
+    Search,
     ScanSearch,
     X,
   } from "@lucide/svelte";
@@ -33,6 +34,7 @@
     type CompressionCapability,
     type CompressionState,
     type DirectoryView,
+    type DirectorySearchResult,
     type ScanEvent,
     type ScanItem,
     type ScanProgress,
@@ -76,6 +78,16 @@
   let stateNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
   let revealNotice: HTMLDivElement | undefined = $state();
+  let searchOpen = $state(false);
+  let searchQuery = $state("");
+  let searchResult = $state<DirectorySearchResult | null>(null);
+  let isSearching = $state(false);
+  let searchError = $state("");
+  let searchInput: HTMLInputElement | null = $state(null);
+  let searchToggleButton: HTMLButtonElement | null = $state(null);
+  let searchSequence = 0;
+  let activeSearchRequestId: number | null = null;
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   const isBusy = $derived(status === "scanning" || status === "cancelling");
   const displayProgress = $derived(
@@ -111,6 +123,23 @@
     status === "cancelling"
       ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
       : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
+  );
+  const searchActive = $derived(searchQuery.trim().length > 0);
+  const visibleItems = $derived(
+    searchActive && searchResult ? searchResult.items : (view?.items ?? []),
+  );
+  const directoryCountLabel = $derived(
+    isSearching
+      ? "Searching…"
+      : searchActive && searchResult
+        ? searchResult.itemsTruncated
+          ? `Top ${searchResult.items.length} of ${searchResult.totalMatches} matches`
+          : `${searchResult.totalMatches} ${searchResult.totalMatches === 1 ? "match" : "matches"}`
+        : view
+          ? view.itemsTruncated
+            ? `Top ${view.items.length} of ${view.totalItems}`
+            : `${view.totalItems} items`
+          : "",
   );
 
   async function chooseDirectory() {
@@ -153,6 +182,7 @@
     view = null;
     selectedEntry = null;
     clearInspection();
+    resetDirectorySearch(true);
     scanId = null;
 
     const onEvent = new Channel<ScanEvent>();
@@ -215,6 +245,7 @@
     view = null;
     selectedEntry = null;
     clearInspection();
+    resetDirectorySearch(true);
     errorMessage = "";
     navigationError = "";
     navigationErrorTitle = "That folder could not be opened.";
@@ -397,12 +428,121 @@
     return Math.max(0.8, Math.min(100, (bytes / viewBytes) * 100));
   }
 
+  function invalidateDirectorySearch() {
+    if (searchTimer !== null) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+    if (activeSearchRequestId !== null) {
+      void invoke("cancel_directory_search", {
+        requestId: activeSearchRequestId,
+      }).catch(() => {});
+      activeSearchRequestId = null;
+    }
+    searchSequence += 1;
+    searchResult = null;
+    searchError = "";
+    isSearching = false;
+  }
+
+  function resetDirectorySearch(close: boolean) {
+    invalidateDirectorySearch();
+    searchQuery = "";
+    if (close) searchOpen = false;
+  }
+
+  async function openDirectorySearch() {
+    searchOpen = true;
+    await tick();
+    searchInput?.focus();
+  }
+
+  async function closeDirectorySearch() {
+    resetDirectorySearch(true);
+    await tick();
+    searchToggleButton?.focus();
+  }
+
+  function clearDirectorySearch() {
+    searchQuery = "";
+    invalidateDirectorySearch();
+    searchInput?.focus();
+  }
+
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      void closeDirectorySearch();
+    }
+  }
+
+  function scheduleDirectorySearch() {
+    invalidateDirectorySearch();
+    const query = searchQuery.trim();
+    if (!query || scanId === null || !view) return;
+
+    isSearching = true;
+    const sequence = searchSequence;
+    const completedScanId = scanId;
+    const nodeId = view.nodeId;
+    const metric = sizeMetric;
+    searchTimer = setTimeout(() => {
+      searchTimer = null;
+      void runDirectorySearch(sequence, completedScanId, nodeId, metric, query);
+    }, 180);
+  }
+
+  async function runDirectorySearch(
+    sequence: number,
+    completedScanId: number,
+    nodeId: number,
+    metric: SizeMetric,
+    query: string,
+  ) {
+    if (searchSequence !== sequence) return;
+    activeSearchRequestId = sequence;
+    try {
+      const result = await invoke<DirectorySearchResult>("search_scan_directory", {
+        scanId: completedScanId,
+        nodeId,
+        metric,
+        query,
+        requestId: sequence,
+      });
+      if (
+        searchSequence === sequence &&
+        scanId === completedScanId &&
+        view?.nodeId === nodeId &&
+        sizeMetric === metric &&
+        searchQuery.trim() === query
+      ) {
+        searchResult = result;
+      }
+    } catch (error) {
+      if (
+        searchSequence === sequence &&
+        scanId === completedScanId &&
+        view?.nodeId === nodeId &&
+        sizeMetric === metric &&
+        searchQuery.trim() === query
+      ) {
+        searchError = String(error);
+      }
+    } finally {
+      if (activeSearchRequestId === sequence) activeSearchRequestId = null;
+      if (searchSequence === sequence) isSearching = false;
+    }
+  }
+
   async function loadDirectory(
     nodeId: number,
     metric: SizeMetric,
     focusHeading: boolean,
   ) {
     if (scanId === null || isNavigating) return;
+    const preservedSearch = focusHeading ? "" : searchQuery;
+    if (focusHeading) resetDirectorySearch(true);
+    else invalidateDirectorySearch();
     isNavigating = true;
     navigationError = "";
     revealError = "";
@@ -416,6 +556,10 @@
       sizeMetric = metric;
       selectedEntry = null;
       clearInspection();
+      if (preservedSearch.trim()) {
+        searchQuery = preservedSearch;
+        scheduleDirectorySearch();
+      }
       if (focusHeading) {
         await tick();
         viewHeading?.focus();
@@ -778,9 +922,45 @@
         <div class="directory-pane">
           <div class="section-heading">
             <h2>{view.displayName}</h2>
-            <span>
-              {view.itemsTruncated ? `Top ${view.items.length} of ${view.totalItems}` : `${view.totalItems} items`}
-            </span>
+            <div class="section-actions">
+              <span aria-live="polite">{directoryCountLabel}</span>
+              {#if searchOpen}
+                <div class="directory-search">
+                  <Search aria-hidden="true" />
+                  <Input
+                    type="search"
+                    placeholder="Find in this folder"
+                    aria-label={`Find in ${view.displayName}`}
+                    maxlength={128}
+                    autocomplete="off"
+                    spellcheck={false}
+                    bind:ref={searchInput}
+                    bind:value={searchQuery}
+                    oninput={scheduleDirectorySearch}
+                    onkeydown={handleSearchKeydown}
+                  />
+                  {#if searchActive}
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="Clear folder search"
+                      title="Clear"
+                      onclick={clearDirectorySearch}
+                    ><X /></Button>
+                  {/if}
+                </div>
+              {:else}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  bind:ref={searchToggleButton}
+                  disabled={isNavigating}
+                  aria-label="Search this folder"
+                  title="Search this folder"
+                  onclick={openDirectorySearch}
+                ><Search /></Button>
+              {/if}
+            </div>
           </div>
 
           {#if inspectedEntry}
@@ -873,9 +1053,32 @@
             </section>
           {/if}
 
-          {#if view.items.length > 0}
-            <div class="item-list" class:is-navigating={isNavigating}>
-              {#each view.items as item (item.id)}
+          {#if searchActive && searchError}
+            <div class="search-message" role="alert">
+              <AlertCircle />
+              <strong>Search unavailable</strong>
+              <span>{searchError}</span>
+              <Button variant="outline" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
+            </div>
+          {:else if searchActive && isSearching && !searchResult}
+            <div class="search-message" role="status" aria-live="polite">
+              <Search />
+              <strong>Searching this folder…</strong>
+            </div>
+          {:else if searchActive && !isSearching && searchResult?.totalMatches === 0}
+            <div class="search-message" role="status">
+              <Search />
+              <strong>No matches in this folder</strong>
+              <span>Try a shorter or different name.</span>
+              <Button variant="outline" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
+            </div>
+          {:else if visibleItems.length > 0}
+            <div
+              class="item-list"
+              class:is-navigating={isNavigating || isSearching}
+              aria-busy={isSearching}
+            >
+              {#each visibleItems as item (item.id)}
                 <div
                   class="storage-row"
                   data-selected={activeEntry?.id === item.id}

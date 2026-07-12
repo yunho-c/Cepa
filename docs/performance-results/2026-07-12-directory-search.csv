@@ -1,0 +1,3 @@
+workload,direct_children,query,total_matches,returned_items,elapsed_us,median_us
+apfs-wide,100000,file-,100000,500,"16060;16475;16104;16396;16285;17850;17283;16605;16693",16475
+apfs-wide,100000,99999,1,1,"1750;1823;1779;1824;1921;1756;1842;1890;1751",1823

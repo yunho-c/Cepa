@@ -54,6 +54,10 @@ benchmark-fixture path directories="100" files_per_directory="100" logical_bytes
 benchmark-scan path iterations="5" backend="jwalk":
     cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_benchmark -- "{{ path }}" "{{ iterations }}" "{{ backend }}"
 
+# Benchmark bounded current-folder search after one completed scan.
+benchmark-search path query iterations="9" backend="auto" metric="allocated":
+    cargo run --release --manifest-path src-tauri/Cargo.toml --example search_benchmark -- "{{ path }}" "{{ query }}" "{{ iterations }}" "{{ backend }}" "{{ metric }}"
+
 # Compare backend accounting on a quiescent directory tree.
 validate-scan path left="jwalk" right="auto":
     cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_parity -- "{{ path }}" "{{ left }}" "{{ right }}"

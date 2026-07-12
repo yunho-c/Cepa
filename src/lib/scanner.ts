@@ -148,6 +148,16 @@ export interface DirectoryView {
   chartItems: ChartItem[];
 }
 
+export interface DirectorySearchResult {
+  scanId: number;
+  nodeId: number;
+  query: string;
+  metric: SizeMetric;
+  totalMatches: number;
+  itemsTruncated: boolean;
+  items: ScanItem[];
+}
+
 export interface ScanResult {
   root: string;
   displayName: string;
