@@ -109,14 +109,20 @@ just build
 ```
 
 `just check` runs Svelte diagnostics, frontend unit tests, Rust formatting
-checks, `cargo check`, and the Rust tests. Frontend coverage includes formatting,
-backend labels, cancellation detection, entry semantics, and sunburst geometry.
+checks, `cargo check`, strict Clippy across all Rust targets, and the Rust tests.
+Frontend coverage includes formatting, backend labels, cancellation detection,
+entry semantics, and sunburst geometry.
 The scanner tests use real temporary filesystem fixtures for aggregation,
 cancellation, invalid roots, nested directory views, and hard-link accounting,
 plus symlink and result-bound behavior.
 
 Native recipes clear the machine's configured `sccache` wrapper so it cannot
 block Cargo.
+
+The `CI` workflow repeats `just install`, `just check`, and `just build` on
+native Ubuntu 22.04, macOS, and Windows runners. Local workflow lint and macOS
+execution validate the definition before handoff; only an actual GitHub Actions
+run proves the Linux and Windows jobs.
 
 ```sh
 just bundle

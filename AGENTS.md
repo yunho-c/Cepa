@@ -139,6 +139,7 @@ Start with these files:
 - `docs/accounting.md`: shared filesystem accounting and traversal semantics.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
+- `.github/workflows/ci.yml`: native Linux, macOS, and Windows check/build matrix.
 
 Frontend helper and visualization tests live beside their modules as
 `src/lib/*.test.ts` and run through `just check`.
@@ -183,6 +184,8 @@ when validating Rust or Tauri work.
 - Report exactly what was validated and distinguish static checks, mocked or
   fixture-based tests, real local scans, platform-specific validation, and
   end-to-end application proof.
+- Treat local workflow lint as wiring validation, not proof that remote Linux or
+  Windows jobs passed; inspect the actual GitHub Actions run before claiming it.
 
 When a requested change conflicts with correctness, portability, user safety,
 or measured performance, surface the tradeoff explicitly instead of silently
