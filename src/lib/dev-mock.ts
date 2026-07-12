@@ -1,6 +1,7 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
   ChartItem,
+  CompressionCapability,
   DirectoryView,
   ScanProgress,
   ScanResponse,
@@ -61,6 +62,16 @@ export function installDevMock(requestedScenario: string) {
           mockDirectoryView(Number(args.nodeId)),
           args.metric === "logical" ? "logical" : "allocated",
         );
+      case "compression_capability":
+        return {
+          status: "inspectOnly",
+          filesystem: "apfs",
+          volumeSupportsTransparentCompression: true,
+          writerAvailable: false,
+          algorithms: [],
+          detail:
+            "This volume supports transparent decmpfs decompression. Cepa can only report the capability; compression changes are not implemented.",
+        } satisfies CompressionCapability;
       case "reveal_scan_item":
         if (scenario === "reveal-error") {
           throw "The mocked item disappeared after the scan completed.";

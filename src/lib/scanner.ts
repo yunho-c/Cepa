@@ -1,6 +1,19 @@
 export type EntryKind = "directory" | "file" | "symlink" | "other";
 export type ScanBackend = "jwalk" | "getattrlistbulk";
 export type SizeMetric = "allocated" | "logical";
+export type CompressionCapabilityStatus =
+  | "inspectOnly"
+  | "unsupported"
+  | "unavailable";
+
+export interface CompressionCapability {
+  status: CompressionCapabilityStatus;
+  filesystem: string;
+  volumeSupportsTransparentCompression: boolean;
+  writerAvailable: boolean;
+  algorithms: string[];
+  detail: string;
+}
 
 export interface ScanProgress {
   entriesScanned: number;
@@ -131,6 +144,19 @@ export function metricBytes(
 
 export function formatMetric(metric: SizeMetric): string {
   return metric === "logical" ? "Logical size" : "Space on disk";
+}
+
+export function formatCompressionCapability(
+  capability: CompressionCapability,
+): string {
+  switch (capability.status) {
+    case "inspectOnly":
+      return `${capability.filesystem} compression · analysis only`;
+    case "unsupported":
+      return `Compression unavailable on ${capability.filesystem}`;
+    case "unavailable":
+      return "Compression status unavailable";
+  }
 }
 
 export function isCancellationError(error: unknown): boolean {

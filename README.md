@@ -25,6 +25,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
+- Scan-authorized, read-only volume compression capability reporting on macOS,
+  Windows, and Linux, with unsupported and unavailable states kept explicit
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   and completed states with visible backend/accounting semantics
@@ -43,10 +45,11 @@ the completed directory breakdown. See
 error, and concurrent-mutation semantics.
 
 MFT traversal on Windows, `statx` traversal on Linux, broader native-filesystem
-and cold-cache validation, and transparent filesystem compression remain roadmap
-work. The compression safety and backend contract is specified in
-[`docs/compression.md`](docs/compression.md); it is a design, not a shipped
-mutation feature.
+and cold-cache validation, per-file compression-state inspection, estimation,
+and compression mutation remain roadmap work. The result footer reports only a
+read-only volume capability; it never infers compression from allocated size and
+never claims a writer is available. The safety and backend contract is specified
+in [`docs/compression.md`](docs/compression.md).
 
 ## Prerequisites
 

@@ -15,8 +15,10 @@ The two primary product requirements are:
 
 Transparent filesystem compression is a future product capability. Its proposed
 semantics, platform coverage, safety model, and rollout gates are documented in
-`docs/compression.md`; no mutation backend is implemented. Preserve its evidence
-boundaries instead of presenting design or capability probing as shipped support.
+`docs/compression.md`. A read-only, scan-authorized volume capability probe is
+implemented in `src-tauri/src/compression.rs`; per-file state inspection,
+estimation, and mutation are not. Preserve those evidence boundaries instead of
+presenting volume probing as writable compression support.
 
 ## Current state and roadmap
 
@@ -36,6 +38,10 @@ the path; do not replace that boundary with a frontend-supplied arbitrary path.
 Directory views can switch between allocated and logical size. The selected
 metric is applied in Rust before bounded list and chart selection, not merely to
 frontend labels, so sparse or compressed entries cannot be truncated incorrectly.
+After completion, the UI requests a volume compression capability using the
+retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
+and always reports that no writer exists. Do not accept a frontend path for this
+or infer compression state from logical-versus-allocated size.
 
 The intended scanning architecture is:
 
@@ -133,6 +139,8 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
+- `src-tauri/src/compression.rs`: read-only platform volume-capability probes and
+  the backend-neutral compression capability wire contract.
 - `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.

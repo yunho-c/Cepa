@@ -780,6 +780,10 @@ where
 }
 
 impl ScanSnapshot {
+    pub(crate) fn root_path(&self) -> PathBuf {
+        self.root_path.to_path_buf()
+    }
+
     pub(crate) fn directory_view(
         &self,
         scan_id: u64,

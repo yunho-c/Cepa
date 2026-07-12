@@ -3,6 +3,7 @@ import {
   describeEntry,
   formatBackend,
   formatBytes,
+  formatCompressionCapability,
   formatDuration,
   formatMetric,
   formatPercent,
@@ -11,6 +12,29 @@ import {
 } from "./scanner";
 
 describe("scanner presentation helpers", () => {
+  test("keeps read-only compression capability distinct from a writer", () => {
+    expect(
+      formatCompressionCapability({
+        status: "inspectOnly",
+        filesystem: "apfs",
+        volumeSupportsTransparentCompression: true,
+        writerAvailable: false,
+        algorithms: [],
+        detail: "Read-only capability.",
+      }),
+    ).toBe("apfs compression · analysis only");
+    expect(
+      formatCompressionCapability({
+        status: "unsupported",
+        filesystem: "ext4",
+        volumeSupportsTransparentCompression: false,
+        writerAvailable: false,
+        algorithms: [],
+        detail: "Unsupported capability.",
+      }),
+    ).toBe("Compression unavailable on ext4");
+  });
+
   test("formats byte and duration boundaries", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(1_536)).toBe("1.50 KB");

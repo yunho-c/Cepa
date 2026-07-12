@@ -26,6 +26,7 @@
   import {
     formatBytes,
     formatBackend,
+    formatCompressionCapability,
     formatCount,
     formatDuration,
     formatMetric,
@@ -34,6 +35,7 @@
     isCancellationError,
     metricBytes,
     type ChartItem,
+    type CompressionCapability,
     type DirectoryView,
     type ScanEvent,
     type ScanItem,
@@ -60,6 +62,7 @@
   let revealError = $state("");
   let revealingNodeId = $state<number | null>(null);
   let sizeMetric = $state<SizeMetric>("allocated");
+  let compressionCapability = $state<CompressionCapability | null>(null);
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -139,6 +142,7 @@
     revealError = "";
     revealingNodeId = null;
     sizeMetric = "allocated";
+    compressionCapability = null;
     progress = null;
     result = null;
     view = null;
@@ -167,6 +171,7 @@
       status = "complete";
       await tick();
       resultHeading?.focus();
+      void loadCompressionCapability(response.scanId);
     } catch (error) {
       const message = String(error);
       if (isCancellationError(message)) {
@@ -209,6 +214,30 @@
     revealError = "";
     revealingNodeId = null;
     sizeMetric = "allocated";
+    compressionCapability = null;
+  }
+
+  async function loadCompressionCapability(completedScanId: number) {
+    try {
+      const capability = await invoke<CompressionCapability>(
+        "compression_capability",
+        { scanId: completedScanId },
+      );
+      if (scanId === completedScanId && status === "complete") {
+        compressionCapability = capability;
+      }
+    } catch (error) {
+      if (scanId === completedScanId && status === "complete") {
+        compressionCapability = {
+          status: "unavailable",
+          filesystem: "unknown",
+          volumeSupportsTransparentCompression: false,
+          writerAvailable: false,
+          algorithms: [],
+          detail: `The capability request failed: ${String(error)}`,
+        };
+      }
+    }
   }
 
   function itemPercent(bytes: number): number {
@@ -749,6 +778,14 @@
         {#if result.skippedEntries > 0}<p>{formatCount(result.skippedEntries)} unreadable entries skipped</p>{/if}
         {#if result.skippedFilesystems > 0}<p>{formatCount(result.skippedFilesystems)} mounted filesystems not traversed</p>{/if}
         {#if result.duplicateHardLinks > 0}<p>{formatCount(result.duplicateHardLinks)} duplicate hard links counted once</p>{/if}
+        {#if compressionCapability}
+          <p
+            class="compression-note"
+            data-status={compressionCapability.status}
+            title={compressionCapability.detail}
+            aria-live="polite"
+          >{formatCompressionCapability(compressionCapability)}</p>
+        {/if}
       </footer>
     </main>
   {/if}

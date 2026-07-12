@@ -228,6 +228,18 @@ infrastructure must record its filesystem and kernel/OS details with the result.
 
 ## Rollout order
 
+The volume-capability portion of step 1 is implemented. It is authorized by a
+completed scan ID and reports `inspectOnly`, `unsupported`, or `unavailable` as
+data. macOS queries `ATTR_VOL_CAPABILITIES`, Windows queries
+`GetVolumeInformationW`, and Linux identifies Btrfs with `statfs`. The macOS
+probe has been exercised against a real APFS temporary volume; Windows and Linux
+probe modules pass target-specific compile checks but still require native
+runtime evidence. Every platform reports `writerAvailable: false`.
+
+Per-file read-only state is not implemented, so step 1 as a whole remains open.
+The probe does not inspect individual entries, estimate savings, infer state from
+logical and allocated bytes, or authorize mutation.
+
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.
 2. Add bounded local estimation and candidate UX without mutation.

@@ -1,3 +1,4 @@
+mod compression;
 mod scanner;
 
 use scanner::{DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
@@ -226,6 +227,18 @@ impl ScanState {
             .ok_or_else(|| "That scan is no longer available.".to_string())?;
         scan.snapshot.reveal_path(node_id)
     }
+
+    fn root_path(&self, id: u64) -> Result<PathBuf, String> {
+        let completed = self
+            .completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let scan = completed
+            .as_ref()
+            .filter(|scan| scan.id == id)
+            .ok_or_else(|| "That scan is no longer available.".to_string())?;
+        Ok(scan.snapshot.root_path())
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -305,6 +318,17 @@ fn open_scan_directory(
 }
 
 #[tauri::command]
+async fn compression_capability(
+    scan_id: u64,
+    state: tauri::State<'_, ScanState>,
+) -> Result<compression::CompressionCapability, String> {
+    let root = state.root_path(scan_id)?;
+    tauri::async_runtime::spawn_blocking(move || compression::probe(&root))
+        .await
+        .map_err(|error| format!("The compression capability task stopped unexpectedly: {error}"))
+}
+
+#[tauri::command]
 async fn reveal_scan_item(
     scan_id: u64,
     node_id: u64,
@@ -330,6 +354,7 @@ pub fn run() {
             scan_directory,
             cancel_scan,
             open_scan_directory,
+            compression_capability,
             reveal_scan_item
         ])
         .run(tauri::generate_context!())
@@ -394,6 +419,14 @@ mod tests {
             state
                 .reveal_path(8, file_id)
                 .expect_err("reject stale scan"),
+            "That scan is no longer available."
+        );
+        assert_eq!(
+            state.root_path(7).expect("resolve completed scan root"),
+            temp.path().canonicalize().expect("canonical fixture root")
+        );
+        assert_eq!(
+            state.root_path(8).expect_err("reject stale scan root"),
             "That scan is no longer available."
         );
         assert_eq!(

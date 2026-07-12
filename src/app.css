@@ -353,6 +353,8 @@ body {
 .result-notes { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 10px; }
 .result-notes > span { color: var(--foreground); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 650; }
 .result-notes p { margin: 0; }
+.result-notes .compression-note { padding-left: 18px; border-left: 1px solid var(--border); color: var(--foreground); }
+.result-notes .compression-note[data-status="inspectOnly"]::before { content: "◇"; margin-right: 6px; color: var(--muted-foreground); }
 
 @keyframes rotate { to { transform: rotate(360deg); } }
 @keyframes scanline { 0% { transform: translateX(-110%); } 55%, 100% { transform: translateX(460%); } }
