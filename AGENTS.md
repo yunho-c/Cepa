@@ -96,6 +96,12 @@ offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin
 selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
+The list's primary and Reveal controls use roving row focus so a completed view
+contributes at most two sequential Tab stops rather than one for every retained
+control. Up/Down and Home/End preserve the action kind while moving; a row
+without Reveal falls back to its primary control. Preserve the associated
+screen-reader instructions and recover focus ownership when search results or
+the current directory change. Do not make all 500 rows and actions tabbable.
 The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
 overflowing the explorer at the minimum window height.

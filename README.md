@@ -61,6 +61,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   valid result, with retry kept available when estimation is still running
 - Single-Tab-stop radial navigation with wrapping arrow keys, Home/End movement,
   Enter/Space activation, and coordinated breadcrumbs and ranked item lists
+- Roving directory-list focus that keeps at most the current row's primary and
+  Reveal controls in the Tab order, with Up/Down and Home/End movement across
+  all retained rows
 - A coordinated map-and-list explorer that remains side by side in the default
   880 by 620 window and throughout the supported desktop range down to the
   configured 620 by 480 minimum
@@ -80,7 +83,9 @@ returns at most 500 rows for a directory, while the radial chart is bounded to
 16 segments per directory, three visible levels, and 512 recursive wire nodes
 in total; omitted chart segments are combined into an aggregate. Offscreen rows
 use standards-based rendering containment without leaving the DOM or changing
-the list's scroll extent. These bounds keep bridge and rendering costs
+the list's scroll extent. Keyboard focus moves through those rows with the arrow
+keys instead of adding every row and action to the sequential Tab order. These
+bounds keep bridge and rendering costs
 predictable even when a scan contains millions of entries.
 
 On macOS, the landing screen collapses the sealed read-only system root and its
@@ -311,7 +316,7 @@ just build
 checks, `cargo check`, strict Clippy across all Rust targets, and the Rust tests.
 Frontend coverage includes formatting, backend labels, cancellation detection,
 entry semantics, desktop command conflict rules, and sunburst geometry and
-keyboard navigation.
+keyboard navigation, plus directory-list focus movement.
 The scanner tests use real temporary filesystem fixtures for aggregation,
 cancellation, invalid roots, nested directory views, and hard-link accounting,
 plus symlink and result-bound behavior.

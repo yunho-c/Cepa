@@ -24,6 +24,7 @@
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
+  import { listNavigationTarget } from "$lib/list-navigation";
   import {
     shouldShowScanRoots,
     type ScanRoot,
@@ -55,7 +56,6 @@
     type SavingsEstimate,
     type SizeMetric,
   } from "$lib/scanner";
-  import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
   import {
     createDesktopMenuAvailabilitySync,
     desktopCommandForMenu,
@@ -66,6 +66,7 @@
     type DesktopCommandContext,
     type DesktopMenuAvailability,
   } from "$lib/shortcuts";
+  import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
 
   type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
 
@@ -105,6 +106,8 @@
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartFocusId: number | null = $state(null);
+  let itemListElement: HTMLDivElement | undefined = $state();
+  let listFocusId: number | null = $state(null);
   let stateNotice: HTMLDivElement | undefined = $state();
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
@@ -221,6 +224,12 @@
   const visibleItems = $derived(
     searchActive && searchResult ? searchResult.items : (view?.items ?? []),
   );
+  const visibleItemIds = $derived(visibleItems.map((item) => item.id));
+  $effect(() => {
+    if (!visibleItemIds.includes(listFocusId ?? -1)) {
+      listFocusId = visibleItemIds[0] ?? null;
+    }
+  });
   const directoryCountLabel = $derived(
     isSearching
       ? "Searching…"
@@ -242,6 +251,26 @@
   const showsScanRoots = $derived(
     shouldShowScanRoots(scanRootsStatus, scanRoots.length),
   );
+
+  async function handleListNavigation(
+    event: KeyboardEvent,
+    itemId: number,
+    action: "open" | "reveal",
+  ) {
+    const targetId = listNavigationTarget(visibleItemIds, itemId, event.key);
+    if (targetId === null) return;
+
+    event.preventDefault();
+    listFocusId = targetId;
+    await tick();
+    const actionTarget = itemListElement?.querySelector<HTMLElement>(
+      `[data-list-${action}-id="${targetId}"]`,
+    );
+    const rowTarget = itemListElement?.querySelector<HTMLElement>(
+      `[data-list-open-id="${targetId}"]`,
+    );
+    (actionTarget ?? rowTarget)?.focus();
+  }
 
   function clearDropState() {
     dropActive = false;
@@ -1567,26 +1596,40 @@
               <Button variant="outline" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
             </div>
           {:else if visibleItems.length > 0}
+            <p id="directory-list-navigation-help" class="sr-only">
+              Use the Up and Down Arrow keys to move between items. Home and End jump to the first and last item. Press Enter to open a folder or show file details. When available, Tab once for the Reveal action.
+            </p>
             <div
               class="item-list"
               class:is-navigating={isNavigating || isSearching}
+              role="list"
+              aria-label={`${view.displayName} contents`}
+              aria-describedby="directory-list-navigation-help"
               aria-busy={isSearching}
+              bind:this={itemListElement}
             >
               {#each visibleItems as item (item.id)}
                 <div
                   class="storage-row"
+                  role="listitem"
                   data-selected={activeEntry?.id === item.id}
                   data-inspected={inspectedEntry?.id === item.id}
                 >
                   <button
                     type="button"
                     class="storage-item"
+                    tabindex={listFocusId === item.id ? 0 : -1}
+                    data-list-open-id={item.id}
                     disabled={isNavigating}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
                     onmouseenter={() => (selectedEntry = item)}
-                    onfocus={() => (selectedEntry = item)}
+                    onfocus={() => {
+                      listFocusId = item.id;
+                      selectedEntry = item;
+                    }}
                     onmouseleave={() => (selectedEntry = null)}
                     onblur={() => (selectedEntry = null)}
+                    onkeydown={(event) => handleListNavigation(event, item.id, "open")}
                     aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
                   >
                     <span class="item-icon" data-kind={item.kind}>
@@ -1617,10 +1660,18 @@
                     <button
                       type="button"
                       class="reveal-item"
+                      tabindex={listFocusId === item.id ? 0 : -1}
+                      data-list-reveal-id={item.id}
                       disabled={isNavigating || revealingNodeId !== null}
                       aria-label={`Reveal ${item.name} in the system file manager`}
                       title="Reveal in file manager"
                       onclick={() => revealItem(item.id)}
+                      onfocus={() => {
+                        listFocusId = item.id;
+                        selectedEntry = item;
+                      }}
+                      onblur={() => (selectedEntry = null)}
+                      onkeydown={(event) => handleListNavigation(event, item.id, "reveal")}
                     >
                       <FolderSearch />
                     </button>
