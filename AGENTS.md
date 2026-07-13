@@ -152,6 +152,13 @@ mirrors live availability. Keep backend menu IDs private to Rust, emit only the
 small stable frontend command vocabulary, and revalidate every emitted command
 in the frontend before acting. Serialize and coalesce availability updates so a
 slower IPC completion cannot leave the native menu in an older state.
+Directory navigation and Reveal also capture a frontend request generation in
+addition to the retained scan ID. Starting another scan or returning Home
+invalidates both generations before clearing state. Preserve that second
+boundary: a delayed response must not replace a newer directory view, clear a
+newer request's busy state, or focus an error in a fresh result even if a mock
+reuses the same scan ID. `?mock=stale-actions` is the deterministic browser
+regression for these races.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native
 desktop and store assets. macOS normalizes ICNS output deterministically;
@@ -357,6 +364,8 @@ Start with these files:
   chooser and its loading, unavailable, and preparing states.
 - `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
   shared native-menu availability and shortcut conflict rules.
+- `src/lib/completed-scan-request.ts`: shared scan-ID and request-generation
+  ownership check for delayed completed-scan actions.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
   canonical radial-C identity.
 - `public/cepa-icon.svg` and `scripts/generate-icons.ts`: canonical app icon and

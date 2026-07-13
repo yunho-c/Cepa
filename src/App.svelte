@@ -23,6 +23,7 @@
   import { Input } from "$lib/components/ui/input";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
+  import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
   import { listNavigationTarget } from "$lib/list-navigation";
   import {
@@ -79,6 +80,7 @@
   let selectedEntry = $state<ChartItem | ScanItem | null>(null);
   let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
+  let navigationSequence = 0;
   let isDiscardingScan = $state(false);
   let errorHeading = $state("That scan didn’t start.");
   let errorMessage = $state("");
@@ -88,6 +90,7 @@
   let navigationErrorTitle = $state("That folder could not be opened.");
   let revealError = $state("");
   let revealingNodeId = $state<number | null>(null);
+  let revealSequence = 0;
   let sizeMetric = $state<SizeMetric>("allocated");
   let compressionCapability = $state<CompressionCapability | null>(null);
   let compressionState = $state<CompressionState | null>(null);
@@ -431,6 +434,7 @@
     if (!requestedPath || isBusy) return;
 
     dropSequence += 1;
+    invalidateCompletedScanRequests();
     preparingScanRoot = null;
     clearDropState();
     status = "scanning";
@@ -533,6 +537,7 @@
 
   async function reset() {
     if (isBusy) return;
+    invalidateCompletedScanRequests();
     const completedScanId = status === "complete" ? scanId : null;
     if (completedScanId !== null) {
       navigationError = "";
@@ -953,6 +958,11 @@
     focusHeading: boolean,
   ) {
     if (scanId === null || isResultBusy) return;
+    const completedScanId = scanId;
+    const request = {
+      scanId: completedScanId,
+      sequence: ++navigationSequence,
+    };
     const preservedSearch = focusHeading ? "" : searchQuery;
     if (focusHeading) resetDirectorySearch(true);
     else invalidateDirectorySearch();
@@ -961,10 +971,17 @@
     revealError = "";
     try {
       const nextView = await invoke<DirectoryView>("open_scan_directory", {
-        scanId,
+        scanId: completedScanId,
         nodeId,
         metric,
       });
+      if (
+        !isCurrentCompletedScanRequest(request, {
+          scanId,
+          sequence: navigationSequence,
+          complete: status === "complete",
+        })
+      ) return;
       view = nextView;
       sizeMetric = metric;
       selectedEntry = null;
@@ -978,6 +995,13 @@
         viewHeading?.focus();
       }
     } catch (error) {
+      if (
+        !isCurrentCompletedScanRequest(request, {
+          scanId,
+          sequence: navigationSequence,
+          complete: status === "complete",
+        })
+      ) return;
       navigationErrorTitle = focusHeading
         ? "That folder could not be opened."
         : "The size metric could not be changed.";
@@ -985,7 +1009,7 @@
       await tick();
       navigationNotice?.focus();
     } finally {
-      isNavigating = false;
+      if (navigationSequence === request.sequence) isNavigating = false;
     }
   }
 
@@ -1001,17 +1025,38 @@
 
   async function revealItem(nodeId: number) {
     if (scanId === null || revealingNodeId !== null || isResultBusy) return;
+    const completedScanId = scanId;
+    const request = {
+      scanId: completedScanId,
+      sequence: ++revealSequence,
+    };
     revealingNodeId = nodeId;
     revealError = "";
     try {
-      await invoke("reveal_scan_item", { scanId, nodeId });
+      await invoke("reveal_scan_item", { scanId: completedScanId, nodeId });
     } catch (error) {
+      if (
+        !isCurrentCompletedScanRequest(request, {
+          scanId,
+          sequence: revealSequence,
+          complete: status === "complete",
+        })
+      ) return;
       revealError = String(error);
       await tick();
       revealNotice?.focus();
     } finally {
-      revealingNodeId = null;
+      if (revealSequence === request.sequence) revealingNodeId = null;
     }
+  }
+
+  function invalidateCompletedScanRequests() {
+    // Backend scan IDs authorize each command; these frontend generations also
+    // prevent an older completion from mutating a newer UI lifecycle.
+    navigationSequence += 1;
+    isNavigating = false;
+    revealSequence += 1;
+    revealingNodeId = null;
   }
 
   function activateEntry(

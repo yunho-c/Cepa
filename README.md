@@ -183,6 +183,7 @@ http://localhost:1420/?mock=estimate-cancel-late-error
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
+http://localhost:1420/?mock=stale-actions
 http://localhost:1420/?mock=stress
 http://localhost:1420/?drop=active
 http://localhost:1420/?roots=preview
@@ -198,6 +199,10 @@ chart nodes and records response-to-painted-frame time on the document's
 scan active after a failed stop request so its recovery state can be exercised.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
+`?mock=stale-actions` holds directory navigation and Reveal requests long enough
+to rescan or return Home first. It deliberately reuses the mock scan ID so the
+request-generation guard—not an incidental ID change—must prevent an old view or
+error from entering the new workflow.
 `?mock=picker-error` covers a first-launch picker failure, while
 `?mock=picker-recovery` fails only after a completed scan is visible.
 The two estimate-cancel scenarios cover an immediate failed stop request and a

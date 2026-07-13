@@ -24,10 +24,12 @@ type DevScenario =
   | "error"
   | "navigation-error"
   | "reveal-error"
+  | "stale-actions"
   | "stress";
 
 const ROOT = "/Users/demo";
 const scanId = 42;
+const STALE_ACTION_DELAY_MS = 1_200;
 
 export function installDevMock(requestedScenario: string) {
   const scenario: DevScenario = isScenario(requestedScenario)
@@ -90,6 +92,7 @@ export function installDevMock(requestedScenario: string) {
         if (scenario === "navigation-error") {
           throw "The mocked snapshot is no longer available.";
         }
+        if (scenario === "stale-actions") await delay(STALE_ACTION_DELAY_MS);
         return metricView(
           stressView
             ? createStressDirectoryView(stressView, Number(args.nodeId))
@@ -215,6 +218,10 @@ export function installDevMock(requestedScenario: string) {
         cancelledEstimateRequests.add(Number(args.requestId));
         return true;
       case "reveal_scan_item":
+        if (scenario === "stale-actions") {
+          await delay(STALE_ACTION_DELAY_MS);
+          throw "The earlier reveal request completed after the scan changed.";
+        }
         if (scenario === "reveal-error") {
           throw "The mocked item disappeared after the scan completed.";
         }
@@ -238,6 +245,7 @@ function isScenario(value: string): value is DevScenario {
     "error",
     "navigation-error",
     "reveal-error",
+    "stale-actions",
     "stress",
   ].includes(value);
 }
