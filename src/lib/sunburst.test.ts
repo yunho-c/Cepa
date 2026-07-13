@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChartItem } from "./scanner";
-import { createSunburst } from "./sunburst";
+import { createSunburst, sunburstNavigationTarget } from "./sunburst";
 
 function item(
   id: number,
@@ -48,5 +48,38 @@ describe("sunburst geometry", () => {
 
     expect(allocated[0].pathData).not.toBe(logical[0].pathData);
     expect(allocated[1].pathData).not.toBe(logical[1].pathData);
+  });
+
+  test("moves through interactive segments with one wrapping focus target", () => {
+    const segments = createSunburst([
+      item(1, 75, 75, [item(2, 25)]),
+      item(3, 25),
+    ]);
+
+    expect(sunburstNavigationTarget(segments, 1, "ArrowRight")).toBe(2);
+    expect(sunburstNavigationTarget(segments, 2, "ArrowDown")).toBe(3);
+    expect(sunburstNavigationTarget(segments, 3, "ArrowRight")).toBe(1);
+    expect(sunburstNavigationTarget(segments, 1, "ArrowLeft")).toBe(3);
+    expect(sunburstNavigationTarget(segments, 2, "ArrowUp")).toBe(1);
+  });
+
+  test("supports Home and End while ignoring aggregate and unrelated keys", () => {
+    const segments = createSunburst([
+      item(1, 75),
+      {
+        id: null,
+        name: "More items",
+        kind: "other",
+        logicalBytes: 25,
+        allocatedBytes: 25,
+        children: [],
+      },
+    ]);
+
+    expect(sunburstNavigationTarget(segments, null, "Home")).toBe(1);
+    expect(sunburstNavigationTarget(segments, null, "End")).toBe(1);
+    expect(sunburstNavigationTarget(segments, null, "ArrowRight")).toBe(1);
+    expect(sunburstNavigationTarget(segments, 1, "Enter")).toBeNull();
+    expect(sunburstNavigationTarget([], null, "Home")).toBeNull();
   });
 });

@@ -13,6 +13,15 @@ export interface SunburstSegment {
   colorIndex: number;
 }
 
+const NAVIGATION_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+]);
+
 export function createSunburst(
   items: ChartItem[],
   metric: SizeMetric = "allocated",
@@ -20,6 +29,29 @@ export function createSunburst(
   const segments: SunburstSegment[] = [];
   appendSegments(segments, items, metric, 0, -Math.PI / 2, Math.PI * 1.5, 0);
   return segments;
+}
+
+export function sunburstNavigationTarget(
+  segments: readonly SunburstSegment[],
+  currentId: number | null,
+  key: string,
+): number | null {
+  if (!NAVIGATION_KEYS.has(key)) return null;
+
+  const ids = segments.flatMap((segment) =>
+    segment.item.id === null ? [] : [segment.item.id],
+  );
+  if (ids.length === 0) return null;
+  if (key === "Home") return ids[0];
+  if (key === "End") return ids.at(-1) ?? null;
+
+  const currentIndex = currentId === null ? -1 : ids.indexOf(currentId);
+  if (key === "ArrowRight" || key === "ArrowDown") {
+    return ids[(currentIndex + 1 + ids.length) % ids.length];
+  }
+
+  const previousIndex = currentIndex <= 0 ? ids.length - 1 : currentIndex - 1;
+  return ids[previousIndex];
 }
 
 function appendSegments(

@@ -53,7 +53,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   report a range and confidence, and identify exact target codecs versus proxies
 - Request-owned estimate cancellation so a late stop error cannot replace a
   valid result, with retry kept available when estimation is still running
-- Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+- Single-Tab-stop radial navigation with wrapping arrow keys, Home/End movement,
+  Enter/Space activation, and coordinated breadcrumbs and ranked item lists
 - A coordinated map-and-list explorer that remains side by side in the default
   880 by 620 window and throughout the supported desktop range down to the
   configured 620 by 480 minimum
@@ -292,7 +293,8 @@ just build
 `just check` runs Svelte diagnostics, frontend unit tests, Rust formatting
 checks, `cargo check`, strict Clippy across all Rust targets, and the Rust tests.
 Frontend coverage includes formatting, backend labels, cancellation detection,
-entry semantics, desktop command conflict rules, and sunburst geometry.
+entry semantics, desktop command conflict rules, and sunburst geometry and
+keyboard navigation.
 The scanner tests use real temporary filesystem fixtures for aggregation,
 cancellation, invalid roots, nested directory views, and hard-link accounting,
 plus symlink and result-bound behavior.

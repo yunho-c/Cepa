@@ -80,6 +80,11 @@ Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving
 aggregate coverage. Keep the global budget deterministic and metric-aware.
+Expose the interactive radial map as a named group, not an image with interactive
+descendants. Its real segments use one roving Tab stop: arrow keys move and wrap,
+Home and End jump to the bounds, and Enter or Space activates the focused item.
+Aggregate segments remain non-interactive. Keep the concise screen-reader
+instruction associated with the group when changing chart interaction.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin

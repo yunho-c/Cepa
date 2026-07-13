@@ -55,7 +55,7 @@
     type SavingsEstimate,
     type SizeMetric,
   } from "$lib/scanner";
-  import { createSunburst } from "$lib/sunburst";
+  import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
   import {
     createDesktopMenuAvailabilitySync,
     desktopCommandForMenu,
@@ -103,6 +103,8 @@
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
+  let sunburstElement: SVGSVGElement | undefined = $state();
+  let chartFocusId: number | null = $state(null);
   let stateNotice: HTMLDivElement | undefined = $state();
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
@@ -187,6 +189,14 @@
     },
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
+  $effect(() => {
+    const interactiveIds = sunburstSegments.flatMap((segment) =>
+      segment.item.id === null ? [] : [segment.item.id],
+    );
+    if (!interactiveIds.includes(chartFocusId ?? -1)) {
+      chartFocusId = interactiveIds[0] ?? null;
+    }
+  });
   // Hover and keyboard focus should always coordinate the chart and list. A
   // clicked inspection remains the fallback when there is no transient target.
   const activeEntry = $derived(selectedEntry ?? inspectedEntry);
@@ -956,7 +966,22 @@
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       activateEntry(entry, event.currentTarget as SVGGElement);
+      return;
     }
+
+    const targetId = sunburstNavigationTarget(
+      sunburstSegments,
+      chartFocusId,
+      event.key,
+    );
+    if (targetId === null) return;
+    event.preventDefault();
+    chartFocusId = targetId;
+    requestAnimationFrame(() => {
+      sunburstElement
+        ?.querySelector<SVGGElement>(`[data-chart-node-id="${targetId}"]`)
+        ?.focus();
+    });
   }
 </script>
 
@@ -1313,15 +1338,26 @@
 
           <div class="sunburst-wrap">
             {#if sunburstSegments.length > 0}
-              <svg class="sunburst" viewBox="0 0 340 340" role="img" aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}>
+              <svg
+                class="sunburst"
+                viewBox="0 0 340 340"
+                role="group"
+                aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
+                aria-describedby="sunburst-navigation-help"
+                bind:this={sunburstElement}
+              >
                 {#each sunburstSegments as segment (`${segment.item.id ?? segment.item.name}-${segment.depth}`)}
                   {#if segment.item.id !== null}
                     <g
                       role="button"
-                      tabindex="0"
+                      tabindex={chartFocusId === segment.item.id ? 0 : -1}
+                      data-chart-node-id={segment.item.id}
                       aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}
                       onmouseenter={() => (selectedEntry = segment.item)}
-                      onfocus={() => (selectedEntry = segment.item)}
+                      onfocus={() => {
+                        chartFocusId = segment.item.id;
+                        selectedEntry = segment.item;
+                      }}
                       onmouseleave={() => (selectedEntry = null)}
                       onblur={() => (selectedEntry = null)}
                       onclick={(event) => activateEntry(segment.item, event.currentTarget)}
@@ -1355,6 +1391,9 @@
           </div>
 
           {#if sunburstSegments.length > 0}
+            <p id="sunburst-navigation-help" class="sr-only">
+              Use the arrow keys to move between segments. Press Enter or Space to open the selected item.
+            </p>
             <p class="chart-help">Select a segment to explore it</p>
           {/if}
         </div>
