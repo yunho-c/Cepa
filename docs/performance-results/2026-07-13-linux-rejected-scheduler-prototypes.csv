@@ -1,0 +1,16 @@
+experiment,method,workload,baseline_wall_ms,candidate_wall_ms,change_percent,decision
+initial-capacity-32,sequential-15,directory-rich,33.720984,40.056742,18.787,rejected
+initial-capacity-32,sequential-15,wide,18.456609,20.401718,10.539,rejected
+initial-capacity-32,sequential-15,workspace,12.257524,13.100461,6.877,rejected
+buffer-pool-8,sequential-21,directory-rich,31.442629,34.426308,9.489,rejected
+buffer-pool-8,sequential-21,wide,18.947823,18.640528,-1.622,rejected
+buffer-pool-8,sequential-21,workspace,12.649064,12.595534,-0.423,rejected
+unconditional-task-pair,alternating-11x9,directory-rich,35.805842,31.592393,-11.767,rejected
+unconditional-task-pair,alternating-11x9,wide,18.485765,17.713138,-4.180,rejected
+unconditional-task-pair,alternating-11x9,workspace,12.123944,14.578776,20.249,rejected
+small-sibling-task-pair,alternating-11x9,directory-rich,39.521780,34.275733,-13.274,rejected
+small-sibling-task-pair,alternating-11x9,wide,18.632155,19.076114,2.382,rejected
+small-sibling-task-pair,alternating-11x9,workspace,11.859462,12.697752,7.069,rejected
+single-or-sibling-pair,sequential-21,directory-rich,31.845323,33.756299,6.001,rejected
+single-or-sibling-pair,sequential-21,wide,18.383322,18.482139,0.538,rejected
+single-or-sibling-pair,sequential-21,workspace,12.727528,12.808366,0.635,rejected

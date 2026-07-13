@@ -553,6 +553,31 @@ Raw scan, cancellation, memory, and parity observations are preserved in
 and
 [`performance-results/2026-07-13-linux-real-workspace-parity.csv`](performance-results/2026-07-13-linux-real-workspace-parity.csv).
 
+#### Rejected entry-buffer and shallow task-batching prototypes
+
+A fresh Rust 1.97.0 ext4 pass tested two remaining sources of scheduler-adjacent
+overhead. Reducing the first result-vector reservation from 512 to 32 entries
+regressed 15-run median wall time by 18.8% on the 110,101-entry
+directory-rich fixture, 10.5% on the 100,102-entry wide fixture, and 6.9% on a
+21,990-entry checkout. A bounded eight-vector recycle pool still regressed the
+directory-rich median by 9.5%; its 1.6% wide improvement and 0.4% checkout
+improvement were not enough to justify another synchronization path. Both
+allocation prototypes were removed.
+
+Pairing two directory tasks per queue message initially looked promising on the
+synthetic fixtures, but alternating-order batches exposed a 20.2% checkout
+regression. Restricting pairs to small, high-fanout siblings preserved a 13.3%
+directory-rich improvement but regressed the wide and checkout medians by 2.4%
+and 7.1%. An explicit single-or-pair message removed most non-batched overhead,
+but then the directory-rich median was 6.0% slower and the other workloads were
+flat. The task scheduler therefore remains unchanged.
+
+These experiments reinforce that `sched_yield` counts alone do not identify a
+safe optimization. Any future scheduler redesign needs representative mixed-tree
+evidence in the first comparison, not only canonical synthetic fixtures. The
+aggregate trials are preserved in
+[`performance-results/2026-07-13-linux-rejected-scheduler-prototypes.csv`](performance-results/2026-07-13-linux-rejected-scheduler-prototypes.csv).
+
 ### 2026-07-12 scan-time revision retention
 
 Compression planning now retains a 32-byte file identity/revision field in each

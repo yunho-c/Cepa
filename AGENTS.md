@@ -257,6 +257,9 @@ The intended scanning architecture is:
   one reusable 64 KiB directory buffer instead of allocating one per directory;
   this improved a 396,033-entry mixed real tree while leaving both canonical
   shapes effectively flat. The eight-worker cap bounds those buffers to 512 KiB.
+  Smaller initial result buffers, bounded buffer recycling, and shallow task
+  batching were measured and rejected; read `docs/performance.md` before
+  revisiting scheduler coordination from syscall counts alone.
   Broader filesystem and hardware coverage, cold-cache measurements, and
   scheduler redesign remain.
 
