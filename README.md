@@ -18,6 +18,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - MFT enumeration on Windows NTFS volume roots, with exact allocation sizes,
   hard-link name recovery, and automatic `jwalk` fallback for subfolders,
   non-NTFS volumes, or unavailable volume access
+- Read-only native storage discovery with free/total capacity and a direct scan
+  action for local volumes, while keeping the folder picker as a fallback
 - Native directory picker on supported desktop platforms
 - Native single-folder drag and drop with a preflight check that preserves the
   current result until the dropped directory is accepted
@@ -55,6 +57,13 @@ returns at most 500 rows for a directory, while the radial chart is bounded to
 16 segments per directory and three visible levels; omitted chart segments are
 combined into an aggregate. These bounds keep bridge and rendering costs
 predictable even when a scan contains millions of entries.
+
+On macOS, the landing screen collapses the sealed read-only system root and its
+matching APFS Data volume into one user-facing entry. That entry displays `/`
+but scans `/System/Volumes/Data`, avoiding a misleading root scan that would
+skip user data at the firmlink boundary. Volume capacity is context, not a sum
+of scannable files; snapshots, filesystem metadata, reserved space, and skipped
+items can make the numbers differ.
 
 Hard-linked bytes are counted once and assigned to the lexicographically first
 relative path in the selected root, so parallel discovery order cannot change
@@ -123,11 +132,14 @@ http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
 http://localhost:1420/?drop=active
+http://localhost:1420/?roots=preview
 ```
 
-The mock workflows and drop-affordance preview are removed from production
-builds. The drop preview is visual only; use `just dev` and drag a real folder
-from the platform file manager to validate the native window event.
+The mock workflows, drop affordance, and storage preview are removed from
+production builds. Combine `?mock=complete&roots=preview` to exercise a volume
+selection through the complete mocked scan. The drop preview is visual only;
+use `just dev` and drag a real folder from the platform file manager to validate
+the native window event.
 
 ## Desktop commands
 

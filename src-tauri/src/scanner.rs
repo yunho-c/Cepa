@@ -225,6 +225,13 @@ pub(crate) struct ScanOutput {
     pub snapshot: ScanSnapshot,
 }
 
+impl ScanOutput {
+    pub(crate) fn set_root_display_name(&mut self, name: String) {
+        self.result.display_name = name.clone();
+        self.snapshot.nodes[self.snapshot.root].name = name.into();
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ScanSnapshot {
     root: NodeId,
@@ -1510,6 +1517,26 @@ mod tests {
                 .expect_err("unknown node IDs must fail"),
             "That item is not part of this scan."
         );
+    }
+
+    #[test]
+    fn applies_a_native_volume_name_without_changing_the_scan_root() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let canonical_root = temp.path().canonicalize().expect("canonical fixture root");
+        let mut output =
+            scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {}).expect("scan fixture");
+
+        output.set_root_display_name("Archive".to_string());
+        let view = output
+            .snapshot
+            .directory_view(7, 0)
+            .expect("build renamed root view");
+
+        assert_eq!(output.result.display_name, "Archive");
+        assert_eq!(output.result.root, canonical_root.to_string_lossy());
+        assert_eq!(view.display_name, "Archive");
+        assert_eq!(view.breadcrumbs[0].name, "Archive");
+        assert_eq!(view.root, canonical_root.to_string_lossy());
     }
 
     #[test]

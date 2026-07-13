@@ -32,6 +32,8 @@ export function installDevMock(requestedScenario: string) {
   mockIPC(async (command, payload = {}) => {
     const args = payload as unknown as Record<string, unknown>;
     switch (command) {
+      case "validate_scan_root":
+        return String(args.path);
       case "plugin:dialog|open":
         return ROOT;
       case "scan_directory": {

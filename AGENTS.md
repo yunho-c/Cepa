@@ -41,6 +41,15 @@ ambiguous drops preserve completed results and surface the ordinary scan or
 navigation error treatment. Drops are ignored while another operation is busy.
 This is an entry-point convenience, not a general path-authorized action: all
 post-scan operations retain their completed scan ID and opaque node ID boundary.
+The landing screen discovers local scan roots through the dependency-light
+`sysinfo` disk API and presents free/total capacity in a native grouped list.
+Zero-capacity and relative roots are filtered, duplicate mount paths are
+collapsed, and the folder picker remains available if discovery fails or returns
+nothing. On macOS, a matching `/` and `/System/Volumes/Data` APFS pair becomes one
+entry: the UI displays `/`, while the scanner uses the Data volume so firmlink
+enforcement does not omit user data. The backend caches display names from the
+discovery response and applies them to the root node without changing its
+authoritative scan path; scan start does not rerun device discovery.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 skipped-item semantics remain available under the collapsed `Scan details`
 disclosure rather than appearing as status badges or a diagnostic footer. It
@@ -215,6 +224,9 @@ Start with these files:
   the `?mock=` query parameter.
 - `src/lib/folder-drop.ts`: pure native drag-event decisions and privacy-safe
   dropped-item labels.
+- `src/lib/scan-roots.ts`: scan-root wire type and bounded capacity helpers.
+- `src/lib/components/scan-root-picker.svelte`: grouped landing-screen volume
+  chooser and its loading, unavailable, and preparing states.
 - `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
   shortcut conflict rules.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
@@ -224,6 +236,8 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
+- `src-tauri/src/scan_roots.rs`: cross-platform local-volume discovery,
+  normalization, APFS system/Data collapsing, and compact wire contract.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and
   per-item state probes plus their backend-neutral wire contracts.
 - `src-tauri/src/compression/estimator.rs`: bounded sampling, codec adapters,
@@ -284,6 +298,10 @@ when validating Rust or Tauri work.
   preflight, inspect the development-only visual preview, and run a real
   file-manager-to-window drop when desktop UI automation or a manual host is
   available. Do not report the visual preview as proof of a native window event.
+- For scan-root discovery changes, run the real-host discovery test on each
+  supported platform in addition to normalization fixtures. Check that presented
+  capacity is contextual volume information rather than claiming it equals the
+  scanner's reachable-file total.
 - For performance changes, report the baseline, comparison, workload, and
   measurement method. Do not claim a speedup from intuition or a synthetic test
   that measures different behavior.

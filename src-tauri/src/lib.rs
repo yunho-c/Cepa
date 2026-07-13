@@ -2,12 +2,15 @@
 
 mod compression;
 mod file_revision;
+mod scan_roots;
 mod scanner;
 
 #[cfg(feature = "desktop")]
 use scanner::{CompressionTarget, ScanProgress};
 use scanner::{DirectoryView, ScanSnapshot, SizeMetric};
 use serde::Serialize;
+#[cfg(feature = "desktop")]
+use std::collections::HashMap;
 use std::path::Path;
 #[cfg(feature = "desktop")]
 use std::path::PathBuf;
@@ -183,6 +186,34 @@ struct ScanState {
     next_id: AtomicU64,
     active: Mutex<Option<ActiveScan>>,
     completed: Mutex<Option<CompletedScan>>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Default)]
+struct ScanRootState {
+    display_names: Mutex<HashMap<PathBuf, String>>,
+}
+
+#[cfg(feature = "desktop")]
+impl ScanRootState {
+    fn replace(&self, roots: &[scan_roots::ScanRoot]) {
+        let names = roots
+            .iter()
+            .map(|root| (root.path().to_path_buf(), root.name().to_string()))
+            .collect();
+        *self
+            .display_names
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = names;
+    }
+
+    fn display_name(&self, path: &Path) -> Option<String> {
+        self.display_names
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(path)
+            .cloned()
+    }
 }
 
 #[cfg(feature = "desktop")]
@@ -549,6 +580,18 @@ struct ScanResponse {
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
+async fn list_scan_roots(
+    state: tauri::State<'_, ScanRootState>,
+) -> Result<Vec<scan_roots::ScanRoot>, String> {
+    let roots = tauri::async_runtime::spawn_blocking(scan_roots::discover_scan_roots)
+        .await
+        .map_err(|error| format!("Storage discovery stopped unexpectedly: {error}"))?;
+    state.replace(&roots);
+    Ok(roots)
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
 async fn validate_scan_root(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         scanner::validate_scan_root(Path::new(&path))
@@ -564,6 +607,7 @@ async fn scan_directory(
     path: String,
     on_event: Channel<ScanEvent>,
     state: tauri::State<'_, ScanState>,
+    roots: tauri::State<'_, ScanRootState>,
     estimates: tauri::State<'_, EstimateState>,
     searches: tauri::State<'_, SearchState>,
     plans: tauri::State<'_, CompressionPlanState>,
@@ -572,6 +616,7 @@ async fn scan_directory(
     searches.cancel_active();
     plans.clear();
     let requested_path = PathBuf::from(path);
+    let root_display_name = roots.display_name(&requested_path);
     let (scan_id, cancel) = state.begin();
     let _ = on_event.send(ScanEvent::Started {
         scan_id,
@@ -580,9 +625,13 @@ async fn scan_directory(
 
     let progress_channel = on_event.clone();
     let task = tauri::async_runtime::spawn_blocking(move || {
-        scanner::scan_path(&requested_path, cancel, |progress| {
+        let mut output = scanner::scan_path(&requested_path, cancel, |progress| {
             let _ = progress_channel.send(ScanEvent::Progress { scan_id, progress });
-        })
+        })?;
+        if let Some(display_name) = root_display_name {
+            output.set_root_display_name(display_name);
+        }
+        Ok::<_, String>(output)
     });
 
     match task.await {
@@ -775,10 +824,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
+        .manage(ScanRootState::default())
         .manage(EstimateState::default())
         .manage(SearchState::default())
         .manage(CompressionPlanState::default())
         .invoke_handler(tauri::generate_handler![
+            list_scan_roots,
             validate_scan_root,
             scan_directory,
             cancel_scan,

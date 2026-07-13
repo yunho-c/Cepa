@@ -22,7 +22,9 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import CepaMark from "$lib/components/cepa-mark.svelte";
+  import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
+  import { type ScanRoot, type ScanRootsStatus } from "$lib/scan-roots";
   import {
     formatBytes,
     formatBackend,
@@ -104,11 +106,41 @@
   const hasDevMock =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("mock");
+  const rootsPreview =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("roots") === "preview";
   let dropActive = $state(dropPreview);
   let droppedPaths = $state<string[]>(
     dropPreview ? ["/Users/demo/Design Archive"] : [],
   );
-  let isPreparingDroppedFolder = $state(false);
+  let preparingScanRoot = $state<string | null>(null);
+  let scanRoots = $state<ScanRoot[]>(
+    rootsPreview
+      ? [
+          {
+            name: "Macintosh HD",
+            path: "/System/Volumes/Data",
+            displayPath: "/",
+            totalBytes: 1_000_000_000_000,
+            availableBytes: 286_000_000_000,
+            isRemovable: false,
+            isReadOnly: false,
+          },
+          {
+            name: "Archive",
+            path: "/Volumes/Archive",
+            displayPath: "/Volumes/Archive",
+            totalBytes: 2_000_000_000_000,
+            availableBytes: 1_240_000_000_000,
+            isRemovable: true,
+            isReadOnly: false,
+          },
+        ]
+      : [],
+  );
+  let scanRootsStatus = $state<ScanRootsStatus>(
+    rootsPreview ? "ready" : "idle",
+  );
   let dropSequence = 0;
 
   const primaryModifier = primaryModifierForPlatform(navigator.platform);
@@ -116,7 +148,10 @@
   const backShortcutLabel = primaryModifier === "meta" ? "⌥←" : "Alt+←";
 
   const isBusy = $derived(
-    status === "scanning" || status === "cancelling" || isPreparingDroppedFolder,
+    status === "scanning" || status === "cancelling" || preparingScanRoot !== null,
+  );
+  const isPreparingDroppedFolder = $derived(
+    preparingScanRoot !== null && droppedPaths.length > 0,
   );
   const displayProgress = $derived(
     progress ?? {
@@ -194,24 +229,40 @@
     }
   }
 
-  async function startDroppedFolder(droppedPath: string) {
+  async function startValidatedRoot(requestedPath: string, fromDrop: boolean) {
     const request = ++dropSequence;
-    dropActive = false;
-    droppedPaths = [droppedPath];
-    isPreparingDroppedFolder = true;
+    if (fromDrop) {
+      dropActive = false;
+      droppedPaths = [requestedPath];
+    } else {
+      clearDropState();
+    }
+    preparingScanRoot = requestedPath;
     try {
       const validatedPath = await invoke<string>("validate_scan_root", {
-        path: droppedPath,
+        path: requestedPath,
       });
       if (request !== dropSequence) return;
-      isPreparingDroppedFolder = false;
+      preparingScanRoot = null;
       path = validatedPath;
       await startScan();
     } catch (error) {
       if (request !== dropSequence) return;
-      isPreparingDroppedFolder = false;
+      preparingScanRoot = null;
       clearDropState();
       await showDroppedFolderError(String(error));
+    }
+  }
+
+  async function loadScanRoots() {
+    if (!isTauri() || hasDevMock || rootsPreview) return;
+    scanRootsStatus = "loading";
+    try {
+      scanRoots = await invoke<ScanRoot[]>("list_scan_roots");
+      scanRootsStatus = "ready";
+    } catch {
+      scanRoots = [];
+      scanRootsStatus = "error";
     }
   }
 
@@ -226,7 +277,7 @@
         clearDropState();
         break;
       case "scan":
-        void startDroppedFolder(action.path);
+        void startValidatedRoot(action.path, true);
         break;
       case "reject":
         clearDropState();
@@ -238,6 +289,7 @@
   }
 
   onMount(() => {
+    void loadScanRoots();
     if (!isTauri() || hasDevMock) return;
 
     let disposed = false;
@@ -284,7 +336,7 @@
     if (!requestedPath || isBusy) return;
 
     dropSequence += 1;
-    isPreparingDroppedFolder = false;
+    preparingScanRoot = null;
     clearDropState();
     status = "scanning";
     path = requestedPath;
@@ -357,7 +409,7 @@
 
   function reset() {
     dropSequence += 1;
-    isPreparingDroppedFolder = false;
+    preparingScanRoot = null;
     clearDropState();
     status = "idle";
     scanId = null;
@@ -870,13 +922,23 @@
         <div class="app-symbol" aria-hidden="true"><CepaMark /></div>
         <h1 id="landing-title">Find what’s taking up space.</h1>
         <p class="lede">
-          Choose a folder to see its largest files and subfolders. Everything
+          Choose a disk or folder to see its largest files and subfolders. Everything
           stays on this device.
         </p>
+
+        <ScanRootPicker
+          roots={scanRoots}
+          status={scanRootsStatus}
+          busy={isBusy}
+          preparingPath={preparingScanRoot}
+          onSelect={(rootPath) => void startValidatedRoot(rootPath, false)}
+          onRetry={() => void loadScanRoots()}
+        />
 
         <div class="scan-entry">
           <Button
             class="choose-button"
+            variant={scanRoots.length > 0 ? "outline" : "default"}
             size="lg"
             disabled={isBusy}
             title={`Choose folder (${primaryShortcutLabel}O)`}

@@ -4,6 +4,28 @@ Cepa reports a best-effort point-in-time view of a live directory tree. The
 portable and native backends share these rules; an optimized backend must match
 them before it can replace `jwalk` for a platform.
 
+## Scan roots and volume capacity
+
+The landing screen performs read-only local-volume discovery before a scan. It
+reports the operating system's total and user-available bytes for each usable
+mount and derives the usage bar by subtraction. These figures help choose where
+to start; they are not scanner accounting. Filesystem metadata, snapshots,
+reserved blocks, inaccessible files, mount boundaries, and concurrently changing
+data can all prevent the completed reachable-file total from matching used
+volume capacity.
+
+Discovery removes zero-capacity and relative entries and deduplicates identical
+mount paths. On Linux, Cepa does not enable `sysinfo`'s optional network-device or
+tmpfs discovery features. On macOS, a sealed `/` mount and matching
+`/System/Volumes/Data` mount with the same name and capacity are treated as one
+user-facing volume. Cepa displays `/` but scans the writable Data mount because
+the native scanner deliberately does not traverse the system root's firmlink.
+
+Volume names are presentation metadata retained from the discovery request.
+They can label the result root and first breadcrumb, but they never replace the
+canonical scan path used for traversal, snapshot authorization, reveal,
+inspection, estimation, or planning.
+
 ## Sizes and entry counts
 
 - Logical size is the byte length reported for regular files. Directory,

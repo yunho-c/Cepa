@@ -241,6 +241,120 @@ body {
   letter-spacing: -0.012em;
 }
 
+.scan-roots {
+  width: min(100%, 570px);
+  text-align: left;
+}
+.scan-roots-heading {
+  min-height: 27px;
+  padding: 0 4px 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.scan-roots-heading h2 { margin: 0; font-size: 12px; font-weight: 630; }
+.scan-roots-heading > span { color: var(--muted-foreground); font-size: 10px; }
+.scan-root-list {
+  max-height: 286px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 8px 30px oklch(0.18 0.008 70 / 0.055);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scan-root[data-slot="button"] {
+  width: 100%;
+  height: auto;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 11px;
+  color: var(--foreground);
+  text-align: left;
+  white-space: normal;
+}
+.scan-root[data-slot="button"]:last-child { border-bottom: 0; }
+.scan-root[data-slot="button"]:hover,
+.scan-root[data-slot="button"]:focus-visible { background: var(--muted); }
+.scan-root[data-preparing="true"] { background: var(--muted); }
+.scan-root-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: oklch(0.38 0.04 80);
+  background: oklch(0.92 0.035 96);
+}
+.scan-root-icon svg { width: 16px; height: 16px; }
+.scan-root-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.scan-root-copy > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 610;
+  letter-spacing: -0.012em;
+}
+.scan-root-copy > span:not(.scan-root-bar),
+.scan-root-capacity > span,
+.scan-root-state span { color: var(--muted-foreground); font-size: 10px; }
+.scan-root-copy > span:not(.scan-root-bar) {
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scan-root-bar {
+  height: 3px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: oklch(0.91 0.006 85);
+}
+.scan-root-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: oklch(0.67 0.12 101);
+}
+.scan-root-capacity { min-width: 92px; display: grid; justify-items: end; gap: 1px; }
+.scan-root-capacity > strong { font-size: 11px; font-weight: 590; font-variant-numeric: tabular-nums; }
+.scan-root-chevron { width: 14px; color: var(--muted-foreground); }
+.scan-root-state {
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  background: var(--card);
+  text-align: left;
+}
+.scan-root-state > div { display: grid; gap: 2px; }
+.scan-root-state strong { font-size: 12px; font-weight: 600; }
+.scan-entry-divider {
+  width: min(100%, 420px);
+  margin: 18px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.scan-entry-divider::before,
+.scan-entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
+.is-spinning { animation: spin 900ms linear infinite; }
+
 .scan-entry {
   width: min(100%, 460px);
   display: flex;
@@ -528,6 +642,7 @@ body {
   from { opacity: 0; transform: scale(0.992); }
   to { opacity: 1; transform: scale(1); }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .explorer { height: auto; grid-template-columns: 1fr; }
@@ -542,6 +657,8 @@ body {
   .landing { padding-left: 20px; padding-right: 20px; }
   .landing h1 { font-size: 40px; }
   .lede { font-size: 15px; }
+  .scan-root[data-slot="button"] { grid-template-columns: 34px minmax(0, 1fr) 14px; }
+  .scan-root-capacity { display: none; }
   .scan-view,
   .results-view { padding-left: 16px; padding-right: 16px; }
   .scan-view { padding-top: 28px; }
