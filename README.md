@@ -25,7 +25,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   current result until the dropped directory is accepted
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
-  currently an estimate elsewhere)
+  the native Windows MFT path; portable Windows scans report an estimate)
 - Metric-aware directory ranking and charts switchable between space on disk
   and logical size
 - Deterministic Unix hard-link deduplication and same-filesystem traversal
@@ -33,7 +33,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Permission and traversal-error accounting without aborting the whole scan,
   with a visible incomplete-coverage notice when unavailable items can lower
   the reported totals
-- Bounded progress updates over a Tauri channel
+- Bounded progress updates over a Tauri channel, with a calm active-scan view
+  that keeps space, current location, elapsed time, cancellation, and unavailable
+  items visible without exposing backend vocabulary
 - On-demand directory views backed by the completed in-memory scan snapshot
 - Case-insensitive current-folder search across every retained direct child,
   bounded to 500 metric-ranked results after matching

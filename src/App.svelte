@@ -1087,14 +1087,14 @@
   {:else if status === "scanning" || status === "cancelling"}
     <main class="scan-view" aria-busy="true">
       <p class="sr-only" aria-live="polite">{scanAnnouncement}</p>
-      <section class="scan-card">
+      <section class="scan-progress" aria-labelledby="scan-progress-title">
         <div class="scan-titlebar">
           <div>
             <span class="scan-kicker">
               <span class="status-dot" aria-hidden="true"></span>
               {status === "cancelling" ? "Stopping" : "Scanning"}
             </span>
-            <h1>{scanTargetName}</h1>
+            <h1 id="scan-progress-title">{scanTargetName}</h1>
           </div>
           <Button
             variant="outline"
@@ -1107,8 +1107,8 @@
         </div>
 
         <div class="scan-total">
+          <span>Space found</span>
           <strong>{formatBytes(displayProgress.allocatedBytes)}</strong>
-          <span>found so far</span>
         </div>
         <p class="scan-path" title={displayProgress.currentPath}>
           {displayProgress.currentPath || path}
@@ -1116,16 +1116,20 @@
 
         <div class="scan-line" aria-hidden="true"><span></span></div>
 
-        <dl class="scan-stats" aria-label="Scan progress">
-          <div><dt>Items</dt><dd>{formatCount(displayProgress.entriesScanned)}</dd></div>
-          <div><dt>Files</dt><dd>{formatCount(displayProgress.filesScanned)}</dd></div>
-          <div><dt>Folders</dt><dd>{formatCount(displayProgress.directoriesScanned)}</dd></div>
+        <dl class="scan-facts" aria-label="Scan progress">
+          <div><dt>Items scanned</dt><dd>{formatCount(displayProgress.entriesScanned)}</dd></div>
           <div><dt>Elapsed</dt><dd>{formatDuration(displayProgress.elapsedMs)}</dd></div>
+          {#if displayProgress.skippedEntries > 0}
+            <div class="scan-fact-exception">
+              <dt>Unavailable items</dt>
+              <dd>{formatCount(displayProgress.skippedEntries)}</dd>
+            </div>
+          {/if}
         </dl>
 
         {#if displayProgress.largestItems.length > 0}
           <section class="partial-results" aria-label="Largest files observed so far">
-            <h2>Largest files found</h2>
+            <h2>Largest so far</h2>
             <ol>
               {#each displayProgress.largestItems.slice(0, 4) as item (item.id)}
                 <li>
@@ -1142,8 +1146,6 @@
             <span>Looking for files…</span>
           </div>
         {/if}
-
-        <p class="scan-footnote">Nothing leaves this device.</p>
       </section>
     </main>
   {:else if result && view}

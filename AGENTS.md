@@ -34,6 +34,11 @@ render coordinated radial and list views in Svelte. macOS uses an initial
 falls back to `jwalk` when its native API is unavailable or unsuitable; Windows
 subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
+The active-scan view is deliberately unframed: space found and the current path
+lead, followed by a compact facts row and the largest files observed so far.
+Keep Stop immediately available and unavailable-item counts visible, but do not
+restore a dashboard card, metric-tile grid, repeated privacy slogan, or backend
+vocabulary to this state.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or
