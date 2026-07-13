@@ -564,7 +564,7 @@ scanner module graph.
 The current tree was revalidated on that native Linux host after its compiler
 was updated to Rust 1.97.0 on 2026-07-13. Dependency-light formatting, check,
 warning-denied Clippy, and 61 library/example tests passed; Svelte diagnostics
-were clean and all 34 frontend tests passed under Bun 1.2.21. On a fresh
+were clean and all 35 frontend tests passed under Bun 1.2.21. On a fresh
 4,099-file ext4 fixture, `jwalk` and `statx` matched all accounting fields,
 including one deduplicated hard link and a directory symlink that was not
 followed. Three `statx` cancellations returned in 70–155 us, and the new
