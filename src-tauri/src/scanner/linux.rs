@@ -318,6 +318,10 @@ fn spawn_worker<'scope, 'env: 'scope>(
     cancel: &'scope AtomicBool,
 ) {
     scope.spawn(move || {
+        // RawDir only borrows this buffer while a directory is being read, so
+        // one allocation can serve every task handled by this worker. Keeping
+        // it outside the loop avoids a 64 KiB allocate/free pair per directory.
+        let mut directory_buffer = vec![MaybeUninit::<u8>::uninit(); DIRECTORY_BUFFER_SIZE];
         loop {
             if abort.load(Ordering::Relaxed) || cancel.load(Ordering::Relaxed) {
                 break;
@@ -327,7 +331,7 @@ fn spawn_worker<'scope, 'env: 'scope>(
                 Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => break,
             };
-            process_directory(task, cancel, &result_sender);
+            process_directory(task, cancel, &result_sender, &mut directory_buffer);
         }
     });
 }
@@ -336,6 +340,7 @@ fn process_directory(
     task: DirectoryTask,
     cancel: &AtomicBool,
     result_sender: &channel::Sender<WorkerMessage>,
+    directory_buffer: &mut [MaybeUninit<u8>],
 ) {
     let DirectoryTask {
         source,
@@ -355,8 +360,7 @@ fn process_directory(
             return;
         }
     };
-    let mut buffer = vec![MaybeUninit::<u8>::uninit(); DIRECTORY_BUFFER_SIZE];
-    let mut directory = RawDir::new(directory_fd.as_ref(), &mut buffer);
+    let mut directory = RawDir::new(directory_fd.as_ref(), directory_buffer);
     let mut entries = Vec::with_capacity(RESULT_BATCH_SIZE);
 
     while let Some(entry) = directory.next() {

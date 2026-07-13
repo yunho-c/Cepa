@@ -1,0 +1,16 @@
+backend,variant,iteration,peak_rss_kib
+statx,baseline,1,82904
+statx,reuse,1,83596
+jwalk,baseline,1,205172
+statx,baseline,2,83736
+statx,reuse,2,83924
+jwalk,baseline,2,195748
+statx,baseline,3,83472
+statx,reuse,3,83780
+jwalk,baseline,3,202416
+statx,baseline,4,84488
+statx,reuse,4,84760
+jwalk,baseline,4,192788
+statx,baseline,5,84576
+statx,reuse,5,85284
+jwalk,baseline,5,194680

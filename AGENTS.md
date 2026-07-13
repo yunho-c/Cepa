@@ -167,8 +167,12 @@ The intended scanning architecture is:
   do not claim a Linux speedup. It remains the automatic backend because current
   measurements show materially lower peak RSS and tighter cancellation tails.
   Measured queue tuning and lazy path/name construction improved both canonical
-  warm fixtures without weakening the existing bounds. Broader filesystem and
-  hardware coverage, cold-cache measurements, and scheduler redesign remain.
+  warm fixtures without weakening the existing bounds. Each worker also retains
+  one reusable 64 KiB directory buffer instead of allocating one per directory;
+  this improved a 396,033-entry mixed real tree while leaving both canonical
+  shapes effectively flat. The eight-worker cap bounds those buffers to 512 KiB.
+  Broader filesystem and hardware coverage, cold-cache measurements, and
+  scheduler redesign remain.
 
 Keep roadmap items described as planned until the code and validation exist.
 Do not present compilation, UI wiring, or a mocked scan as proof of real

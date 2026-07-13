@@ -448,6 +448,64 @@ It regressed median traversal by 2.9% and 5.9%, so the production bound remains
 RSS, and cancellation are preserved in
 [`performance-results/2026-07-12-linux-lazy-paths.csv`](performance-results/2026-07-12-linux-lazy-paths.csv).
 
+#### Worker-local directory buffers and a representative mixed tree
+
+The earlier real-tree sample contained only 3,133 entries. A broader read-only
+run used the same ext4/i9-13900K workstation and Rust 1.97.0 against a quiescent
+development workspace containing 353,405 files and 42,628 directories. The
+396,033 retained entries included 41,865 duplicate hard links and occupied
+approximately 72.8 GiB on disk. `jwalk` and `statx` agreed exactly on file and
+directory counts, logical and allocated bytes, duplicate links, skipped entries,
+skipped filesystems, and accounting flags.
+
+One avoidable allocation remained in the native path: every directory task
+allocated and released a fresh 64 KiB `getdents64` buffer. `RawDir` only borrows
+the buffer while that task is being read, so each worker now allocates one buffer
+before its task loop and reuses it for every directory. The existing eight-worker
+cap bounds these buffers to 512 KiB regardless of tree size.
+
+Fifteen interleaved A/B rounds on each canonical fixture and 31 on the mixed
+workspace produced these medians:
+
+| Workload | Metric | Per-directory allocation | Worker-local reuse | Change |
+| --- | --- | ---: | ---: | ---: |
+| Directory-rich | Wall time | 43.45 ms | 43.25 ms | -0.5% |
+| Directory-rich | Traversal | 42.02 ms | 42.46 ms | +1.1% |
+| Wide | Wall time | 19.35 ms | 19.44 ms | +0.4% |
+| Wide | Traversal | 17.80 ms | 18.12 ms | +1.8% |
+| Mixed workspace | Wall time | 164.87 ms | 154.78 ms | -6.1% |
+| Mixed workspace | Traversal | 161.77 ms | 151.38 ms | -6.4% |
+
+The canonical changes are inside the run-to-run variation and are not claimed as
+speedups. The mixed workload has 42,628 directories and showed the expected
+benefit from avoiding repeated buffer allocation. Five paired process runs put
+median native peak RSS at 83,736 KiB before and 83,924 KiB after, a 188 KiB
+increase (+0.2%). These are process-level observations; the worker buffers
+themselves remain fixed by the existing concurrency cap.
+
+Twenty-one cancellation runs per variant and workload remained bounded. The
+selected implementation had a 118 us median and 218 us maximum on the
+directory-rich fixture, and a 152 us median and 219 us maximum on the mixed
+workspace. Post-change parity passed again for both canonical fixtures and the
+mixed tree. Native formatting, check, strict Clippy, and all 56 dependency-light
+tests also passed on the Rust 1.97.0 Linux host.
+
+For backend context, separate nine-run sequential measurements put the current
+native mixed-workspace median at 140.31 ms versus 114.07 ms for `jwalk`; native
+is still 23.0% slower and no throughput advantage is claimed. Five warmed
+process observations put median peak RSS at 83,924 KiB for native versus
+195,748 KiB for `jwalk`, 57.1% lower. This larger real workload therefore
+supports the existing automatic-backend tradeoff: bounded memory and tight
+cancellation remain the reason for selecting `statx`, not warm traversal speed.
+
+Raw scan, cancellation, memory, and parity observations are preserved in
+[`performance-results/2026-07-13-linux-directory-buffer-reuse.csv`](performance-results/2026-07-13-linux-directory-buffer-reuse.csv),
+[`performance-results/2026-07-13-linux-directory-buffer-cancellation.csv`](performance-results/2026-07-13-linux-directory-buffer-cancellation.csv),
+[`performance-results/2026-07-13-linux-real-workspace.csv`](performance-results/2026-07-13-linux-real-workspace.csv),
+[`performance-results/2026-07-13-linux-real-workspace-memory.csv`](performance-results/2026-07-13-linux-real-workspace-memory.csv),
+and
+[`performance-results/2026-07-13-linux-real-workspace-parity.csv`](performance-results/2026-07-13-linux-real-workspace-parity.csv).
+
 ### 2026-07-12 scan-time revision retention
 
 Compression planning now retains a 32-byte file identity/revision field in each

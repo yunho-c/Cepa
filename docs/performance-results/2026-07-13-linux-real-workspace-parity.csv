@@ -1,0 +1,4 @@
+workload,matched,files,directories,logical_bytes,allocated_bytes,duplicate_hard_links,skipped_entries,skipped_filesystems
+"directory-rich",true,100001,10100,181,4096,0,0,0
+"wide",true,100001,101,179,4096,0,0,0
+"real",true,353405,42628,77365287690,78169411584,41865,0,0
