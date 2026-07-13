@@ -12,6 +12,7 @@
     FolderOpen,
     FolderSearch,
     Link2,
+    RefreshCw,
     Search,
     ScanSearch,
     X,
@@ -44,6 +45,10 @@
     type SizeMetric,
   } from "$lib/scanner";
   import { createSunburst } from "$lib/sunburst";
+  import {
+    desktopCommandForKeydown,
+    primaryModifierForPlatform,
+  } from "$lib/shortcuts";
 
   type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
 
@@ -73,6 +78,7 @@
   let estimateRequestSequence = 0;
   let estimateActionButton: HTMLButtonElement | null = $state(null);
   let estimateCancelButton: HTMLButtonElement | null = $state(null);
+  let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
@@ -88,6 +94,10 @@
   let searchSequence = 0;
   let activeSearchRequestId: number | null = null;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const primaryModifier = primaryModifierForPlatform(navigator.platform);
+  const primaryShortcutLabel = primaryModifier === "meta" ? "⌘" : "Ctrl+";
+  const backShortcutLabel = primaryModifier === "meta" ? "⌥←" : "Alt+←";
 
   const isBusy = $derived(status === "scanning" || status === "cancelling");
   const displayProgress = $derived(
@@ -284,6 +294,14 @@
     inspectedEntry = null;
     compressionState = null;
     isInspectingCompression = false;
+    inspectionReturnTarget = null;
+  }
+
+  async function closeInspection() {
+    const returnTarget = inspectionReturnTarget;
+    clearInspection();
+    await tick();
+    if (returnTarget?.isConnected) returnTarget.focus();
   }
 
   async function inspectEntry(entry: ChartItem | ScanItem) {
@@ -476,6 +494,44 @@
     }
   }
 
+  function handleDesktopKeydown(event: KeyboardEvent) {
+    const command = desktopCommandForKeydown(event, {
+      primaryModifier,
+      canChooseDirectory: !isBusy,
+      canRescan: status === "complete",
+      canSearch: status === "complete" && view !== null && !isNavigating,
+      canNavigateUp:
+        status === "complete" && parentId !== null && !isNavigating,
+      searchOpen,
+      detailsOpen: inspectedEntry !== null,
+    });
+    if (command === null) return;
+
+    event.preventDefault();
+    switch (command) {
+      case "chooseDirectory":
+        void chooseDirectory();
+        break;
+      case "rescan":
+        void startScan();
+        break;
+      case "search":
+        void openDirectorySearch();
+        break;
+      case "navigateUp":
+        void openDirectory(parentId);
+        break;
+      case "closeSearch":
+        void closeDirectorySearch();
+        break;
+      case "closeDetails":
+        void closeInspection();
+        break;
+      case "suppress":
+        break;
+    }
+  }
+
   function scheduleDirectorySearch() {
     invalidateDirectorySearch();
     const query = searchQuery.trim();
@@ -601,11 +657,15 @@
     }
   }
 
-  function activateEntry(entry: ChartItem | ScanItem) {
+  function activateEntry(
+    entry: ChartItem | ScanItem,
+    trigger?: HTMLElement | SVGGElement,
+  ) {
     if (entry.kind === "directory") {
       void openDirectory(entry.id);
     } else {
       selectedEntry = entry;
+      inspectionReturnTarget = trigger ?? null;
       void inspectEntry(entry);
     }
   }
@@ -613,10 +673,12 @@
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      activateEntry(entry);
+      activateEntry(entry, event.currentTarget as SVGGElement);
     }
   }
 </script>
+
+<svelte:window onkeydown={handleDesktopKeydown} />
 
 <svelte:head>
   <title>Cepa — Disk space, clearly</title>
@@ -636,10 +698,24 @@
     </button>
 
     {#if status === "complete"}
-      <Button variant="outline" size="sm" onclick={chooseDirectory}>
-        <FolderOpen data-icon="inline-start" />
-        Choose folder
-      </Button>
+      <div class="header-actions">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Scan again"
+          title={`Scan again (${primaryShortcutLabel}R)`}
+          onclick={() => startScan()}
+        ><RefreshCw /></Button>
+        <Button
+          variant="outline"
+          size="sm"
+          title={`Choose folder (${primaryShortcutLabel}O)`}
+          onclick={chooseDirectory}
+        >
+          <FolderOpen data-icon="inline-start" />
+          Choose folder
+        </Button>
+      </div>
     {/if}
   </header>
 
@@ -654,7 +730,12 @@
         </p>
 
         <div class="scan-entry">
-          <Button class="choose-button" size="lg" onclick={chooseDirectory}>
+          <Button
+            class="choose-button"
+            size="lg"
+            title={`Choose folder (${primaryShortcutLabel}O)`}
+            onclick={chooseDirectory}
+          >
             <FolderOpen data-icon="inline-start" />
             Choose folder…
           </Button>
@@ -865,6 +946,7 @@
               variant="ghost"
               size="sm"
               disabled={isNavigating}
+              title={`Up (${backShortcutLabel})`}
               onclick={() => openDirectory(parentId)}
             >
               <ArrowLeft data-icon="inline-start" /> Up
@@ -884,7 +966,7 @@
                       onfocus={() => (selectedEntry = segment.item)}
                       onmouseleave={() => (selectedEntry = null)}
                       onblur={() => (selectedEntry = null)}
-                      onclick={() => activateEntry(segment.item)}
+                      onclick={(event) => activateEntry(segment.item, event.currentTarget)}
                       onkeydown={(event) => handleSegmentKeydown(event, segment.item)}
                     >
                       <path
@@ -956,7 +1038,7 @@
                   bind:ref={searchToggleButton}
                   disabled={isNavigating}
                   aria-label="Search this folder"
-                  title="Search this folder"
+                  title={`Search this folder (${primaryShortcutLabel}F)`}
                   onclick={openDirectorySearch}
                 ><Search /></Button>
               {/if}
@@ -979,8 +1061,8 @@
                   variant="ghost"
                   size="icon-xs"
                   aria-label="Close item details"
-                  title="Close"
-                  onclick={clearInspection}
+                  title="Close (Esc)"
+                  onclick={closeInspection}
                 ><X /></Button>
               </header>
               <div class="inspection-state">
@@ -1088,7 +1170,7 @@
                     type="button"
                     class="storage-item"
                     disabled={isNavigating}
-                    onclick={() => activateEntry(item)}
+                    onclick={(event) => activateEntry(item, event.currentTarget)}
                     onmouseenter={() => (selectedEntry = item)}
                     onfocus={() => (selectedEntry = item)}
                     onmouseleave={() => (selectedEntry = null)}

@@ -41,6 +41,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+- In-place rescanning and platform-native desktop shortcuts for opening a folder,
+  searching, moving to the parent folder, and dismissing transient details
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   and completed states, with backend/accounting semantics available under a
   compact scan-details disclosure
@@ -108,6 +110,26 @@ http://localhost:1420/?mock=reveal-error
 
 These mocks are removed from production builds.
 
+## Desktop commands
+
+Keyboard commands follow the host platform and only run when the current app
+state supports them. Modified variants such as Command-Shift-R remain available
+to the host webview instead of being intercepted. Reserved commands that are
+temporarily unavailable are consumed as no-ops so they cannot reload the webview
+or open its built-in find surface.
+
+| Action | macOS | Windows and Linux |
+| --- | --- | --- |
+| Choose a folder | Command-O | Ctrl-O |
+| Scan the current root again | Command-R | Ctrl-R |
+| Search the current folder | Command-F | Ctrl-F |
+| Move to the parent folder | Option-Left | Alt-Left |
+| Close search, then item details | Escape | Escape |
+
+Closing search or item details restores focus to the control that opened it.
+Rescanning clears snapshot-bound state and returns focus to the completed scan
+heading when the replacement scan finishes.
+
 Run `just` to list every available recipe.
 
 ## Performance work
@@ -151,7 +173,7 @@ just build
 `just check` runs Svelte diagnostics, frontend unit tests, Rust formatting
 checks, `cargo check`, strict Clippy across all Rust targets, and the Rust tests.
 Frontend coverage includes formatting, backend labels, cancellation detection,
-entry semantics, and sunburst geometry.
+entry semantics, desktop command conflict rules, and sunburst geometry.
 The scanner tests use real temporary filesystem fixtures for aggregation,
 cancellation, invalid roots, nested directory views, and hard-link accounting,
 plus symlink and result-bound behavior.

@@ -50,6 +50,10 @@ Completed directory views also support debounced, current-folder name search.
 Rust matches every direct child before retaining the metric-ranked top 500, so
 items below the ordinary list cutoff remain discoverable without expanding IPC
 or rendering bounds. Search is scan-authorized and never accepts a path.
+Completed scans can be rerun against the same root without reopening the folder
+picker. Platform-aware desktop commands live in `src/lib/shortcuts.ts`; keep
+their availability state-driven, preserve IME and modified-key behavior, and
+restore focus when Escape dismisses search or item details.
 After completion, the UI requests a volume compression capability using the
 retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
 and always reports that no writer exists. Do not accept a frontend path for this
@@ -189,6 +193,8 @@ Start with these files:
 - `src/lib/scanner.ts`: frontend scan protocol types and formatters.
 - `src/lib/dev-mock.ts`: development-only Tauri workflow scenarios loaded by
   the `?mock=` query parameter.
+- `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
+  shortcut conflict rules.
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.

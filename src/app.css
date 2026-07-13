@@ -111,6 +111,8 @@ body {
   backdrop-filter: blur(20px) saturate(1.2);
 }
 
+.header-actions { display: flex; align-items: center; gap: 5px; }
+
 .wordmark {
   padding: 4px;
   border: 0;
