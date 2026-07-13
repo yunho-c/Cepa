@@ -1074,6 +1074,10 @@
     }
   }
 
+  function previewEntry(entry: ChartItem | ScanItem) {
+    if (selectedEntry?.id !== entry.id) selectedEntry = entry;
+  }
+
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -1467,7 +1471,7 @@
                       tabindex={chartFocusId === segment.item.id ? 0 : -1}
                       data-chart-node-id={segment.item.id}
                       aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}
-                      onmouseenter={() => (selectedEntry = segment.item)}
+                      onpointermove={() => previewEntry(segment.item)}
                       onfocus={() => {
                         chartFocusId = segment.item.id;
                         selectedEntry = segment.item;
@@ -1707,7 +1711,7 @@
                     data-list-open-id={item.id}
                     disabled={isResultBusy}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
-                    onmouseenter={() => (selectedEntry = item)}
+                    onpointermove={() => previewEntry(item)}
                     onfocus={() => {
                       listFocusId = item.id;
                       selectedEntry = item;

@@ -91,6 +91,11 @@ descendants. Its real segments use one roving Tab stop: arrow keys move and wrap
 Home and End jump to the bounds, and Enter or Space activates the focused item.
 Aggregate segments remain non-interactive. Keep the concise screen-reader
 instruction associated with the group when changing chart interaction.
+Pointer previews begin on actual pointer movement, not merely because a scan or
+directory transition rendered a segment or row beneath a stationary cursor.
+This keeps a newly completed view anchored on its current directory until the
+user deliberately explores it. Keyboard focus must continue to preview its item
+immediately.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin

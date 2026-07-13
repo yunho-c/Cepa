@@ -67,6 +67,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Roving directory-list focus that keeps at most the current row's primary and
   Reveal controls in the Tab order, with Up/Down and Home/End movement across
   all retained rows
+- Deliberate pointer previews that keep newly rendered scan and directory views
+  anchored on the current folder until the pointer actually moves over a chart
+  segment or list row
 - A coordinated map-and-list explorer that remains side by side in the default
   880 by 620 window and throughout the supported desktop range down to the
   configured 620 by 480 minimum
