@@ -161,6 +161,12 @@ retained scan/node boundary. macOS and Windows report existing-data metadata;
 Btrfs reports future-write inode policy because those flags do not prove that
 existing extents are compressed. The inspector opens or stats paths without
 following links. Inspection alone does not create a mutation plan.
+The Linux-only ignored Btrfs fixture verifies the real `statfs` and
+`FS_IOC_GETFLAGS` paths for enabled, disabled, and inherited policy through both
+path and retained-handle inspection, plus link replacement. Run
+`just validate-btrfs-compression /mounted/btrfs/path`; the runner creates and
+removes a uniquely named child fixture. This is metadata-inspection evidence,
+not proof of existing compressed extents, estimator accuracy, or mutation.
 Savings estimation begins only from an explicit file action. It reads at most
 three aligned 256 KiB ranges, is cancellable, rejects changed sizes and links, and
 returns lower/upper savings bounds with confidence and algorithm fidelity. Windows

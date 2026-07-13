@@ -258,9 +258,28 @@ macOS queries `ATTR_VOL_CAPABILITIES` and reads `UF_COMPRESSED`; Windows queries
 `statfs` and reads `FS_IOC_GETFLAGS`. Btrfs results are explicitly scoped to
 future writes because its inode flags do not prove existing extent state. The
 macOS probes have been exercised against real uncompressed and `ditto`-compressed
-APFS files plus a symlink-replacement fixture. Windows and Linux modules pass
-target-specific compile checks and native regular-file harnesses, but a real
-Btrfs runtime fixture remains an external evidence gate.
+APFS files plus a symlink-replacement fixture. Windows passes target-specific
+compile checks and a native regular-file harness.
+
+The Linux probe and inspector also pass a real Btrfs runtime fixture. On
+2026-07-13, Rust 1.97.0 code ran against a 512 MiB loopback Btrfs filesystem on
+kernel 6.8.0-124 with btrfs-progs 6.6.3. The repo-native fixture verified the
+`inspectOnly` volume capability, all advertised algorithms, an always-false
+writer flag, and both path and retained-handle inspection of explicit enabled,
+explicit disabled, and inherited future-write policies. It also verified that
+a replacement symlink is not followed and that inspection does not change file
+contents. The test remains ignored in the ordinary cross-filesystem suite; on a
+writable mounted Btrfs directory, run:
+
+```sh
+just validate-btrfs-compression /mnt/btrfs
+```
+
+The runner creates and removes a uniquely named child fixture. Raw output is
+preserved in
+[`validation-results/2026-07-13-linux-btrfs-compression.txt`](validation-results/2026-07-13-linux-btrfs-compression.txt).
+This closes the Step 1 Btrfs runtime gate only; it does not identify compressed
+extents, measure estimator accuracy, or authorize mutation.
 
 Every platform reports `writerAvailable: false`. Inspection does not estimate
 savings or infer state from logical and allocated bytes. Estimation is a separate
@@ -318,8 +337,8 @@ UI. Deterministic tests cover sampling bounds, full small-file coverage,
 compressible versus pseudo-random data, sparse-file conservatism, wire semantics,
 and cancellation ownership. macOS runs the real proxy codec locally; the Windows
 module and Linux platform code pass native isolated harnesses. Native estimator
-accuracy on Btrfs and Btrfs runtime fixtures remain CI or external evidence
-gates.
+accuracy on Btrfs remains a CI or external evidence gate; the Step 1 runtime
+fixture above validates metadata inspection, not estimator fidelity.
 
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.

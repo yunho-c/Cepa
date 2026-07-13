@@ -51,6 +51,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   Windows, and Linux, with unsupported and unavailable states kept explicit
 - Selection-driven, no-follow compression-state inspection for regular files:
   current decmpfs/NTFS data state and clearly separated Btrfs future-write policy
+- A repo-native real-Btrfs fixture covering volume capability, explicit enabled
+  and disabled inode policy, inherited policy, retained handles, and link
+  replacement
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
 - Request-owned estimate cancellation so a late stop error cannot replace a
@@ -193,6 +196,17 @@ platform file manager to validate the native window event. During frontend
 development, `?appearance=dark` or `?appearance=light` fixes the preview
 appearance without adding a production preference; production follows the
 operating system and updates live.
+
+On Linux, the ignored Btrfs metadata fixture can be run against any writable
+directory on a mounted Btrfs filesystem. It creates and removes one isolated
+child directory and requires `btrfs-progs`:
+
+```sh
+just validate-btrfs-compression /mnt/btrfs
+```
+
+This validates capability and future-write inode-policy inspection only. It
+does not prove existing extents are compressed or exercise a writer.
 
 ## Desktop commands
 

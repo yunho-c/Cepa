@@ -426,7 +426,7 @@ mod platform {
             CompressionCapability::inspect_only(
                 "btrfs",
                 ["zlib", "lzo", "zstd"],
-                "Btrfs supports transparent compression. Cepa can only report the volume capability; per-file inspection and compression changes are not implemented.",
+                "Btrfs supports transparent compression. Cepa can inspect future-write inode policy but does not modify it.",
             )
         } else {
             CompressionCapability::unsupported(
@@ -847,6 +847,59 @@ mod tests {
         assert_eq!(inspected.state, CompressionStateKind::Compressed);
         assert_eq!(inspected.scope, CompressionStateScope::ExistingData);
         assert_eq!(inspected.format.as_deref(), Some("decmpfs"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires CEPA_BTRFS_FIXTURE_ROOT on a mounted Btrfs filesystem"]
+    fn reads_btrfs_capability_and_future_write_policies() {
+        use super::inspect_open_file;
+
+        let root = std::env::var_os("CEPA_BTRFS_FIXTURE_ROOT")
+            .map(std::path::PathBuf::from)
+            .expect("CEPA_BTRFS_FIXTURE_ROOT must name the prepared fixture directory");
+        let capability = probe(&root);
+
+        assert_eq!(capability.status, CompressionCapabilityStatus::InspectOnly);
+        assert_eq!(capability.filesystem, "btrfs");
+        assert!(capability.volume_supports_transparent_compression);
+        assert!(!capability.writer_available);
+        assert_eq!(capability.algorithms, ["zlib", "lzo", "zstd"]);
+
+        for (name, expected) in [
+            ("enabled.bin", CompressionStateKind::Enabled),
+            ("disabled.bin", CompressionStateKind::Disabled),
+            ("inherited.bin", CompressionStateKind::Inherited),
+        ] {
+            let path = root.join(name);
+            let contents = std::fs::read(&path).expect("read fixture contents before inspection");
+
+            let path_state = inspect(&path, EntryKind::File);
+            assert_eq!(path_state.state, expected, "path inspection for {name}");
+            assert_eq!(path_state.scope, CompressionStateScope::FutureWrites);
+            assert!(path_state.format.is_none());
+
+            let file = std::fs::File::open(&path).expect("open fixture through its stable path");
+            let handle_state = inspect_open_file(&file, EntryKind::File);
+            assert_eq!(
+                handle_state.state, expected,
+                "retained-handle inspection for {name}"
+            );
+            assert_eq!(handle_state.scope, CompressionStateScope::FutureWrites);
+            assert_eq!(
+                std::fs::read(&path).expect("read fixture contents after inspection"),
+                contents,
+                "inspection must not modify {name}"
+            );
+
+            println!("{name}: {expected:?} / FutureWrites");
+        }
+
+        let replacement = root.join("replacement-link.bin");
+        let state = inspect(&replacement, EntryKind::File);
+        assert_eq!(state.state, CompressionStateKind::Unavailable);
+        assert_eq!(state.scope, CompressionStateScope::None);
+        println!("replacement-link.bin: Unavailable / None");
     }
 
     #[cfg(unix)]

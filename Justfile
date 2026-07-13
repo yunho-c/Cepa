@@ -28,6 +28,10 @@ native-check: rust-fmt
     cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features -- -D warnings
     cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
 
+# Validate the Linux compression inspector against a real mounted Btrfs filesystem.
+validate-btrfs-compression path:
+    bash scripts/validate-btrfs-compression.sh "{{ path }}"
+
 # Launch two short native sessions and verify window geometry restoration.
 window-state-smoke:
     cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- seed
