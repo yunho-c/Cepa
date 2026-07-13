@@ -156,6 +156,11 @@ and can revalidate that immutable plan. A new scan or newer plan invalidates the
 old plan. For regular files, the scanner retains a compact exact identity plus
 modification/change revision when the backend can provide it, and preparation
 rejects unavailable or mismatched scan-time revisions before producing a plan.
+Unix snapshots hoist their enforced single filesystem ID once and store a
+24-byte compact revision per eligible node; Windows retains the full 32-byte
+revision. `scan_benchmark` schema 6 reports capacity-aware retained snapshot
+payload and bytes per entry, excluding allocator bookkeeping and the separate
+initial response view. Keep those evidence boundaries distinct from peak RSS.
 This metadata is not a content fingerprint: same-clock-tick inode reuse or data
 rewrites may remain indistinguishable. Do not add an apply command or expose a
 dead-end plan UI until a held-handle/content-integrity design closes that gate.

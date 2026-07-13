@@ -66,6 +66,12 @@ impl BenchmarkScan {
         self.initial_view.total_items
     }
 
+    /// Retained snapshot payload capacity, excluding allocator bookkeeping and
+    /// the separately materialized initial response view.
+    pub fn snapshot_retained_bytes(&self) -> usize {
+        self.snapshot.retained_payload_bytes()
+    }
+
     pub fn search_root(
         &self,
         query: &str,

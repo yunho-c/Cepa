@@ -23,6 +23,16 @@ pub(crate) struct ScannedFileRevision {
     changed: u64,
 }
 
+/// Unix scans enforce a single filesystem boundary, so the filesystem ID can
+/// live once on the retained snapshot instead of being repeated in every node.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactScannedFileRevision {
+    file_id: NonZeroU64,
+    modified: u64,
+    changed: u64,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct FileSnapshot {
     pub scanned: ScannedFileRevision,
@@ -68,13 +78,55 @@ impl ScannedFileRevision {
         use std::os::unix::fs::MetadataExt;
 
         Self::from_unix_parts(
-            metadata.dev(),
+            unix_revision_filesystem_id(metadata),
             metadata.ino(),
             metadata.mtime(),
             metadata.mtime_nsec(),
             metadata.ctime(),
             metadata.ctime_nsec(),
         )
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn compact(self) -> (u64, CompactScannedFileRevision) {
+        (
+            self.filesystem_id,
+            CompactScannedFileRevision {
+                file_id: self.file_id,
+                modified: self.modified,
+                changed: self.changed,
+            },
+        )
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unix_revision_filesystem_id(metadata: &std::fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+
+    // statx exposes device major and minor separately. Keep revisions created
+    // from std metadata in that same canonical representation so a retained
+    // native-scan identity can be compared exactly with a later no-follow
+    // snapshot.
+    (u64::from(libc::major(metadata.dev())) << 32) | u64::from(libc::minor(metadata.dev()))
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn unix_revision_filesystem_id(metadata: &std::fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+
+    metadata.dev()
+}
+
+#[cfg(unix)]
+impl CompactScannedFileRevision {
+    pub(crate) fn expand(self, filesystem_id: u64) -> ScannedFileRevision {
+        ScannedFileRevision {
+            filesystem_id,
+            file_id: self.file_id,
+            modified: self.modified,
+            changed: self.changed,
+        }
     }
 }
 
@@ -230,6 +282,19 @@ mod tests {
     fn optional_revision_stays_compact() {
         assert_eq!(size_of::<ScannedFileRevision>(), 32);
         assert_eq!(size_of::<Option<ScannedFileRevision>>(), 32);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retained_unix_revision_hoists_the_filesystem_identity() {
+        let revision =
+            ScannedFileRevision::from_raw_parts(41, 7, 11, 13).expect("build scanner revision");
+        let (filesystem_id, compact) = revision.compact();
+
+        assert_eq!(size_of::<CompactScannedFileRevision>(), 24);
+        assert_eq!(size_of::<Option<CompactScannedFileRevision>>(), 24);
+        assert_eq!(filesystem_id, 41);
+        assert_eq!(compact.expand(filesystem_id), revision);
     }
 
     #[cfg(unix)]

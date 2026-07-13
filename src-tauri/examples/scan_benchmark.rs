@@ -60,6 +60,8 @@ struct RunMeasurement {
     initial_response_serialization_us: u64,
     initial_list_items: usize,
     initial_chart_items: usize,
+    snapshot_retained_bytes: usize,
+    snapshot_bytes_per_entry: f64,
     entries_per_second: f64,
 }
 
@@ -79,6 +81,8 @@ struct Summary {
     median_initial_response_bytes: f64,
     median_initial_response_serialization_us: f64,
     median_initial_chart_items: f64,
+    median_snapshot_retained_bytes: f64,
+    median_snapshot_bytes_per_entry: f64,
 }
 
 fn main() {
@@ -117,6 +121,12 @@ fn run() -> Result<(), String> {
         }
 
         let entries = result.file_count.saturating_add(result.directory_count);
+        let snapshot_retained_bytes = scan.snapshot_retained_bytes();
+        let snapshot_bytes_per_entry = if entries == 0 {
+            0.0
+        } else {
+            snapshot_retained_bytes as f64 / entries as f64
+        };
         let entries_per_second = if wall.is_zero() {
             0.0
         } else {
@@ -140,12 +150,14 @@ fn run() -> Result<(), String> {
             initial_response_serialization_us: initial_response.serialization_us,
             initial_list_items: initial_response.list_items,
             initial_chart_items: initial_response.chart_items,
+            snapshot_retained_bytes,
+            snapshot_bytes_per_entry,
             entries_per_second,
         });
     }
 
     let report = BenchmarkReport {
-        schema_version: 5,
+        schema_version: 6,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -276,6 +288,12 @@ fn summarize(runs: &[RunMeasurement]) -> Summary {
                 .map(|run| run.initial_response_serialization_us as f64),
         ),
         median_initial_chart_items: median(runs.iter().map(|run| run.initial_chart_items as f64)),
+        median_snapshot_retained_bytes: median(
+            runs.iter().map(|run| run.snapshot_retained_bytes as f64),
+        ),
+        median_snapshot_bytes_per_entry: median(
+            runs.iter().map(|run| run.snapshot_bytes_per_entry),
+        ),
     }
 }
 

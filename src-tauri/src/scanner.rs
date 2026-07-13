@@ -12,7 +12,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use crate::file_revision::CompactScannedFileRevision;
 use crate::file_revision::ScannedFileRevision;
+
+#[cfg(unix)]
+type RetainedScanRevision = CompactScannedFileRevision;
+#[cfg(not(unix))]
+type RetainedScanRevision = ScannedFileRevision;
 
 #[cfg(target_os = "linux")]
 #[path = "scanner/linux.rs"]
@@ -243,6 +250,8 @@ pub(crate) struct ScanSnapshot {
     root_path: Arc<Path>,
     nodes: Vec<InternalNode>,
     allocated_size_is_estimate: bool,
+    #[cfg(unix)]
+    revision_filesystem_id: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -287,6 +296,8 @@ struct ScanCounters {
     observed_logical_bytes: u64,
     observed_allocated_bytes: u64,
     hard_link_owners: HashMap<FileIdentity, HardLinkOwner>,
+    #[cfg(unix)]
+    revision_filesystem_id: Option<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -319,7 +330,7 @@ struct InternalNode {
     allocated_bytes: u64,
     file_count: u64,
     directory_count: u64,
-    scan_revision: Option<ScannedFileRevision>,
+    scan_revision: Option<RetainedScanRevision>,
 }
 
 impl InternalNode {
@@ -343,6 +354,28 @@ impl InternalNode {
 }
 
 impl ScanCounters {
+    fn retain_scan_revision(
+        &mut self,
+        revision: Option<ScannedFileRevision>,
+    ) -> Option<RetainedScanRevision> {
+        #[cfg(unix)]
+        {
+            let (filesystem_id, compact) = revision?.compact();
+            match self.revision_filesystem_id {
+                Some(retained_id) if retained_id != filesystem_id => None,
+                Some(_) => Some(compact),
+                None => {
+                    self.revision_filesystem_id = Some(filesystem_id);
+                    Some(compact)
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            revision
+        }
+    }
+
     fn push_node(
         &mut self,
         nodes: &mut Vec<InternalNode>,
@@ -377,6 +410,7 @@ impl ScanCounters {
             .observed_allocated_bytes
             .saturating_add(allocated_bytes);
 
+        let scan_revision = self.retain_scan_revision(measured.scan_revision);
         let node_id = nodes.len();
         nodes[parent].children.push(node_id);
         nodes.push(InternalNode {
@@ -388,7 +422,7 @@ impl ScanCounters {
             allocated_bytes,
             file_count,
             directory_count,
-            scan_revision: measured.scan_revision,
+            scan_revision,
         });
 
         let mut replaced_owner = None;
@@ -897,6 +931,8 @@ where
         root_path: root_node_path,
         nodes,
         allocated_size_is_estimate: semantics.allocated_size_is_estimate,
+        #[cfg(unix)]
+        revision_filesystem_id: counters.revision_filesystem_id,
     };
 
     Ok(ScanOutput {
@@ -928,6 +964,27 @@ where
 }
 
 impl ScanSnapshot {
+    pub(crate) fn retained_payload_bytes(&self) -> usize {
+        let arc_header = 2_usize.saturating_mul(std::mem::size_of::<usize>());
+        let root_path = arc_header.saturating_add(std::mem::size_of_val(self.root_path.as_ref()));
+        let node_arena = self
+            .nodes
+            .capacity()
+            .saturating_mul(std::mem::size_of::<InternalNode>());
+        let node_allocations = self.nodes.iter().fold(0_usize, |total, node| {
+            total.saturating_add(node.name.capacity()).saturating_add(
+                node.children
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<NodeId>()),
+            )
+        });
+
+        std::mem::size_of::<Self>()
+            .saturating_add(root_path)
+            .saturating_add(node_arena)
+            .saturating_add(node_allocations)
+    }
+
     pub(crate) fn root_path(&self) -> PathBuf {
         self.root_path.to_path_buf()
     }
@@ -941,8 +998,19 @@ impl ScanSnapshot {
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
             allocated_size_is_estimate: self.allocated_size_is_estimate,
-            scan_revision: node.scan_revision,
+            scan_revision: self.scan_revision(node),
         })
+    }
+
+    fn scan_revision(&self, node: &InternalNode) -> Option<ScannedFileRevision> {
+        #[cfg(unix)]
+        {
+            Some(node.scan_revision?.expand(self.revision_filesystem_id?))
+        }
+        #[cfg(not(unix))]
+        {
+            node.scan_revision
+        }
     }
 
     pub(crate) fn directory_view(
@@ -1454,9 +1522,13 @@ mod tests {
     fn scans_and_aggregates_a_directory_tree() {
         let temp = tempfile::tempdir().expect("create fixture directory");
         let nested = temp.path().join("nested");
+        let root_file = temp.path().join("root.bin");
         fs::create_dir(&nested).expect("create nested directory");
-        fs::write(temp.path().join("root.bin"), vec![1_u8; 17]).expect("write root file");
+        fs::write(&root_file, vec![1_u8; 17]).expect("write root file");
         fs::write(nested.join("child.bin"), vec![2_u8; 31]).expect("write nested file");
+        let expected_revision = crate::file_revision::snapshot_no_follow(&root_file)
+            .expect("snapshot root file revision")
+            .scanned;
 
         let mut progress = Vec::new();
         let output = scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |update| {
@@ -1526,9 +1598,10 @@ mod tests {
             .snapshot
             .compression_target(file_id)
             .expect("build compression target");
-        assert!(
-            compression_target.scan_revision.is_some(),
-            "supported scanner backends must retain a planning revision"
+        assert_eq!(
+            compression_target.scan_revision,
+            Some(expected_revision),
+            "the retained revision must reconstruct the exact planning identity"
         );
         assert_eq!(
             output
@@ -1544,6 +1617,27 @@ mod tests {
                 .expect_err("unknown node IDs must fail"),
             "That item is not part of this scan."
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retained_revisions_refuse_a_second_filesystem_identity() {
+        let mut counters = ScanCounters::default();
+        let first = ScannedFileRevision::from_raw_parts(17, 3, 5, 7).expect("build first revision");
+        let other_filesystem =
+            ScannedFileRevision::from_raw_parts(19, 11, 13, 17).expect("build second revision");
+
+        let retained = counters
+            .retain_scan_revision(Some(first))
+            .expect("retain first filesystem revision");
+        assert_eq!(retained.expand(17), first);
+        assert!(
+            counters
+                .retain_scan_revision(Some(other_filesystem))
+                .is_none(),
+            "a compact revision must never inherit the wrong filesystem identity"
+        );
+        assert_eq!(counters.revision_filesystem_id, Some(17));
     }
 
     #[test]
@@ -2208,6 +2302,8 @@ mod tests {
             root_path: Arc::from(root_path),
             nodes,
             allocated_size_is_estimate: false,
+            #[cfg(unix)]
+            revision_filesystem_id: None,
         };
 
         let view = snapshot
@@ -2312,6 +2408,8 @@ mod tests {
             root_path: Arc::from(root_path),
             nodes,
             allocated_size_is_estimate: false,
+            #[cfg(unix)]
+            revision_filesystem_id: None,
         };
         let allocated = snapshot
             .directory_view_with_metric(1, 0, SizeMetric::Allocated)

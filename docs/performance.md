@@ -87,6 +87,11 @@ Each run measures:
   this excludes native IPC framing, transfer, and frontend parsing.
 - `initialListItems` and `initialChartItems`: the recursive wire-node counts that
   make response-size comparisons auditable.
+- `snapshotRetainedBytes`: capacity-aware payload bytes owned by the retained
+  snapshot, including the node arena, names, child-ID buffers, and root path but
+  excluding allocator bookkeeping and the separately materialized initial view.
+- `snapshotBytesPerEntry`: retained payload divided by the completed file and
+  directory count. Empty roots report zero.
 - `wallMs`: scanner plus initial view and small harness overhead.
 
 The benchmark deliberately retains the snapshot until after timing, matching
@@ -582,6 +587,43 @@ to 118.62 ms, so this sample likewise found no measurable regression. These are
 warm synthetic results, not evidence about cold-cache or antivirus-heavy
 systems. Summary samples are preserved in
 [`performance-results/2026-07-12-scan-revision-impact.csv`](performance-results/2026-07-12-scan-revision-impact.csv).
+
+### 2026-07-13 compact Unix scan revisions
+
+Unix backends enforce one filesystem boundary, so repeating the filesystem ID
+inside every retained revision was unnecessary. The snapshot now stores that ID
+once and retains a 24-byte file ID plus modification/change revision in each
+eligible node. Compression-target resolution reconstructs the original exact
+32-byte `ScannedFileRevision`; an unexpected second filesystem identity loses
+its revision instead of inheriting the wrong one. Windows keeps the full
+revision because its portable fallback does not expose the same cheap root
+filesystem identity.
+
+The benchmark schema advanced to version 6 and now measures retained snapshot
+payload directly. On a fresh 101,011-entry directory-rich APFS fixture, the
+capacity-aware retained payload fell from 20,376,415 to 19,327,855 bytes: a
+1,048,560-byte or 5.146% reduction, equal to 10.381 bytes per completed entry
+after arena capacity is included. Eleven alternating-order warm pairs measured
+29.98 ms baseline and 29.24 ms compact median wall time, so this run found no
+throughput regression.
+
+Peak process RSS did not mirror the retained-payload improvement: its median
+rose from 35,487,744 to 37,896,192 bytes (6.8%), while individual baseline runs
+ranged from 35.0 to 44.9 MB. RSS includes transient traversal allocations,
+threads, allocator behavior, and the harness, so this result does not support a
+peak-memory reduction claim. The optimization is retained for its directly
+measured post-scan payload reduction. Accounting fields were identical across
+the baseline and compact binaries. Raw paired values are preserved in
+[`performance-results/2026-07-13-macos-compact-revisions.csv`](performance-results/2026-07-13-macos-compact-revisions.csv).
+
+The current tree passed the full macOS frontend and Rust suite, a release Tauri
+build, and real `jwalk`/`getattrlistbulk` parity on the 101,011-entry fixture.
+Rust 1.97.0 Linux formatting, check, warning-denied Clippy, all 58 core tests,
+and every example test passed through the dependency-light path. That native
+run also verifies that `statx` major/minor device identity reconstructs the same
+revision as a later no-follow standard metadata snapshot. Windows passed the
+same exact-revision regression and a default-feature release build; its retained
+revision layout is unchanged.
 
 ### 2026-07-12 Windows NTFS MFT validation
 

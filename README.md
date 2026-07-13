@@ -106,9 +106,12 @@ but every preview is blocked because no writer exists. This dormant protocol has
 no UI action and does not authorize mutation. Planning now requires an exact
 retained scan-time identity/revision match, closing ordinary identical-size
 replacement and rewrite gaps; same-clock-tick metadata collisions and
-content-integrity/held-handle gating remain before an apply command can exist. The
-scan-details disclosure, selection inspector, and bounded estimator are likewise
-read-only and never infer compression state from allocated size.
+content-integrity/held-handle gating remain before an apply command can exist.
+The Unix snapshot hoists the shared filesystem identity out of each retained
+node; on one 101,011-entry APFS fixture this reduced measured retained payload
+by 5.15% without an observed throughput regression, though process peak RSS did
+not fall. The scan-details disclosure, selection inspector, and bounded estimator
+are likewise read-only and never infer compression state from allocated size.
 The safety and backend contract is specified in
 [`docs/compression.md`](docs/compression.md).
 
