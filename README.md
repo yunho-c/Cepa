@@ -47,6 +47,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+- A coordinated map-and-list explorer that remains side by side in the default
+  880 by 620 desktop window, with a narrow stacked fallback at the configured
+  minimum width
 - System-synchronized light and dark appearance, including live operating-system
   changes and theme-aware chart, warning, and native-window surfaces
 - Cross-platform restoration of the last stable window size, on-screen position,
