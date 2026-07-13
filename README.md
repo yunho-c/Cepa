@@ -49,6 +49,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - System-synchronized light and dark appearance, including live operating-system
   changes and theme-aware chart, warning, and native-window surfaces
+- Cross-platform restoration of the last stable window size, on-screen position,
+  and maximized state without restoring hidden or fullscreen state
 - Native application menus with state-aware Open Folder, Scan Again, Search,
   and parent-folder commands, backed by the same guarded desktop shortcuts
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
@@ -168,6 +170,16 @@ no-ops so they cannot reload the webview or open its built-in find surface.
 Closing search or item details restores focus to the control that opened it.
 Rescanning clears snapshot-bound state and returns focus to the completed scan
 heading when the replacement scan finishes.
+
+Window geometry is saved in Tauri's application configuration directory when
+Cepa exits and restored on the next launch. Only size, on-screen position, and
+maximized state are captured; schema fields for fullscreen, visibility, and
+decorations remain at defaults, while scanned paths and results never enter the
+file.
+
+On a provisioned desktop host, `just window-state-smoke` launches two brief
+native sessions, verifies the second window matches the first session's saved
+geometry, and removes its dedicated smoke-test state file.
 
 ## App identity
 

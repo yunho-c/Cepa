@@ -28,6 +28,11 @@ native-check: rust-fmt
     cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features -- -D warnings
     cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
 
+# Launch two short native sessions and verify window geometry restoration.
+window-state-smoke:
+    cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- seed
+    cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- verify
+
 # Check the Svelte and TypeScript frontend.
 frontend-check:
     bun run check

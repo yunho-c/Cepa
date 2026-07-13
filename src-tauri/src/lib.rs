@@ -3,6 +3,8 @@
 mod compression;
 #[cfg(feature = "desktop")]
 mod desktop_menu;
+#[cfg(feature = "desktop")]
+mod desktop_window;
 mod file_revision;
 mod scan_roots;
 mod scanner;
@@ -838,6 +840,8 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(desktop_window::state_plugin())
+        .setup(desktop_window::initialize)
         .manage(ScanState::default())
         .manage(ScanRootState::default())
         .manage(EstimateState::default())

@@ -59,6 +59,15 @@ such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
+The desktop shell restores stable window geometry with the official Tauri
+window-state plugin. Track and restore only size, on-screen position, and
+maximized state; do not add visibility (which can relaunch the app hidden),
+decorations, or fullscreen to `StateFlags`, and never add scan paths or result
+data to this state file. The plugin's macOS
+startup monitor query can be empty and skip position restoration, so
+`desktop_window/placement.rs` reapplies only an on-screen saved position (or
+centers safely when monitor metadata is unavailable). Keep the two-launch
+smoke test green when changing startup ordering or window configuration.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
@@ -260,6 +269,10 @@ Start with these files:
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
 - `src-tauri/src/desktop_menu.rs`: native menu construction, stable command
   event mapping, and live item availability.
+- `src-tauri/src/desktop_window.rs`: deliberately bounded window-state
+  persistence policy and plugin construction.
+- `src-tauri/examples/window_state_smoke.rs`: two-process native geometry
+  persistence and restoration proof with isolated temporary state.
 - `src-tauri/src/scan_roots.rs`: cross-platform local-volume discovery,
   normalization, APFS system/Data collapsing, and compact wire contract.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and
@@ -294,6 +307,7 @@ just icons     # regenerate derived desktop icons from the canonical vector
 just dev       # run the native Tauri application
 just web       # run only the Vite frontend
 just native-check # validate Rust core without Tauri desktop libraries
+just window-state-smoke # prove native geometry persistence across two launches
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles
@@ -325,6 +339,9 @@ when validating Rust or Tauri work.
 - For native-menu changes, test command/availability mapping, build the desktop
   shell, and inspect a real packaged or development window. A frontend shortcut
   test does not prove that the operating-system menu was constructed or updated.
+- For window-state changes, keep persistence limited to non-sensitive geometry,
+  inspect the actual state file, and prove restoration across two native process
+  launches. A plugin compile alone does not prove persistence.
 - For scan-root discovery changes, run the real-host discovery test on each
   supported platform in addition to normalization fixtures. Check that presented
   capacity is contextual volume information rather than claiming it equals the
