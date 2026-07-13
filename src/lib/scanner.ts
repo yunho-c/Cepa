@@ -206,6 +206,11 @@ export function formatCount(count: number): string {
   return new Intl.NumberFormat(undefined, { notation: "compact" }).format(count);
 }
 
+export function formatUnavailableItems(count: number): string {
+  const normalized = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  return `${formatCount(normalized)} ${normalized === 1 ? "item was" : "items were"} unavailable during this scan`;
+}
+
 export function formatDuration(milliseconds: number): string {
   if (milliseconds < 1_000) return `${Math.max(milliseconds, 0)} ms`;
   if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)} s`;

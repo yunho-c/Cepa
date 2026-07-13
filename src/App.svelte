@@ -34,6 +34,7 @@
     formatMetric,
     formatPercent,
     formatSavingsEstimate,
+    formatUnavailableItems,
     describeEntry,
     isCancellationError,
     metricBytes,
@@ -1086,6 +1087,16 @@
         <span>{formatDuration(result.elapsedMs)}</span>
       </p>
 
+      {#if result.skippedEntries > 0}
+        <div class="coverage-notice" role="status">
+          <AlertCircle aria-hidden="true" />
+          <p>
+            <strong>Some items weren’t included.</strong>
+            <span>{formatUnavailableItems(result.skippedEntries)}, so totals may be lower than the space actually in use.</span>
+          </p>
+        </div>
+      {/if}
+
       <div class="explorer-toolbar">
         <nav class="breadcrumbs" aria-label="Current scan path">
           {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
@@ -1440,10 +1451,7 @@
 
       <details class="scan-details">
         <summary>
-          <span>
-            <strong>Scan details</strong>
-            <small>Scanner, accounting, and skipped items</small>
-          </span>
+          <strong>Scan details</strong>
           <ChevronRight aria-hidden="true" />
         </summary>
         <dl>
@@ -1451,7 +1459,7 @@
           <div><dt>Space on disk</dt><dd>{result.allocatedSizeIsEstimate ? "Estimated" : "Exact"}</dd></div>
           <div><dt>Hard links</dt><dd>{result.hardLinkDeduplicationSupported ? "Counted once" : "Not deduplicated"}</dd></div>
           <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
-          <div><dt>Unreadable items</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
+          <div><dt>Items not included</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
           <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
           {#if result.duplicateHardLinks > 0}
             <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>

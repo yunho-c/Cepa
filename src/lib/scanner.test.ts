@@ -8,6 +8,7 @@ import {
   formatMetric,
   formatPercent,
   formatSavingsEstimate,
+  formatUnavailableItems,
   isCancellationError,
   metricBytes,
 } from "./scanner";
@@ -64,6 +65,18 @@ describe("scanner presentation helpers", () => {
     expect(formatDuration(999)).toBe("999 ms");
     expect(formatDuration(1_500)).toBe("1.5 s");
     expect(formatDuration(119_600)).toBe("2m 0s");
+  });
+
+  test("describes unavailable items without implying a single failure cause", () => {
+    expect(formatUnavailableItems(1)).toBe(
+      "1 item was unavailable during this scan",
+    );
+    expect(formatUnavailableItems(2)).toBe(
+      "2 items were unavailable during this scan",
+    );
+    expect(formatUnavailableItems(Number.NaN)).toBe(
+      "0 items were unavailable during this scan",
+    );
   });
 
   test("bounds percentages and handles empty totals", () => {

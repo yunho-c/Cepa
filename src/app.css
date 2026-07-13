@@ -479,6 +479,20 @@ body {
 .result-total strong { font-size: clamp(27px, 3vw, 36px); line-height: 1.05; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
 .result-summary { margin: 12px 0 18px; display: flex; flex-wrap: wrap; gap: 7px 18px; color: var(--muted-foreground); font-size: 12px; }
 .result-summary span + span::before { content: "·"; margin-right: 18px; color: oklch(0.65 0.006 85); }
+.coverage-notice {
+  margin: -3px 0 18px;
+  padding: 9px 12px;
+  border: 1px solid oklch(0.72 0.065 72 / 0.24);
+  border-radius: 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: oklch(0.975 0.012 78 / 0.82);
+}
+.coverage-notice > svg { width: 15px; flex: 0 0 auto; margin-top: 1px; color: oklch(0.55 0.095 67); }
+.coverage-notice p { min-width: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: 11px; line-height: 1.45; }
+.coverage-notice strong { font-weight: 620; }
+.coverage-notice span { color: var(--muted-foreground); }
 
 .explorer-toolbar { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .breadcrumbs { min-width: 0; display: flex; align-items: center; gap: 1px; overflow-x: auto; scrollbar-width: none; }
@@ -615,13 +629,11 @@ body {
 .search-message > [data-slot="button"] { margin-top: 4px; }
 
 .scan-details { margin-top: 16px; border: 1px solid var(--border); border-radius: 13px; background: oklch(0.995 0.001 85 / 0.7); overflow: hidden; }
-.scan-details > summary { min-height: 58px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }
+.scan-details > summary { min-height: 46px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }
 .scan-details > summary::-webkit-details-marker { display: none; }
 .scan-details > summary:hover { background: oklch(0.95 0.004 85 / 0.7); }
 .scan-details > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.scan-details > summary > span { display: grid; gap: 2px; }
 .scan-details > summary strong { font-size: 12px; font-weight: 600; }
-.scan-details > summary small { color: var(--muted-foreground); font-size: 10px; }
 .scan-details > summary svg { width: 14px; color: var(--muted-foreground); transition: transform 150ms ease; }
 .scan-details[open] > summary svg { transform: rotate(90deg); }
 .scan-details dl { margin: 0; padding: 4px 16px 16px; border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }

@@ -51,9 +51,12 @@ enforcement does not omit user data. The backend caches display names from the
 discovery response and applies them to the root node without changing its
 authoritative scan path; scan start does not rerun device discovery.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
-skipped-item semantics remain available under the collapsed `Scan details`
-disclosure rather than appearing as status badges or a diagnostic footer. It
-also has explicit cancellation and navigation-error states.
+intentional mount-boundary semantics remain available under the collapsed
+`Scan details` disclosure rather than appearing as status badges or a diagnostic
+footer. A completed scan with unavailable items shows one restrained,
+cause-neutral coverage notice because its totals may be low; do not mislabel all
+such items as permission failures. It also has explicit cancellation and
+navigation-error states.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
@@ -210,6 +213,9 @@ Keep implementation vocabulary out of the primary hierarchy. Do not repeat
 completion state, native backend names, syscall names, or accounting guarantees
 in banners, badges, headings, and footers. User-relevant exceptions stay visible;
 routine technical evidence belongs in the existing progressive disclosure.
+Treat unavailable entries as an incomplete-coverage exception, but keep expected
+filesystem-boundary counts in `Scan details` rather than presenting them as an
+error.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 

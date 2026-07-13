@@ -104,7 +104,11 @@ rather than silently claiming complete path accounting.
 
 Permission failures, entries that disappear during traversal, and recoverable
 metadata failures increment `skippedEntries`; they do not abort the entire
-scan. A root that cannot be opened is a fatal error.
+scan. Completed results with a nonzero `skippedEntries` count show a visible,
+cause-neutral coverage notice because their totals may be lower than the space
+actually in use. Intentional mount-boundary exclusions remain in `Scan details`
+through `skippedFilesystems` and are not presented as scan failures. A root that
+cannot be opened is a fatal error.
 
 The filesystem remains live while Cepa scans it. Files created, removed, linked,
 or resized during traversal can make the result differ from any single instant.

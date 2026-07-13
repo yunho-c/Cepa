@@ -30,7 +30,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   and logical size
 - Deterministic Unix hard-link deduplication and same-filesystem traversal
   boundaries
-- Permission and traversal-error accounting without aborting the whole scan
+- Permission and traversal-error accounting without aborting the whole scan,
+  with a visible incomplete-coverage notice when unavailable items can lower
+  the reported totals
 - Bounded progress updates over a Tauri channel
 - On-demand directory views backed by the completed in-memory scan snapshot
 - Case-insensitive current-folder search across every retained direct child,
@@ -48,8 +50,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - In-place rescanning and platform-native desktop shortcuts for opening a folder,
   searching, moving to the parent folder, and dismissing transient details
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
-  and completed states, with backend/accounting semantics available under a
-  compact scan-details disclosure
+  partial-coverage, and completed states, with routine backend/accounting
+  semantics available under a compact scan-details disclosure
 
 Symlinks are reported but never followed. Mounted filesystems are not traversed
 when the portable backend can identify filesystem boundaries. The result view
