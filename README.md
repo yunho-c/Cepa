@@ -47,6 +47,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
+- System-synchronized light and dark appearance, including live operating-system
+  changes and theme-aware chart, warning, and native-window surfaces
 - In-place rescanning and platform-native desktop shortcuts for opening a folder,
   searching, moving to the parent folder, and dismissing transient details
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
@@ -135,13 +137,16 @@ http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
 http://localhost:1420/?drop=active
 http://localhost:1420/?roots=preview
+http://localhost:1420/?appearance=dark&roots=preview
 ```
 
 The mock workflows, drop affordance, and storage preview are removed from
 production builds. Combine `?mock=complete&roots=preview` to exercise a volume
 selection through the complete mocked scan. The drop preview is visual only;
 use `just dev` and drag a real folder from the platform file manager to validate
-the native window event.
+the native window event. During frontend development, `?appearance=dark` or
+`?appearance=light` fixes the preview appearance without adding a production
+preference; production follows the operating system and updates live.
 
 ## Desktop commands
 

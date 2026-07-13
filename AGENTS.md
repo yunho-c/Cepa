@@ -56,7 +56,9 @@ intentional mount-boundary semantics remain available under the collapsed
 footer. A completed scan with unavailable items shows one restrained,
 cause-neutral coverage notice because its totals may be low; do not mislabel all
 such items as permission failures. It also has explicit cancellation and
-navigation-error states.
+navigation-error states. Appearance follows the operating system and updates
+live; development-only `?appearance=dark` and `?appearance=light` previews cover
+both palettes without introducing a production setting.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
@@ -201,6 +203,9 @@ Every workflow should have intentional empty, loading, partial-result, error,
 cancelled, and completed states. Preserve keyboard navigation, visible focus,
 semantic controls, readable contrast, and reduced-motion usability. Progressive
 updates should feel smooth without hiding freshness or blocking interaction.
+Follow the live operating-system light/dark appearance rather than adding an
+application-only theme preference. New bespoke surfaces must use the semantic
+tokens in `src/app.css` and be reviewed in both appearances.
 
 Avoid decorative complexity, excessive animation, generic dashboard layouts,
 and bespoke controls when an existing shadcn-svelte primitive fits. Any
@@ -228,6 +233,8 @@ Start with these files:
 - `src/lib/scanner.ts`: frontend scan protocol types and formatters.
 - `src/lib/dev-mock.ts`: development-only Tauri workflow scenarios loaded by
   the `?mock=` query parameter.
+- `src/lib/appearance.ts`: root appearance synchronization and live system-theme
+  change handling.
 - `src/lib/folder-drop.ts`: pure native drag-event decisions and privacy-safe
   dropped-item labels.
 - `src/lib/scan-roots.ts`: scan-root wire type and bounded capacity helpers.
