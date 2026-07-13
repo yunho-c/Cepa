@@ -92,17 +92,40 @@ Each run measures:
   excluding allocator bookkeeping and the separately materialized initial view.
 - `snapshotBytesPerEntry`: retained payload divided by the completed file and
   directory count. Empty roots report zero.
+- `snapshotReleaseMs`: synchronous destructor time for the retained snapshot
+  after the separately owned result and initial response view are released.
 - `wallMs`: scanner plus initial view and small harness overhead.
 
 The benchmark deliberately retains the snapshot until after timing, matching
 the application, which needs it for drill-down.
 That lifetime now ends explicitly when the user returns Home: a matching scan-ID
-discard drops the retained snapshot, cancels related search and estimate work,
-and invalidates any compression plan before the frontend leaves the result. A
-weak-ownership regression proves the retained owner is released when no
-in-flight worker still holds a temporary clone, and that a stale ID cannot
-release a newer result. This is an ownership-boundary check, not a claim about
-when the operating system will reduce process RSS.
+discard detaches the retained snapshot, cancels related search and estimate
+work, and invalidates any compression plan before the frontend leaves the
+result. A blocking-pool task keeps the detached owner until temporary clones
+held by already-running work are gone, then performs the final destructor away
+from the Tauri command thread. Regressions cover stale-ID isolation, immediate
+state detachment, in-flight ownership, and the final drop thread. This is an
+ownership-boundary check, not a claim about when the operating system will
+reduce process RSS.
+
+## 2026-07-13 snapshot release baseline
+
+Environment: Intel Core i9-13900K, 32 logical CPUs, 125 GiB RAM, Linux 6.8,
+Rust 1.97.0, NVMe-backed ext4, `x86_64`, release profile, `statx` backend. A
+fresh wide fixture contained 1,000,003 entries and retained 157,606,577 bytes
+of capacity-aware snapshot payload. Results are nine runs after one warmup.
+
+Synchronous snapshot destruction took 12.10–15.13 ms, with a 13.20 ms median.
+That is enough work to avoid placing the destructor directly on a UI-facing
+command path. Cepa now removes the state owner in constant time and schedules
+final release on the blocking pool; if a search, view, or estimate already owns
+a clone, the release task waits without making the detached scan available to
+new requests.
+
+The measurement isolates Rust destructor work. It is not a WebView frame-time
+measurement, an RSS-reclamation measurement, or evidence that release cost
+scales linearly for every directory shape. Raw runs are preserved in
+[`performance-results/2026-07-13-linux-snapshot-release.csv`](performance-results/2026-07-13-linux-snapshot-release.csv).
 
 ## 2026-07-11 portable baseline
 

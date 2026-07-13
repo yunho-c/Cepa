@@ -62,6 +62,7 @@ struct RunMeasurement {
     initial_chart_items: usize,
     snapshot_retained_bytes: usize,
     snapshot_bytes_per_entry: f64,
+    snapshot_release_ms: f64,
     entries_per_second: f64,
 }
 
@@ -83,6 +84,7 @@ struct Summary {
     median_initial_chart_items: f64,
     median_snapshot_retained_bytes: f64,
     median_snapshot_bytes_per_entry: f64,
+    median_snapshot_release_ms: f64,
 }
 
 fn main() {
@@ -111,8 +113,8 @@ fn run() -> Result<(), String> {
         let scan = benchmark_scan_with_backend(&path, backend)?;
         let wall = started_at.elapsed();
         let initial_response = scan.measure_initial_response()?;
-        let result = &scan.result;
-        let mismatches = expected.accounting_mismatches(result);
+        let result = scan.result.clone();
+        let mismatches = expected.accounting_mismatches(&result);
         if !mismatches.is_empty() {
             return Err(format!(
                 "the scanned workload changed between benchmark runs: {}",
@@ -122,6 +124,7 @@ fn run() -> Result<(), String> {
 
         let entries = result.file_count.saturating_add(result.directory_count);
         let snapshot_retained_bytes = scan.snapshot_retained_bytes();
+        let initial_view_ms = scan.initial_view_ms;
         let snapshot_bytes_per_entry = if entries == 0 {
             0.0
         } else {
@@ -132,10 +135,12 @@ fn run() -> Result<(), String> {
         } else {
             entries as f64 / wall.as_secs_f64()
         };
+        let snapshot_release_ms = scan.measure_snapshot_release_ms();
         eprintln!(
-            "run {iteration}/{iterations}: {:.2} ms, {:.0} entries/s",
+            "run {iteration}/{iterations}: {:.2} ms, {:.0} entries/s, {:.2} ms release",
             duration_ms(wall),
-            entries_per_second
+            entries_per_second,
+            snapshot_release_ms,
         );
 
         runs.push(RunMeasurement {
@@ -145,19 +150,20 @@ fn run() -> Result<(), String> {
             traversal_us: result.traversal_us,
             aggregation_us: result.aggregation_us,
             indexing_us: result.indexing_us,
-            initial_view_ms: scan.initial_view_ms,
+            initial_view_ms,
             initial_response_bytes: initial_response.response_bytes,
             initial_response_serialization_us: initial_response.serialization_us,
             initial_list_items: initial_response.list_items,
             initial_chart_items: initial_response.chart_items,
             snapshot_retained_bytes,
             snapshot_bytes_per_entry,
+            snapshot_release_ms,
             entries_per_second,
         });
     }
 
     let report = BenchmarkReport {
-        schema_version: 6,
+        schema_version: 7,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -294,6 +300,7 @@ fn summarize(runs: &[RunMeasurement]) -> Summary {
         median_snapshot_bytes_per_entry: median(
             runs.iter().map(|run| run.snapshot_bytes_per_entry),
         ),
+        median_snapshot_release_ms: median(runs.iter().map(|run| run.snapshot_release_ms)),
     }
 }
 

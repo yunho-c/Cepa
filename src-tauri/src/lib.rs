@@ -26,6 +26,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
+#[cfg(feature = "desktop")]
+use std::time::Duration;
 use std::time::Instant;
 #[cfg(feature = "desktop")]
 use tauri::ipc::Channel;
@@ -70,6 +72,22 @@ impl BenchmarkScan {
     /// the separately materialized initial response view.
     pub fn snapshot_retained_bytes(&self) -> usize {
         self.snapshot.retained_payload_bytes()
+    }
+
+    /// Measures only the synchronous destructor work for the retained snapshot.
+    /// The result and initial wire view are released before timing begins.
+    pub fn measure_snapshot_release_ms(self) -> f64 {
+        let Self {
+            result,
+            snapshot,
+            initial_view,
+            ..
+        } = self;
+        drop(result);
+        drop(initial_view);
+        let started_at = Instant::now();
+        drop(snapshot);
+        started_at.elapsed().as_secs_f64() * 1_000.0
     }
 
     pub fn search_root(
@@ -508,13 +526,15 @@ impl SearchState {
 
 #[cfg(feature = "desktop")]
 impl ScanState {
-    fn begin(&self) -> (u64, Arc<AtomicBool>) {
+    fn begin(&self) -> (u64, Arc<AtomicBool>, Option<Arc<ScanSnapshot>>) {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = Arc::new(AtomicBool::new(false));
-        *self
+        let released_snapshot = self
             .completed
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = None;
+            .unwrap_or_else(|error| error.into_inner())
+            .take()
+            .map(|completed| completed.snapshot);
         let mut active = self
             .active
             .lock()
@@ -527,7 +547,7 @@ impl ScanState {
             previous.cancel.store(true, Ordering::Relaxed);
         }
 
-        (id, cancel)
+        (id, cancel, released_snapshot)
     }
 
     fn cancel(&self, id: u64) -> bool {
@@ -570,18 +590,21 @@ impl ScanState {
         Ok(view)
     }
 
-    fn discard(&self, id: u64) -> Result<(), String> {
+    fn detach(&self, id: u64) -> Result<Option<Arc<ScanSnapshot>>, String> {
         let mut completed = self
             .completed
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         match completed.as_ref() {
             Some(scan) if scan.id == id => {
-                *completed = None;
-                Ok(())
+                let snapshot = completed
+                    .take()
+                    .expect("the matching completed scan is present")
+                    .snapshot;
+                Ok(Some(snapshot))
             }
             Some(_) => Err("That scan is no longer available.".to_string()),
-            None => Ok(()),
+            None => Ok(None),
         }
     }
 
@@ -682,7 +705,10 @@ async fn scan_directory(
     plans.clear();
     let requested_path = PathBuf::from(path);
     let root_display_name = roots.display_name(&requested_path);
-    let (scan_id, cancel) = state.begin();
+    let (scan_id, cancel, released_snapshot) = state.begin();
+    if let Some(snapshot) = released_snapshot {
+        release_last_arc_on_blocking_pool(snapshot);
+    }
     let _ = on_event.send(ScanEvent::Started {
         scan_id,
         root: requested_path.to_string_lossy().into_owned(),
@@ -726,12 +752,34 @@ fn discard_scan_state(
     estimates: &EstimateState,
     searches: &SearchState,
     plans: &CompressionPlanState,
-) -> Result<(), String> {
-    scans.discard(scan_id)?;
+) -> Result<Option<Arc<ScanSnapshot>>, String> {
+    let snapshot = scans.detach(scan_id)?;
     estimates.cancel_active();
     searches.cancel_active();
     plans.clear();
-    Ok(())
+    Ok(snapshot)
+}
+
+#[cfg(feature = "desktop")]
+fn release_last_arc_on_blocking_pool<T>(value: Arc<T>)
+where
+    T: Send + Sync + 'static,
+{
+    drop(tauri::async_runtime::spawn_blocking(move || {
+        let mut value = value;
+        loop {
+            match Arc::try_unwrap(value) {
+                Ok(value) => {
+                    drop(value);
+                    break;
+                }
+                Err(shared) => {
+                    value = shared;
+                    thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+    }));
 }
 
 #[cfg(feature = "desktop")]
@@ -743,7 +791,10 @@ fn discard_scan(
     searches: tauri::State<'_, SearchState>,
     plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<(), String> {
-    discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
+    if let Some(snapshot) = discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)? {
+        release_last_arc_on_blocking_pool(snapshot);
+    }
+    Ok(())
 }
 
 #[cfg(feature = "desktop")]
@@ -977,13 +1028,42 @@ mod tests {
     #[test]
     fn starting_a_new_scan_cancels_the_previous_one() {
         let state = ScanState::default();
-        let (_, first_cancel) = state.begin();
-        let (second_id, second_cancel) = state.begin();
+        let (_, first_cancel, first_released) = state.begin();
+        let (second_id, second_cancel, second_released) = state.begin();
 
+        assert!(first_released.is_none());
+        assert!(second_released.is_none());
         assert!(first_cancel.load(Ordering::Relaxed));
         assert!(!second_cancel.load(Ordering::Relaxed));
         assert!(state.cancel(second_id));
         assert!(second_cancel.load(Ordering::Relaxed));
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn starting_a_new_scan_detaches_the_previous_snapshot() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("payload.bin"), [1_u8]).expect("write fixture file");
+        let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan fixture");
+        let state = ScanState::default();
+        state.complete(7, output.snapshot).expect("retain snapshot");
+        let retained = state.snapshot(7).expect("clone retained snapshot");
+        let retained_weak = Arc::downgrade(&retained);
+        drop(retained);
+
+        let (_, _, released) = state.begin();
+        let released = released.expect("detach the previous snapshot");
+
+        assert_eq!(
+            state
+                .root_path(7)
+                .expect_err("the prior snapshot must be unavailable"),
+            "That scan is no longer available."
+        );
+        assert!(retained_weak.upgrade().is_some());
+        drop(released);
+        assert!(retained_weak.upgrade().is_none());
     }
 
     #[cfg(feature = "desktop")]
@@ -1208,8 +1288,10 @@ mod tests {
         assert!(!search_cancel.load(Ordering::Relaxed));
         assert_eq!(plans.generation.load(Ordering::Acquire), plan_generation);
 
-        discard_scan_state(7, &scans, &estimates, &searches, &plans).expect("discard current scan");
-        assert!(retained_weak.upgrade().is_none());
+        let released = discard_scan_state(7, &scans, &estimates, &searches, &plans)
+            .expect("discard current scan")
+            .expect("detach the retained snapshot");
+        assert!(retained_weak.upgrade().is_some());
         assert!(estimate_cancel.load(Ordering::Relaxed));
         assert!(search_cancel.load(Ordering::Relaxed));
         assert!(plans.generation.load(Ordering::Acquire) > plan_generation);
@@ -1217,8 +1299,44 @@ mod tests {
             scans.root_path(7).expect_err("snapshot must be released"),
             "That scan is no longer available."
         );
-        discard_scan_state(7, &scans, &estimates, &searches, &plans)
-            .expect("discarding an absent scan is idempotent");
+        assert!(
+            discard_scan_state(7, &scans, &estimates, &searches, &plans)
+                .expect("discarding an absent scan is idempotent")
+                .is_none()
+        );
+        drop(released);
+        assert!(retained_weak.upgrade().is_none());
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn snapshot_release_waits_for_in_flight_owners_and_drops_off_thread() {
+        struct DropProbe(std::sync::mpsc::Sender<std::thread::ThreadId>);
+
+        impl Drop for DropProbe {
+            fn drop(&mut self) {
+                let _ = self.0.send(std::thread::current().id());
+            }
+        }
+
+        let caller = std::thread::current().id();
+        let (dropped_tx, dropped_rx) = std::sync::mpsc::channel();
+        let owner = Arc::new(DropProbe(dropped_tx));
+        let in_flight = owner.clone();
+
+        super::release_last_arc_on_blocking_pool(owner);
+        assert!(
+            dropped_rx
+                .recv_timeout(std::time::Duration::from_millis(20))
+                .is_err(),
+            "the background owner must wait for in-flight work"
+        );
+
+        drop(in_flight);
+        let drop_thread = dropped_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("background release must finish after the final in-flight owner");
+        assert_ne!(drop_thread, caller);
     }
 
     #[cfg(feature = "desktop")]

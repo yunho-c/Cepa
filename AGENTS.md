@@ -143,7 +143,10 @@ cancels active estimate/search work, and invalidates any compression plan; a
 stale ID cannot affect a newer snapshot. If that command fails, keep the result
 visible, focus its contextual error, and allow retry. After success, move focus
 to the landing heading. Do not clear only the frontend and leave a potentially
-multi-million-node snapshot resident. Platform-aware desktop commands live in
+multi-million-node snapshot resident. Detach the state owner under its mutex,
+then retain one owner on the Tauri blocking pool until any in-flight clones
+finish so the final large-arena destructor cannot run on a command/runtime
+thread. Platform-aware desktop commands live in
 `src/lib/shortcuts.ts`; keep
 their availability state-driven, preserve IME and modified-key behavior, and
 restore focus when Escape dismisses search or item details. The native
@@ -215,9 +218,10 @@ preparation rejects unavailable or mismatched scan-time revisions before
 producing a plan.
 Unix snapshots hoist their enforced single filesystem ID once and store a
 24-byte compact revision per eligible node; Windows retains the full 32-byte
-revision. `scan_benchmark` schema 6 reports capacity-aware retained snapshot
-payload and bytes per entry, excluding allocator bookkeeping and the separate
-initial response view. Keep those evidence boundaries distinct from peak RSS.
+revision. `scan_benchmark` schema 7 reports capacity-aware retained snapshot
+payload, bytes per entry, and isolated synchronous snapshot-release time,
+excluding allocator bookkeeping and the separate initial response view. Keep
+those evidence boundaries distinct from peak RSS and UI latency.
 This metadata is not a content fingerprint: same-clock-tick data rewrites may
 remain indistinguishable. The current anchor is read-only and does
 not prove that a future writer can mutate and verify through that exact handle.

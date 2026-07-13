@@ -42,7 +42,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   items visible without exposing backend vocabulary
 - On-demand directory views backed by the completed in-memory scan snapshot
 - A scan-authorized Home transition that releases the retained snapshot and
-  cancels related background work instead of hiding a still-resident result
+  cancels related background work instead of hiding a still-resident result;
+  final large-arena destruction runs away from the command thread
 - Adaptive metric ranking that keeps ordinary-folder selection fast while
   capping transient child-ID storage at 2 MiB for extremely wide directories
 - Case-insensitive current-folder search across every retained direct child,
