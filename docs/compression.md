@@ -268,26 +268,50 @@ explicit request and neither operation authorizes mutation.
 
 Step 1.5 implements a dormant, read-only `CompressionPlan` protocol. Preparation
 accepts only a completed scan ID, opaque node ID, and requested operation. It
-reopens regular files without following links, checks scan size and exact
-allocation where the scan backend provides it, and records an immutable
-platform-specific metadata revision. The scanner retains a compact 32-byte
-revision for regular files when the backend supplies a nonzero stable file ID
-and exact timestamps. Unix revisions include device, inode, modification time,
-and change time; Windows revisions include volume serial, file ID, last-write
-time, and change time. Preparation requires that retained revision to match the
-reopened file before it checks current size and allocation. Revalidation also
-includes size, allocation, and link count and returns `valid`, `changed`, or
-`unavailable`; a new scan or newer plan invalidates the previous plan.
+opens a regular file without following links, keeps that read-only file open as
+the single active plan's identity anchor, checks scan size and exact allocation
+where the scan backend provides it, and records an immutable platform-specific
+metadata revision. Compression-state inspection during preparation uses the
+same open file instead of reopening its path. The scanner retains a 24-byte Unix
+revision plus one snapshot-level filesystem ID, or a 32-byte Windows revision,
+when the backend supplies a nonzero stable file ID and exact timestamps. Unix
+revisions include device, inode, modification time, and change time; Windows
+revisions include volume serial, file ID, last-write time, and change time.
+Preparation requires that retained scan revision to match the opened file, then
+rechecks both the anchor and a fresh no-follow path binding before storing the
+plan.
+
+Revalidation first opens the current path without following links, snapshots the
+retained file separately, and requires both revisions, sizes, allocations, and
+link counts to agree with each other and the prepared revision. It returns
+`valid`, `changed`, or `unavailable`; regular-file replacement, unlink, symlink
+replacement, and same-length mutation fixtures cover those boundaries. Unix
+opens are nonblocking until the regular-file type check completes, so replacing
+a scanned file with a FIFO cannot stall the planning worker. A new scan or newer
+plan invalidates the previous plan. The retained handle is shared only with an
+already-running validation and otherwise closes with invalidation, so dormant
+previews cannot accumulate open files.
 
 Every preview currently contains a `writerUnavailable` blocker, no apply command
 exists, and the UI intentionally exposes no dead-end planning action. The
 metadata revision is not a content fingerprint, and the retained scan snapshot
-rejects planning when a usable scan-time revision is unavailable. Tests cover
-identical-size replacement and rewrite between scanning and planning. A
-same-clock-tick rewrite—or delete/recreate that reuses the same file ID within
-that tick—can still be indistinguishable because the revision is metadata, not a
-content fingerprint. A future writer must close that remaining gap with a
-held-handle/content-integrity strategy; this preview is not mutation authority.
+rejects planning when a usable scan-time revision is unavailable. A
+same-clock-tick rewrite can still be indistinguishable because the revision is
+metadata. The identity anchor is also read-only; it proves that plan validation
+can keep referring to the originally opened file, not that a platform writer can
+mutate through that exact handle. A future writer must acquire the necessary
+rights without reopening a mutable path and add byte-integrity verification
+before and after the filesystem operation. This preview is not mutation
+authority.
+
+The identity-anchor change was validated natively on macOS, Linux, and Windows.
+The full macOS frontend/Rust suite and optimized desktop build passed. Rust
+1.97.0 Linux formatting, check, warning-denied Clippy, 61 core tests, every
+example test, and the FIFO replacement regression passed through the
+dependency-light path. Rust 1.97.0 Windows formatting, check, warning-denied
+Clippy, 51 core tests, every example test, and an optimized default-feature
+build also passed. These checks prove the read-only handle lifecycle and native
+API wiring; they do not satisfy the writer validation gates below.
 
 Step 2 is implemented as a bounded, cancellable per-file estimator and candidate
 UI. Deterministic tests cover sampling bounds, full small-file coverage,

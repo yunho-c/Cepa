@@ -151,19 +151,25 @@ proxy estimate into a guaranteed savings number or run estimation automatically
 on hover/selection.
 Compression-plan preparation is also scan-authorized: the frontend supplies a
 completed scan ID, opaque node ID, and operation, never a path. Rust opens the
-file without following links, snapshots platform identity and revision metadata,
-and can revalidate that immutable plan. A new scan or newer plan invalidates the
-old plan. For regular files, the scanner retains a compact exact identity plus
-modification/change revision when the backend can provide it, and preparation
-rejects unavailable or mismatched scan-time revisions before producing a plan.
+file without following links, retains that read-only handle as the active plan's
+identity anchor, snapshots platform identity and revision metadata, and inspects
+compression state through the same open file. Revalidation compares both the
+retained file and a fresh no-follow open of its current path. A new scan or newer
+plan invalidates the old plan and releases its anchor after any in-flight
+validation completes. For regular files, the scanner retains a compact exact
+identity plus modification/change revision when the backend can provide it, and
+preparation rejects unavailable or mismatched scan-time revisions before
+producing a plan.
 Unix snapshots hoist their enforced single filesystem ID once and store a
 24-byte compact revision per eligible node; Windows retains the full 32-byte
 revision. `scan_benchmark` schema 6 reports capacity-aware retained snapshot
 payload and bytes per entry, excluding allocator bookkeeping and the separate
 initial response view. Keep those evidence boundaries distinct from peak RSS.
-This metadata is not a content fingerprint: same-clock-tick inode reuse or data
-rewrites may remain indistinguishable. Do not add an apply command or expose a
-dead-end plan UI until a held-handle/content-integrity design closes that gate.
+This metadata is not a content fingerprint: same-clock-tick data rewrites may
+remain indistinguishable. The current anchor is read-only and does
+not prove that a future writer can mutate and verify through that exact handle.
+Do not add an apply command or expose a dead-end plan UI until a
+mutation-capable held-handle/content-integrity design closes that gate.
 The same constraint applies to destructive cleanup. Do not add a path-based
 trash or delete action authorized only by a completed scan: a replacement could
 occupy that path between scanning and mutation. Reclaim actions need an
@@ -324,6 +330,8 @@ Start with these files:
   per-item state probes plus their backend-neutral wire contracts.
 - `src-tauri/src/compression/estimator.rs`: bounded sampling, codec adapters,
   conservative savings ranges, confidence, and cancellation.
+- `src-tauri/src/file_revision.rs`: no-follow file opens, exact cross-platform
+  metadata snapshots, and the retained plan identity-anchor primitive.
 - `src-tauri/src/scanner.rs`: backend dispatch, portable traversal, shared compact arenas,
   and aggregation.
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.

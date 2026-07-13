@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
+use std::fs::File;
 use std::io;
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::file_revision::{self, ScannedFileRevision};
 use crate::scanner::{CompressionTarget, EntryKind};
 
-use super::{CompressionCapabilityStatus, CompressionStateKind, inspect, probe};
+use super::{CompressionCapabilityStatus, CompressionStateKind, inspect_open_file, probe};
 
 const NTFS_MAX_UNCOMPRESSED_BYTES: u64 = 30 * 1024 * 1024 * 1024;
 
@@ -82,11 +84,17 @@ pub(crate) struct PreparedCompressionPlan {
     preview: CompressionPlanPreview,
     target: CompressionTarget,
     revision: FileRevision,
+    identity_anchor: Arc<File>,
 }
 
 impl PreparedCompressionPlan {
     pub(crate) fn preview(&self) -> &CompressionPlanPreview {
         &self.preview
+    }
+
+    #[cfg(test)]
+    pub(crate) fn identity_anchor_weak(&self) -> std::sync::Weak<File> {
+        Arc::downgrade(&self.identity_anchor)
     }
 }
 
@@ -109,8 +117,9 @@ pub(super) fn prepare(
         return Err("Only regular files can be included in a compression plan.".into());
     }
 
-    let revision = snapshot_revision(&target.path)
+    let opened = file_revision::open_snapshot_no_follow(&target.path)
         .map_err(|error| format!("The file could not be opened safely for planning: {error}."))?;
+    let revision = FileRevision::from(opened.snapshot);
     let scanned_revision = target.scan_revision.ok_or_else(|| {
         "The scan could not retain a stable file identity and revision; rescan with a supported backend before planning."
             .to_string()
@@ -130,7 +139,8 @@ pub(super) fn prepare(
     }
 
     let capability = probe(&target.path);
-    let state = inspect(&target.path, target.kind);
+    let state = inspect_open_file(&opened.file, target.kind);
+    validate_anchor_binding(&target.path, &opened.file, &revision)?;
     let mut blockers = Vec::new();
     if !capability.writer_available {
         blockers.push(PlanBlocker {
@@ -227,37 +237,90 @@ pub(super) fn prepare(
         preview,
         target,
         revision,
+        identity_anchor: Arc::new(opened.file),
     })
 }
 
 pub(super) fn revalidate(plan: &PreparedCompressionPlan) -> PlanValidation {
-    match snapshot_revision(&plan.target.path) {
-        Ok(revision) if revision == plan.revision => PlanValidation {
-            plan_id: plan.preview.plan_id,
-            status: PlanValidationStatus::Valid,
-            detail: "The file identity and revision still match this plan.".into(),
-        },
-        Ok(_) => PlanValidation {
+    let rebound = match snapshot_revision(&plan.target.path) {
+        Ok(revision) => revision,
+        Err(error) => {
+            return PlanValidation {
+                plan_id: plan.preview.plan_id,
+                status: PlanValidationStatus::Unavailable,
+                detail: format!("The planned file could not be reopened safely: {error}."),
+            };
+        }
+    };
+    let anchored = match snapshot_anchor_revision(&plan.identity_anchor) {
+        Ok(revision) => revision,
+        Err(error) => {
+            return PlanValidation {
+                plan_id: plan.preview.plan_id,
+                status: PlanValidationStatus::Unavailable,
+                detail: format!("The plan's retained identity anchor could not be read: {error}."),
+            };
+        }
+    };
+    if rebound != anchored {
+        return PlanValidation {
             plan_id: plan.preview.plan_id,
             status: PlanValidationStatus::Changed,
-            detail: "The file identity or revision changed; discard this plan and rescan.".into(),
-        },
-        Err(error) => PlanValidation {
+            detail: "The path now refers to a different file; discard this plan and rescan.".into(),
+        };
+    }
+    if anchored != plan.revision {
+        PlanValidation {
             plan_id: plan.preview.plan_id,
-            status: PlanValidationStatus::Unavailable,
-            detail: format!("The planned file could not be reopened safely: {error}."),
-        },
+            status: PlanValidationStatus::Changed,
+            detail: "The retained file changed; discard this plan and rescan.".into(),
+        }
+    } else {
+        PlanValidation {
+            plan_id: plan.preview.plan_id,
+            status: PlanValidationStatus::Valid,
+            detail: "The retained file and its current path binding still match this plan.".into(),
+        }
+    }
+}
+
+impl From<file_revision::FileSnapshot> for FileRevision {
+    fn from(snapshot: file_revision::FileSnapshot) -> Self {
+        Self {
+            scanned: snapshot.scanned,
+            logical_bytes: snapshot.logical_bytes,
+            allocated_bytes: snapshot.allocated_bytes,
+            link_count: snapshot.link_count,
+        }
     }
 }
 
 fn snapshot_revision(path: &Path) -> io::Result<FileRevision> {
-    let snapshot = file_revision::snapshot_no_follow(path)?;
-    Ok(FileRevision {
-        scanned: snapshot.scanned,
-        logical_bytes: snapshot.logical_bytes,
-        allocated_bytes: snapshot.allocated_bytes,
-        link_count: snapshot.link_count,
-    })
+    file_revision::snapshot_no_follow(path).map(FileRevision::from)
+}
+
+fn snapshot_anchor_revision(file: &File) -> io::Result<FileRevision> {
+    file_revision::snapshot_open_file(file).map(FileRevision::from)
+}
+
+fn validate_anchor_binding(
+    path: &Path,
+    identity_anchor: &File,
+    expected: &FileRevision,
+) -> Result<(), String> {
+    let anchored = snapshot_anchor_revision(identity_anchor).map_err(|error| {
+        format!("The retained file could not be revalidated during planning: {error}.")
+    })?;
+    if &anchored != expected {
+        return Err("The file changed while its compression plan was being prepared; rescan before planning.".into());
+    }
+    let rebound = snapshot_revision(path).map_err(|error| {
+        format!("The file path could not be rebound safely during planning: {error}.")
+    })?;
+    if rebound != anchored {
+        return Err("The file path changed while its compression plan was being prepared; rescan before planning.".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -328,6 +391,40 @@ mod tests {
         let validation = revalidate(&plan);
 
         assert_eq!(validation.status, PlanValidationStatus::Changed);
+    }
+
+    #[test]
+    fn revalidation_rejects_a_regular_file_replacement_after_planning() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        let original = temp.path().join("original.bin");
+        fs::write(&path, b"before").expect("write fixture");
+        let plan =
+            prepare(1, 1, 1, target(&path), CompressionOperation::Compress).expect("prepare plan");
+
+        fs::rename(&path, &original).expect("move planned file aside");
+        fs::write(&path, b"before").expect("replace path with same-length content");
+
+        snapshot_anchor_revision(&plan.identity_anchor)
+            .expect("path replacement must not close the retained identity anchor");
+        let validation = revalidate(&plan);
+        assert_eq!(validation.status, PlanValidationStatus::Changed);
+        assert!(validation.detail.contains("different file"));
+    }
+
+    #[test]
+    fn revalidation_keeps_the_anchor_but_rejects_an_unlinked_path() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, b"retained").expect("write fixture");
+        let plan =
+            prepare(1, 1, 1, target(&path), CompressionOperation::Compress).expect("prepare plan");
+
+        fs::remove_file(&path).expect("unlink planned file");
+
+        snapshot_anchor_revision(&plan.identity_anchor)
+            .expect("the active plan must keep its unlinked identity anchor alive");
+        assert_eq!(revalidate(&plan).status, PlanValidationStatus::Unavailable);
     }
 
     #[test]

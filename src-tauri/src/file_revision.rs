@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io;
 use std::num::NonZeroU64;
 use std::path::Path;
@@ -39,6 +40,12 @@ pub(crate) struct FileSnapshot {
     pub logical_bytes: u64,
     pub allocated_bytes: Option<u64>,
     pub link_count: u64,
+}
+
+#[derive(Debug)]
+pub(crate) struct OpenedFileSnapshot {
+    pub file: File,
+    pub snapshot: FileSnapshot,
 }
 
 impl ScannedFileRevision {
@@ -141,15 +148,30 @@ fn pack_unix_timestamp(seconds: i64, nanoseconds: i64) -> Option<u64> {
     Some((biased_seconds << UNIX_NANOSECOND_BITS) | nanoseconds as u64)
 }
 
-#[cfg(unix)]
 pub(crate) fn snapshot_no_follow(path: &Path) -> io::Result<FileSnapshot> {
+    Ok(open_snapshot_no_follow(path)?.snapshot)
+}
+
+#[cfg(unix)]
+pub(crate) fn open_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnapshot> {
     use std::fs::OpenOptions;
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
 
     let file = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        // O_NONBLOCK prevents a regular file replaced by a FIFO or device from
+        // stalling the planning worker before the handle type is validated.
+        // It has no effect on regular-file reads.
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)?;
+    let snapshot = snapshot_open_file(&file)?;
+    Ok(OpenedFileSnapshot { file, snapshot })
+}
+
+#[cfg(unix)]
+pub(crate) fn snapshot_open_file(file: &File) -> io::Result<FileSnapshot> {
+    use std::os::unix::fs::MetadataExt;
+
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(io::Error::new(
@@ -172,17 +194,13 @@ pub(crate) fn snapshot_no_follow(path: &Path) -> io::Result<FileSnapshot> {
 }
 
 #[cfg(windows)]
-pub(crate) fn snapshot_no_follow(path: &Path) -> io::Result<FileSnapshot> {
-    use std::fs::File;
-    use std::mem::size_of;
+pub(crate) fn open_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnapshot> {
     use std::os::windows::ffi::OsStrExt;
-    use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    use std::os::windows::io::FromRawHandle;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO,
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileBasicInfo, FileStandardInfo,
-        GetFileInformationByHandle, GetFileInformationByHandleEx, OPEN_EXISTING,
+        CreateFileW, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
 
     let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
@@ -202,6 +220,20 @@ pub(crate) fn snapshot_no_follow(path: &Path) -> io::Result<FileSnapshot> {
         return Err(io::Error::last_os_error());
     }
     let file = unsafe { File::from_raw_handle(handle) };
+    let snapshot = snapshot_open_file(&file)?;
+    Ok(OpenedFileSnapshot { file, snapshot })
+}
+
+#[cfg(windows)]
+pub(crate) fn snapshot_open_file(file: &File) -> io::Result<FileSnapshot> {
+    use std::mem::size_of;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO,
+        FILE_STANDARD_INFO, FileBasicInfo, FileStandardInfo, GetFileInformationByHandle,
+        GetFileInformationByHandleEx,
+    };
+
     let mut information = BY_HANDLE_FILE_INFORMATION::default();
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) } == 0 {
         return Err(io::Error::last_os_error());
@@ -266,7 +298,15 @@ pub(crate) fn snapshot_no_follow(path: &Path) -> io::Result<FileSnapshot> {
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(crate) fn snapshot_no_follow(_path: &Path) -> io::Result<FileSnapshot> {
+pub(crate) fn open_snapshot_no_follow(_path: &Path) -> io::Result<OpenedFileSnapshot> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "stable file identity is unavailable on this platform",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn snapshot_open_file(_file: &File) -> io::Result<FileSnapshot> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "stable file identity is unavailable on this platform",
@@ -310,5 +350,46 @@ mod tests {
         assert!(pack_unix_timestamp(UNIX_MAX_SECONDS + 1, 0).is_none());
         assert!(pack_unix_timestamp(0, -1).is_none());
         assert!(pack_unix_timestamp(0, 1_000_000_000).is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn no_follow_open_rejects_a_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::time::{Duration, Instant};
+
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("replacement.fifo");
+        let path = CString::new(path.as_os_str().as_bytes()).expect("encode FIFO path");
+        // SAFETY: path is a valid null-terminated temporary path.
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+
+        let delayed_writer_path = path.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            // This only prevents a broken blocking implementation from hanging
+            // the entire test process; the production open must return first.
+            let descriptor = unsafe {
+                libc::open(
+                    delayed_writer_path.as_ptr(),
+                    libc::O_RDWR | libc::O_NONBLOCK,
+                )
+            };
+            if descriptor >= 0 {
+                // SAFETY: descriptor is owned by this thread after open.
+                unsafe { libc::close(descriptor) };
+            }
+        });
+
+        let started = Instant::now();
+        let error = open_snapshot_no_follow(Path::new(path.to_str().expect("UTF-8 fixture path")))
+            .expect_err("a FIFO must not become a file identity anchor");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "the no-follow open waited for a FIFO writer"
+        );
     }
 }

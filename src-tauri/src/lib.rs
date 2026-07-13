@@ -1043,9 +1043,19 @@ mod tests {
             second_id
         );
         assert!(state.get(first_id).is_err());
-        assert!(state.get(second_id).is_ok());
+        let (_, in_flight) = state.get(second_id).expect("clone current plan");
+        let identity_anchor = in_flight.identity_anchor_weak();
         state.clear();
         assert!(state.get(second_id).is_err());
+        assert!(
+            identity_anchor.upgrade().is_some(),
+            "an in-flight validation clone must keep its anchor alive"
+        );
+        drop(in_flight);
+        assert!(
+            identity_anchor.upgrade().is_none(),
+            "clearing the plan must release its anchor after in-flight work ends"
+        );
     }
 
     #[test]

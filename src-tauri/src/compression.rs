@@ -201,6 +201,17 @@ pub(crate) fn inspect(path: &Path, kind: EntryKind) -> CompressionState {
     }
 }
 
+pub(crate) fn inspect_open_file(file: &std::fs::File, kind: EntryKind) -> CompressionState {
+    match kind {
+        EntryKind::File => platform::inspect_open_file(file),
+        EntryKind::Directory | EntryKind::Symlink | EntryKind::Other => {
+            CompressionState::not_applicable(
+                "Only a retained regular-file handle can be inspected for planning.",
+            )
+        }
+    }
+}
+
 pub(crate) fn estimate(
     target: &crate::scanner::CompressionTarget,
     cancel: &std::sync::atomic::AtomicBool,
@@ -212,8 +223,10 @@ pub(crate) fn estimate(
 mod platform {
     use super::{CompressionCapability, CompressionState};
     use std::ffi::{CStr, CString};
+    use std::fs::File;
     use std::mem::{self, MaybeUninit};
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::io::AsRawFd;
     use std::path::Path;
 
     #[repr(C)]
@@ -273,6 +286,35 @@ mod platform {
             return CompressionState::unavailable(
                 "The scanned item is no longer a regular file and was not followed.",
             );
+        }
+        if info.st_flags & libc::UF_COMPRESSED != 0 {
+            CompressionState::existing_data(
+                true,
+                Some("decmpfs"),
+                "macOS reports UF_COMPRESSED for this file. Cepa reads this metadata but does not modify it.",
+            )
+        } else {
+            CompressionState::existing_data(
+                false,
+                None,
+                "macOS does not report UF_COMPRESSED for this file.",
+            )
+        }
+    }
+
+    pub(super) fn inspect_open_file(file: &File) -> CompressionState {
+        let mut info = MaybeUninit::<libc::stat>::zeroed();
+        // SAFETY: the descriptor is open and info points to writable storage.
+        if unsafe { libc::fstat(file.as_raw_fd(), info.as_mut_ptr()) } != 0 {
+            return CompressionState::unavailable(format!(
+                "The opened file metadata query failed: {}.",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: fstat succeeded and initialized the output structure.
+        let info = unsafe { info.assume_init() };
+        if info.st_mode & libc::S_IFMT != libc::S_IFREG {
+            return CompressionState::unavailable("The retained item is no longer a regular file.");
         }
         if info.st_flags & libc::UF_COMPRESSED != 0 {
             CompressionState::existing_data(
@@ -351,9 +393,10 @@ mod platform {
 mod platform {
     use super::{CompressionCapability, CompressionState, CompressionStateKind};
     use std::ffi::CString;
+    use std::fs::File;
     use std::mem::MaybeUninit;
     use std::os::unix::ffi::OsStrExt;
-    use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::io::{AsRawFd, FromRawFd};
     use std::path::Path;
 
     pub(super) fn probe(path: &Path) -> CompressionCapability {
@@ -403,7 +446,7 @@ mod platform {
             }
         };
         // SAFETY: path is null-terminated. O_NOFOLLOW prevents resolving a
-        // replacement symlink, and OwnedFd closes the successful descriptor.
+        // replacement symlink, and File closes the successful descriptor.
         let raw_fd = unsafe {
             libc::open(
                 path.as_ptr(),
@@ -417,7 +460,11 @@ mod platform {
             ));
         }
         // SAFETY: raw_fd is a newly owned successful open result.
-        let file = unsafe { OwnedFd::from_raw_fd(raw_fd) };
+        let file = unsafe { File::from_raw_fd(raw_fd) };
+        inspect_open_file(&file)
+    }
+
+    pub(super) fn inspect_open_file(file: &File) -> CompressionState {
         let mut metadata = MaybeUninit::<libc::stat>::zeroed();
         // SAFETY: the descriptor is open and metadata points to writable storage.
         if unsafe { libc::fstat(file.as_raw_fd(), metadata.as_mut_ptr()) } != 0 {
@@ -589,6 +636,10 @@ mod platform {
         }
         // SAFETY: handle is a newly owned successful CreateFileW result.
         let file = unsafe { File::from_raw_handle(handle) };
+        inspect_open_file(&file)
+    }
+
+    pub(super) fn inspect_open_file(file: &File) -> CompressionState {
         let mut metadata = BY_HANDLE_FILE_INFORMATION::default();
         // SAFETY: the handle is open and metadata points to writable storage.
         if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut metadata) } == 0 {
@@ -654,6 +705,7 @@ mod platform {
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 mod platform {
     use super::{CompressionCapability, CompressionState};
+    use std::fs::File;
     use std::path::Path;
 
     pub(super) fn probe(_path: &Path) -> CompressionCapability {
@@ -664,6 +716,12 @@ mod platform {
     }
 
     pub(super) fn inspect(_path: &Path) -> CompressionState {
+        CompressionState::unsupported(
+            "Cepa does not yet have a compression-state inspector for this platform.",
+        )
+    }
+
+    pub(super) fn inspect_open_file(_file: &File) -> CompressionState {
         CompressionState::unsupported(
             "Cepa does not yet have a compression-state inspector for this platform.",
         )
