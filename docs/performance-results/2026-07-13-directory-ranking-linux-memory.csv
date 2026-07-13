@@ -1,0 +1,11 @@
+variant,round,order,peak_rss_kib
+baseline,1,first,97764
+adaptive,1,second,98820
+adaptive,2,first,98244
+baseline,2,second,98136
+baseline,3,first,98016
+adaptive,3,second,98548
+adaptive,4,first,98132
+baseline,4,second,98008
+baseline,5,first,98980
+adaptive,5,second,97612

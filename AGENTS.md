@@ -80,6 +80,12 @@ Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving
 aggregate coverage. Keep the global budget deterministic and metric-aware.
+Directory ranking uses one full child-ID partition only while that clone fits a
+2 MiB budget. Wider folders use repeated 16 × limit partial selection, bounding
+the top-500 ranking buffer to about 64 KiB on 64-bit platforms. Preserve exact
+metric, secondary-size, name, and node-ID ordering across both paths; do not
+raise the clone budget or shrink the measured window without comparable wide-
+folder latency and memory evidence.
 Expose the interactive radial map as a named group, not an image with interactive
 descendants. Its real segments use one roving Tab stop: arrow keys move and wrap,
 Home and End jump to the bounds, and Enter or Space activates the focused item.

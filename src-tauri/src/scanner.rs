@@ -42,6 +42,9 @@ const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
 const MAX_CHART_ITEMS_TOTAL: usize = 512;
 const MAX_CHART_DEPTH: usize = 3;
 const MAX_SEARCH_QUERY_CHARS: usize = 128;
+const RANKING_BUFFER_MULTIPLIER: usize = 16;
+const MAX_RANKING_CLONE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_RANKING_CLONE_IDS: usize = MAX_RANKING_CLONE_BYTES / std::mem::size_of::<NodeId>();
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1263,18 +1266,7 @@ impl ScanSnapshot {
     }
 
     fn ranked_child_ids(&self, parent: NodeId, limit: usize, metric: SizeMetric) -> Vec<NodeId> {
-        let mut ranked = self.nodes[parent].children.clone();
-
-        if ranked.len() > limit {
-            ranked.select_nth_unstable_by(limit, |left, right| {
-                compare_node_ids_by_metric(&self.nodes, *left, *right, metric)
-            });
-            ranked.truncate(limit);
-        }
-        ranked.sort_unstable_by(|left, right| {
-            compare_node_ids_by_metric(&self.nodes, *left, *right, metric)
-        });
-        ranked
+        ranked_node_ids(&self.nodes[parent].children, limit, &self.nodes, metric)
     }
 
     fn node_path(&self, node_id: NodeId) -> PathBuf {
@@ -1383,6 +1375,74 @@ fn compare_node_ids_by_metric(
         })
         .then_with(|| left_node.name().cmp(right_node.name()))
         .then_with(|| left.cmp(&right))
+}
+
+fn retain_best_node_ids(
+    node_ids: &mut Vec<NodeId>,
+    limit: usize,
+    nodes: &[InternalNode],
+    metric: SizeMetric,
+) {
+    if node_ids.len() <= limit {
+        return;
+    }
+    node_ids.select_nth_unstable_by(limit, |left, right| {
+        compare_node_ids_by_metric(nodes, *left, *right, metric)
+    });
+    node_ids.truncate(limit);
+}
+
+fn ranked_node_ids(
+    children: &[NodeId],
+    limit: usize,
+    nodes: &[InternalNode],
+    metric: SizeMetric,
+) -> Vec<NodeId> {
+    ranked_node_ids_with_clone_limit(children, limit, nodes, metric, MAX_RANKING_CLONE_IDS)
+}
+
+fn ranked_node_ids_with_clone_limit(
+    children: &[NodeId],
+    limit: usize,
+    nodes: &[InternalNode],
+    metric: SizeMetric,
+    max_clone_ids: usize,
+) -> Vec<NodeId> {
+    if limit == 0 {
+        return Vec::new();
+    }
+
+    // A single partition has the lowest measured latency for ordinary and
+    // moderately wide folders. Cap that transient clone at 2 MiB, then reduce
+    // fixed-size groups so pathological directories cannot allocate one ID for
+    // every child. The bounded top-500 path retains 8,000 IDs (about 64 KiB on
+    // 64-bit platforms) while preserving O(n) selection work.
+    let mut ranked = if children.len() > max_clone_ids {
+        bounded_ranked_node_ids(children, limit, nodes, metric)
+    } else {
+        children.to_vec()
+    };
+    retain_best_node_ids(&mut ranked, limit, nodes, metric);
+    ranked.sort_unstable_by(|left, right| compare_node_ids_by_metric(nodes, *left, *right, metric));
+    ranked
+}
+
+fn bounded_ranked_node_ids(
+    children: &[NodeId],
+    limit: usize,
+    nodes: &[InternalNode],
+    metric: SizeMetric,
+) -> Vec<NodeId> {
+    let buffer_capacity = limit.saturating_mul(RANKING_BUFFER_MULTIPLIER);
+    let mut ranked = Vec::with_capacity(buffer_capacity);
+    for child in children.iter().copied() {
+        ranked.push(child);
+        if ranked.len() == buffer_capacity {
+            retain_best_node_ids(&mut ranked, limit, nodes, metric);
+        }
+    }
+    retain_best_node_ids(&mut ranked, limit, nodes, metric);
+    ranked
 }
 
 #[derive(Clone, Copy)]
@@ -2428,6 +2488,59 @@ mod tests {
         );
         assert_eq!(logical.items[0].id, wire_id(sparse_id));
         assert_eq!(logical.chart_items[0].id, Some(wire_id(sparse_id)));
+    }
+
+    #[test]
+    fn chunked_child_ranking_matches_a_complete_sort_with_bounded_capacity() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let root_path = temp.path().canonicalize().expect("canonical fixture root");
+        let child_count = MAX_LIST_ITEMS * RANKING_BUFFER_MULTIPLIER * 2 + 17;
+        let mut root = InternalNode::root(&root_path);
+        let mut nodes = Vec::with_capacity(child_count + 1);
+        nodes.push(InternalNode::root(&root_path));
+
+        for index in 0..child_count {
+            let node_id = nodes.len();
+            root.children.push(node_id);
+            nodes.push(InternalNode {
+                name: OsString::from(format!("item-{:05}.bin", child_count - index)),
+                parent: Some(0),
+                children: Vec::new(),
+                kind: EntryKind::File,
+                logical_bytes: ((index * 3_571) % 15_000) as u64,
+                allocated_bytes: ((index * 7_919) % 10_000) as u64,
+                file_count: 1,
+                directory_count: 0,
+                scan_revision: None,
+            });
+        }
+        nodes[0] = root;
+        let snapshot = ScanSnapshot {
+            root: 0,
+            root_path: Arc::from(root_path),
+            nodes,
+            allocated_size_is_estimate: false,
+            #[cfg(unix)]
+            revision_filesystem_id: None,
+        };
+
+        for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+            let mut expected = snapshot.nodes[0].children.clone();
+            expected.sort_unstable_by(|left, right| {
+                compare_node_ids_by_metric(&snapshot.nodes, *left, *right, metric)
+            });
+            expected.truncate(MAX_LIST_ITEMS);
+
+            let ranked = ranked_node_ids_with_clone_limit(
+                &snapshot.nodes[0].children,
+                MAX_LIST_ITEMS,
+                &snapshot.nodes,
+                metric,
+                MAX_LIST_ITEMS,
+            );
+            assert_eq!(ranked, expected);
+            assert!(ranked.capacity() <= MAX_LIST_ITEMS * RANKING_BUFFER_MULTIPLIER);
+        }
     }
 
     #[cfg(unix)]

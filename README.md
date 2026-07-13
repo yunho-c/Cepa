@@ -40,6 +40,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   that keeps space, current location, elapsed time, cancellation, and unavailable
   items visible without exposing backend vocabulary
 - On-demand directory views backed by the completed in-memory scan snapshot
+- Adaptive metric ranking that keeps ordinary-folder selection fast while
+  capping transient child-ID storage at 2 MiB for extremely wide directories
 - Case-insensitive current-folder search across every retained direct child,
   bounded to 500 metric-ranked results after matching
 - Reveal-in-file-manager actions authorized by completed scan and item IDs

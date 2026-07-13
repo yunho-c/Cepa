@@ -1,0 +1,11 @@
+variant,round,order,peak_rss_bytes
+baseline,1,first,69664768
+buffer16,1,second,68141056
+buffer16,2,first,59244544
+baseline,2,second,71139328
+baseline,3,first,69025792
+buffer16,3,second,67354624
+buffer16,4,first,66699264
+baseline,4,second,64110592
+baseline,5,first,71892992
+buffer16,5,second,85131264

@@ -773,6 +773,58 @@ and
 The browser result is a frontend regression baseline, not native WebKit,
 WebView2, or WebKitGTK proof.
 
+### 2026-07-13 adaptive very-wide-directory ranking
+
+Opening a directory previously cloned its complete child-ID vector before a
+single partial selection retained the top 500 list rows. The work was linear,
+but the temporary allocation also grew linearly: 500,000 direct children need
+about 3.8 MiB of IDs, and a 5.57-million-child directory would need about
+42.5 MiB before names or response materialization.
+
+The selected implementation keeps that single-partition path while the clone is
+at most 2 MiB. Beyond the cutoff, it repeatedly reduces a 16 × limit buffer to
+the requested limit. The top-500 path therefore uses an 8,000-ID buffer, about
+64 KiB on a 64-bit target, while retaining linear selection work and the exact
+metric, secondary-size, name, and node-ID ordering. A synthetic regression
+compares more than two complete windows with a full sort under both size metrics.
+
+The main comparison used a quiescent, directly wide ext4 folder with 500,000
+empty files on the native i9-13900K/Rust 1.97.0 Linux host. Each of 15
+alternating-order rounds ran the release `statx` benchmark's warmup and one
+measured scan. Values below are medians:
+
+| Variant | Initial view | Full wall time | Response bytes | Retained snapshot |
+| --- | ---: | ---: | ---: | ---: |
+| Full child-ID clone | 16.78 ms | 496.08 ms | 63,402 | 78,803,311 bytes |
+| Adaptive 16 × limit selection | 10.71 ms | 485.13 ms | 63,402 | 78,803,311 bytes |
+
+Initial-view latency fell 36.2%. The 2.2% wall-time change is not presented as a
+scan-throughput improvement because traversal dominates it and varied between
+runs. Five paired process observations were likewise flat at 98,016 versus
+98,244 KiB median peak RSS. Process RSS includes the retained arena and traversal
+workers, so the memory result does not demonstrate a whole-process reduction;
+the defensible bound is the ranking vector's directly constrained capacity.
+
+Window tuning was interleaved separately on a 250,000-file ext4 folder. A
+two-window buffer regressed median initial-view time to 8.88 ms, versus 6.42 ms
+for the full clone, while the selected 16 × limit buffer reached 4.93 ms. On a
+200,000-file APFS folder, however, the always-bounded 16 × limit prototype was
+3.78 ms versus 3.36 ms for the full clone. This cross-platform result motivated
+the adaptive 2 MiB cutoff instead of forcing either strategy on every folder.
+A nine-round recheck of the final adaptive binary on that APFS fixture measured
+3.41 ms versus 3.51 ms for the baseline, confirming that the below-cutoff branch
+retains the original selection behavior. Full scan wall time was too variable on
+the 97%-full development volume to compare.
+
+Raw trials are preserved in
+[`performance-results/2026-07-13-directory-ranking-linux-buffer-scaling.csv`](performance-results/2026-07-13-directory-ranking-linux-buffer-scaling.csv),
+[`performance-results/2026-07-13-directory-ranking-linux-adaptive.csv`](performance-results/2026-07-13-directory-ranking-linux-adaptive.csv),
+[`performance-results/2026-07-13-directory-ranking-linux-memory.csv`](performance-results/2026-07-13-directory-ranking-linux-memory.csv),
+[`performance-results/2026-07-13-directory-ranking-macos-tuning.csv`](performance-results/2026-07-13-directory-ranking-macos-tuning.csv),
+[`performance-results/2026-07-13-directory-ranking-macos-adaptive.csv`](performance-results/2026-07-13-directory-ranking-macos-adaptive.csv),
+and
+[`performance-results/2026-07-13-directory-ranking-macos-memory.csv`](performance-results/2026-07-13-directory-ranking-macos-memory.csv).
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
@@ -786,7 +838,7 @@ speed claim.
 Before generalizing these results beyond the measured workloads, add:
 
 - additional representative real directory trees and cold-cache runs;
-- snapshot-owned bytes per entry and scaling beyond 100,000 entries;
+- snapshot-owned bytes per entry and scaling beyond 500,000 entries;
 - cancellation latency during deliberately long aggregation work;
 - native Tauri IPC transport and production first-render timing on each platform
   WebView;
