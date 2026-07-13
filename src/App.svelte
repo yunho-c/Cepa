@@ -78,6 +78,7 @@
   let selectedEntry = $state<ChartItem | ScanItem | null>(null);
   let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
+  let errorHeading = $state("That scan didn’t start.");
   let errorMessage = $state("");
   let scanStarted = $state(false);
   let scanActionError = $state("");
@@ -204,9 +205,6 @@
       ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
       : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
   );
-  const scanFailureHeading = $derived(
-    scanStarted ? "The scan couldn’t finish." : "That scan didn’t start.",
-  );
   const searchActive = $derived(searchQuery.trim().length > 0);
   const visibleItems = $derived(
     searchActive && searchResult ? searchResult.items : (view?.items ?? []),
@@ -238,9 +236,9 @@
     droppedPaths = [];
   }
 
-  async function showDroppedFolderError(message: string) {
+  async function showScanEntryError(title: string, message: string) {
     if (status === "complete" && result && view) {
-      navigationErrorTitle = "That item can’t be scanned.";
+      navigationErrorTitle = title;
       navigationError = message;
       await tick();
       navigationNotice?.focus();
@@ -248,6 +246,7 @@
       status = "error";
       scanStarted = false;
       scanActionError = "";
+      errorHeading = title;
       errorMessage = message;
       await tick();
       stateNotice?.focus();
@@ -275,7 +274,7 @@
       if (request !== dropSequence) return;
       preparingScanRoot = null;
       clearDropState();
-      await showDroppedFolderError(String(error));
+      await showScanEntryError("That folder can’t be scanned.", String(error));
     }
   }
 
@@ -306,7 +305,10 @@
         break;
       case "reject":
         clearDropState();
-        void showDroppedFolderError("Drop one folder at a time.");
+        void showScanEntryError(
+          "Drop one folder at a time.",
+          "Choose a single folder and try again.",
+        );
         break;
       case "ignore":
         break;
@@ -358,6 +360,8 @@
   async function chooseDirectory() {
     if (isBusy) return;
     errorMessage = "";
+    navigationError = "";
+    revealError = "";
     try {
       const selected = await open({
         directory: true,
@@ -370,12 +374,7 @@
         await startScan();
       }
     } catch (error) {
-      scanStarted = false;
-      scanActionError = "";
-      errorMessage = `Could not open the folder picker: ${String(error)}`;
-      status = "error";
-      await tick();
-      stateNotice?.focus();
+      await showScanEntryError("Folder picker didn’t open.", String(error));
     }
   }
 
@@ -391,6 +390,7 @@
     path = requestedPath;
     scanStarted = false;
     scanActionError = "";
+    errorHeading = "That scan didn’t start.";
     errorMessage = "";
     navigationError = "";
     navigationErrorTitle = "That folder could not be opened.";
@@ -447,6 +447,9 @@
       } else {
         status = "error";
         scanId = null;
+        errorHeading = scanStarted
+          ? "The scan couldn’t finish."
+          : "That scan didn’t start.";
         errorMessage = message;
       }
       await tick();
@@ -488,6 +491,7 @@
     status = "idle";
     scanStarted = false;
     scanActionError = "";
+    errorHeading = "That scan didn’t start.";
     scanId = null;
     progress = null;
     result = null;
@@ -1096,7 +1100,7 @@
             >
               <AlertCircle />
               <div>
-                <strong>{scanFailureHeading}</strong>
+                <strong>{errorHeading}</strong>
                 <span>{errorMessage}</span>
               </div>
             </div>

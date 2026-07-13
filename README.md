@@ -26,6 +26,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   current result until the dropped directory is accepted
 - Responsive cancellation and automatic cancellation of superseded scans
 - Failed stop requests keep the live scan visible and make cancellation retryable
+- Folder-picker failures preserve an existing completed result and remain retryable
 - Logical and allocated byte accounting (allocated size is exact on Unix and
   the native Windows MFT path; portable Windows scans report an estimate)
 - Metric-aware directory ranking and charts switchable between space on disk
@@ -158,6 +159,8 @@ exercise the complete workflow without a native process:
 http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=cancel-error
+http://localhost:1420/?mock=picker-error
+http://localhost:1420/?mock=picker-recovery
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
@@ -174,6 +177,8 @@ selection through the complete mocked scan.
 chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
 scan active after a failed stop request so its recovery state can be exercised.
+`?mock=picker-error` covers a first-launch picker failure, while
+`?mock=picker-recovery` fails only after a completed scan is visible.
 The drop preview is visual only; use `just dev` and drag a real folder from the
 platform file manager to validate the native window event. During frontend
 development, `?appearance=dark` or `?appearance=light` fixes the preview

@@ -16,6 +16,8 @@ type DevScenario =
   | "complete"
   | "scanning"
   | "cancel-error"
+  | "picker-error"
+  | "picker-recovery"
   | "error"
   | "navigation-error"
   | "reveal-error"
@@ -29,6 +31,7 @@ export function installDevMock(requestedScenario: string) {
     ? requestedScenario
     : "complete";
   const stressView = scenario === "stress" ? createStressView(scanId, ROOT) : null;
+  let pickerOpenCount = 0;
   let rejectPendingScan: ((reason: string) => void) | null = null;
   const cancelledEstimateRequests = new Set<number>();
   const cancelledSearchRequests = new Set<number>();
@@ -39,6 +42,13 @@ export function installDevMock(requestedScenario: string) {
       case "validate_scan_root":
         return String(args.path);
       case "plugin:dialog|open":
+        pickerOpenCount += 1;
+        if (
+          scenario === "picker-error" ||
+          (scenario === "picker-recovery" && pickerOpenCount > 1)
+        ) {
+          throw "The system folder picker is unavailable.";
+        }
         return ROOT;
       case "scan_directory": {
         const channelId = (args.onEvent as { id: number }).id;
@@ -198,6 +208,8 @@ function isScenario(value: string): value is DevScenario {
     "complete",
     "scanning",
     "cancel-error",
+    "picker-error",
+    "picker-recovery",
     "error",
     "navigation-error",
     "reveal-error",
