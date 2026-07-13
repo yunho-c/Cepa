@@ -137,7 +137,14 @@ Rust matches every direct child before retaining the metric-ranked top 500, so
 items below the ordinary list cutoff remain discoverable without expanding IPC
 or rendering bounds. Search is scan-authorized and never accepts a path.
 Completed scans can be rerun against the same root without reopening the folder
-picker. Platform-aware desktop commands live in `src/lib/shortcuts.ts`; keep
+picker. Returning to the landing view first invokes the scan-authorized
+`discard_scan` command. A matching scan ID releases the retained snapshot,
+cancels active estimate/search work, and invalidates any compression plan; a
+stale ID cannot affect a newer snapshot. If that command fails, keep the result
+visible, focus its contextual error, and allow retry. After success, move focus
+to the landing heading. Do not clear only the frontend and leave a potentially
+multi-million-node snapshot resident. Platform-aware desktop commands live in
+`src/lib/shortcuts.ts`; keep
 their availability state-driven, preserve IME and modified-key behavior, and
 restore focus when Escape dismisses search or item details. The native
 application menu in `src-tauri/src/desktop_menu.rs` shares this command path and

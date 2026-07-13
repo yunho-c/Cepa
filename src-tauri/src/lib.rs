@@ -570,6 +570,21 @@ impl ScanState {
         Ok(view)
     }
 
+    fn discard(&self, id: u64) -> Result<(), String> {
+        let mut completed = self
+            .completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        match completed.as_ref() {
+            Some(scan) if scan.id == id => {
+                *completed = None;
+                Ok(())
+            }
+            Some(_) => Err("That scan is no longer available.".to_string()),
+            None => Ok(()),
+        }
+    }
+
     fn snapshot(&self, id: u64) -> Result<Arc<ScanSnapshot>, String> {
         let completed = self
             .completed
@@ -702,6 +717,33 @@ async fn scan_directory(
             Err(format!("The scanner stopped unexpectedly: {error}"))
         }
     }
+}
+
+#[cfg(feature = "desktop")]
+fn discard_scan_state(
+    scan_id: u64,
+    scans: &ScanState,
+    estimates: &EstimateState,
+    searches: &SearchState,
+    plans: &CompressionPlanState,
+) -> Result<(), String> {
+    scans.discard(scan_id)?;
+    estimates.cancel_active();
+    searches.cancel_active();
+    plans.clear();
+    Ok(())
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+fn discard_scan(
+    scan_id: u64,
+    scans: tauri::State<'_, ScanState>,
+    estimates: tauri::State<'_, EstimateState>,
+    searches: tauri::State<'_, SearchState>,
+    plans: tauri::State<'_, CompressionPlanState>,
+) -> Result<(), String> {
+    discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
 }
 
 #[cfg(feature = "desktop")]
@@ -897,6 +939,7 @@ pub fn run() {
             list_scan_roots,
             validate_scan_root,
             scan_directory,
+            discard_scan,
             cancel_scan,
             open_scan_directory,
             search_scan_directory,
@@ -918,7 +961,8 @@ pub fn run() {
 mod tests {
     #[cfg(feature = "desktop")]
     use super::{
-        CompressionPlanState, EstimateState, ScanState, SearchState, compression, scanner,
+        CompressionPlanState, EstimateState, ScanState, SearchState, compression,
+        discard_scan_state, scanner,
     };
     use super::{ScanBackend, benchmark_cancellation};
     use std::fs;
@@ -1132,6 +1176,49 @@ mod tests {
                 .expect_err("reject unknown item"),
             "That item is not part of this scan."
         );
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn discarding_a_completed_scan_releases_only_that_snapshot() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("payload.bin"), [1_u8]).expect("write fixture file");
+        let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan fixture");
+        let scans = ScanState::default();
+        scans.complete(7, output.snapshot).expect("retain snapshot");
+        let retained = scans.snapshot(7).expect("clone retained snapshot");
+        let retained_weak = Arc::downgrade(&retained);
+        drop(retained);
+
+        let estimates = EstimateState::default();
+        let (_, estimate_cancel) = estimates.begin(91);
+        let searches = SearchState::default();
+        let (_, search_cancel) = searches.begin(92);
+        let plans = CompressionPlanState::default();
+        let plan_generation = plans.generation.load(Ordering::Acquire);
+
+        assert_eq!(
+            discard_scan_state(8, &scans, &estimates, &searches, &plans)
+                .expect_err("reject stale discard"),
+            "That scan is no longer available."
+        );
+        assert!(retained_weak.upgrade().is_some());
+        assert!(!estimate_cancel.load(Ordering::Relaxed));
+        assert!(!search_cancel.load(Ordering::Relaxed));
+        assert_eq!(plans.generation.load(Ordering::Acquire), plan_generation);
+
+        discard_scan_state(7, &scans, &estimates, &searches, &plans).expect("discard current scan");
+        assert!(retained_weak.upgrade().is_none());
+        assert!(estimate_cancel.load(Ordering::Relaxed));
+        assert!(search_cancel.load(Ordering::Relaxed));
+        assert!(plans.generation.load(Ordering::Acquire) > plan_generation);
+        assert_eq!(
+            scans.root_path(7).expect_err("snapshot must be released"),
+            "That scan is no longer available."
+        );
+        discard_scan_state(7, &scans, &estimates, &searches, &plans)
+            .expect("discarding an absent scan is idempotent");
     }
 
     #[cfg(feature = "desktop")]

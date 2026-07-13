@@ -14,6 +14,7 @@ import { createStressDirectoryView, createStressView } from "./dev-stress";
 
 type DevScenario =
   | "complete"
+  | "discard-error"
   | "scanning"
   | "cancel-error"
   | "picker-error"
@@ -80,6 +81,11 @@ export function installDevMock(requestedScenario: string) {
         rejectPendingScan?.("Scan cancelled.");
         rejectPendingScan = null;
         return true;
+      case "discard_scan":
+        if (scenario === "discard-error") {
+          throw "The mocked scan snapshot could not be released.";
+        }
+        return null;
       case "open_scan_directory":
         if (scenario === "navigation-error") {
           throw "The mocked snapshot is no longer available.";
@@ -222,6 +228,7 @@ export function installDevMock(requestedScenario: string) {
 function isScenario(value: string): value is DevScenario {
   return [
     "complete",
+    "discard-error",
     "scanning",
     "cancel-error",
     "picker-error",

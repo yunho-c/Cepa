@@ -41,6 +41,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   that keeps space, current location, elapsed time, cancellation, and unavailable
   items visible without exposing backend vocabulary
 - On-demand directory views backed by the completed in-memory scan snapshot
+- A scan-authorized Home transition that releases the retained snapshot and
+  cancels related background work instead of hiding a still-resident result
 - Adaptive metric ranking that keeps ordinary-folder selection fast while
   capping transient child-ID storage at 2 MiB for extremely wide directories
 - Case-insensitive current-folder search across every retained direct child,
@@ -173,6 +175,7 @@ exercise the complete workflow without a native process:
 http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=cancel-error
+http://localhost:1420/?mock=discard-error
 http://localhost:1420/?mock=picker-error
 http://localhost:1420/?mock=picker-recovery
 http://localhost:1420/?mock=estimate-cancel-error
@@ -193,6 +196,8 @@ selection through the complete mocked scan.
 chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
 scan active after a failed stop request so its recovery state can be exercised.
+`?mock=discard-error` keeps a completed result visible when its retained snapshot
+cannot be released and verifies the focused, contextual recovery state.
 `?mock=picker-error` covers a first-launch picker failure, while
 `?mock=picker-recovery` fails only after a completed scan is visible.
 The two estimate-cancel scenarios cover an immediate failed stop request and a

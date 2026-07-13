@@ -79,6 +79,7 @@
   let selectedEntry = $state<ChartItem | ScanItem | null>(null);
   let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
+  let isDiscardingScan = $state(false);
   let errorHeading = $state("That scan didn’t start.");
   let errorMessage = $state("");
   let scanStarted = $state(false);
@@ -103,6 +104,7 @@
   let estimateActionNotice: HTMLDivElement | undefined = $state();
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
+  let landingHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartFocusId: number | null = $state(null);
@@ -173,8 +175,12 @@
   const backShortcutLabel = primaryModifier === "meta" ? "⌥←" : "Alt+←";
 
   const isBusy = $derived(
-    status === "scanning" || status === "cancelling" || preparingScanRoot !== null,
+    status === "scanning" ||
+      status === "cancelling" ||
+      preparingScanRoot !== null ||
+      isDiscardingScan,
   );
+  const isResultBusy = $derived(isNavigating || isDiscardingScan);
   const isPreparingDroppedFolder = $derived(
     preparingScanRoot !== null && droppedPaths.length > 0,
   );
@@ -525,7 +531,28 @@
     }
   }
 
-  function reset() {
+  async function reset() {
+    if (isBusy) return;
+    const completedScanId = status === "complete" ? scanId : null;
+    if (completedScanId !== null) {
+      navigationError = "";
+      revealError = "";
+      isDiscardingScan = true;
+      try {
+        await invoke("discard_scan", { scanId: completedScanId });
+      } catch (error) {
+        if (scanId === completedScanId && status === "complete") {
+          navigationErrorTitle = "This scan could not be closed.";
+          navigationError = String(error);
+          await tick();
+          navigationNotice?.focus();
+        }
+        return;
+      } finally {
+        isDiscardingScan = false;
+      }
+    }
+
     dropSequence += 1;
     preparingScanRoot = null;
     clearDropState();
@@ -547,6 +574,8 @@
     revealingNodeId = null;
     sizeMetric = "allocated";
     compressionCapability = null;
+    await tick();
+    landingHeading?.focus();
   }
 
   async function loadCompressionCapability(completedScanId: number) {
@@ -582,6 +611,7 @@
   }
 
   async function closeInspection() {
+    if (isDiscardingScan) return;
     const returnTarget = inspectionReturnTarget;
     clearInspection();
     await tick();
@@ -589,7 +619,7 @@
   }
 
   async function inspectEntry(entry: ChartItem | ScanItem) {
-    if (scanId === null || entry.id === null) return;
+    if (scanId === null || entry.id === null || isResultBusy) return;
     clearEstimate();
     const completedScanId = scanId;
     const request = ++inspectionSequence;
@@ -655,7 +685,7 @@
     if (activeEstimateRequestId !== null && isEstimatingSavings) {
       void invoke("cancel_compression_estimate", {
         requestId: activeEstimateRequestId,
-      });
+      }).catch(() => {});
     }
     savingsEstimate = null;
     isEstimatingSavings = false;
@@ -669,7 +699,8 @@
       scanId === null ||
       inspectedEntry === null ||
       inspectedEntry.id === null ||
-      isEstimatingSavings
+      isEstimatingSavings ||
+      isResultBusy
     ) return;
     const completedScanId = scanId;
     const nodeId = inspectedEntry.id;
@@ -727,7 +758,11 @@
   }
 
   async function cancelEstimate() {
-    if (activeEstimateRequestId === null || !isEstimatingSavings) return;
+    if (
+      activeEstimateRequestId === null ||
+      !isEstimatingSavings ||
+      isDiscardingScan
+    ) return;
     const requestId = activeEstimateRequestId;
     estimateActionError = "";
     isCancellingEstimate = true;
@@ -773,6 +808,7 @@
   }
 
   async function openDirectorySearch() {
+    if (isResultBusy) return;
     searchOpen = true;
     await tick();
     searchInput?.focus();
@@ -856,7 +892,7 @@
   function scheduleDirectorySearch() {
     invalidateDirectorySearch();
     const query = searchQuery.trim();
-    if (!query || scanId === null || !view) return;
+    if (!query || scanId === null || !view || isResultBusy) return;
 
     isSearching = true;
     const sequence = searchSequence;
@@ -916,7 +952,7 @@
     metric: SizeMetric,
     focusHeading: boolean,
   ) {
-    if (scanId === null || isNavigating) return;
+    if (scanId === null || isResultBusy) return;
     const preservedSearch = focusHeading ? "" : searchQuery;
     if (focusHeading) resetDirectorySearch(true);
     else invalidateDirectorySearch();
@@ -964,7 +1000,7 @@
   }
 
   async function revealItem(nodeId: number) {
-    if (scanId === null || revealingNodeId !== null) return;
+    if (scanId === null || revealingNodeId !== null || isResultBusy) return;
     revealingNodeId = nodeId;
     revealError = "";
     try {
@@ -1092,7 +1128,9 @@
     <main class="landing" class:landing-with-storage={showsScanRoots}>
       <section class="landing-copy" aria-labelledby="landing-title">
         <div class="app-symbol" aria-hidden="true"><CepaMark /></div>
-        <h1 id="landing-title">Find what’s taking up space.</h1>
+        <h1 id="landing-title" tabindex="-1" bind:this={landingHeading}>
+          Find what’s taking up space.
+        </h1>
         <p class="lede">
           Choose a disk or folder to see its largest files and subfolders. Everything
           stays on this device.
@@ -1291,7 +1329,7 @@
             {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
             <button
               type="button"
-              disabled={isNavigating}
+              disabled={isResultBusy}
               aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
               onclick={() => openDirectory(breadcrumb.id)}
             >{breadcrumb.name}</button>
@@ -1301,13 +1339,13 @@
           <button
             type="button"
             aria-pressed={sizeMetric === "allocated"}
-            aria-disabled={isNavigating}
+            aria-disabled={isResultBusy}
             onclick={() => setSizeMetric("allocated")}
           >On disk</button>
           <button
             type="button"
             aria-pressed={sizeMetric === "logical"}
-            aria-disabled={isNavigating}
+            aria-disabled={isResultBusy}
             onclick={() => setSizeMetric("logical")}
           >Logical</button>
         </div>
@@ -1346,7 +1384,7 @@
       <section
         class="explorer"
         aria-label="Storage map and folder contents"
-        aria-busy={isNavigating}
+        aria-busy={isResultBusy}
       >
         <div class="chart-pane">
           <h2 class="sr-only" tabindex="-1" bind:this={viewHeading}>
@@ -1357,7 +1395,7 @@
               class="chart-back"
               variant="ghost"
               size="sm"
-              disabled={isNavigating}
+              disabled={isResultBusy}
               title={`Up (${backShortcutLabel})`}
               onclick={() => openDirectory(parentId)}
             >
@@ -1462,7 +1500,7 @@
                   variant="ghost"
                   size="icon-xs"
                   bind:ref={searchToggleButton}
-                  disabled={isNavigating}
+                  disabled={isResultBusy}
                   aria-label="Search this folder"
                   title={`Search this folder (${primaryShortcutLabel}F)`}
                   onclick={openDirectorySearch}
@@ -1601,7 +1639,7 @@
             </p>
             <div
               class="item-list"
-              class:is-navigating={isNavigating || isSearching}
+              class:is-navigating={isResultBusy || isSearching}
               role="list"
               aria-label={`${view.displayName} contents`}
               aria-describedby="directory-list-navigation-help"
@@ -1620,7 +1658,7 @@
                     class="storage-item"
                     tabindex={listFocusId === item.id ? 0 : -1}
                     data-list-open-id={item.id}
-                    disabled={isNavigating}
+                    disabled={isResultBusy}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
                     onmouseenter={() => (selectedEntry = item)}
                     onfocus={() => {
@@ -1662,7 +1700,7 @@
                       class="reveal-item"
                       tabindex={listFocusId === item.id ? 0 : -1}
                       data-list-reveal-id={item.id}
-                      disabled={isNavigating || revealingNodeId !== null}
+                      disabled={isResultBusy || revealingNodeId !== null}
                       aria-label={`Reveal ${item.name} in the system file manager`}
                       title="Reveal in file manager"
                       onclick={() => revealItem(item.id)}

@@ -96,6 +96,13 @@ Each run measures:
 
 The benchmark deliberately retains the snapshot until after timing, matching
 the application, which needs it for drill-down.
+That lifetime now ends explicitly when the user returns Home: a matching scan-ID
+discard drops the retained snapshot, cancels related search and estimate work,
+and invalidates any compression plan before the frontend leaves the result. A
+weak-ownership regression proves the retained owner is released when no
+in-flight worker still holds a temporary clone, and that a stale ID cannot
+release a newer result. This is an ownership-boundary check, not a claim about
+when the operating system will reduce process RSS.
 
 ## 2026-07-11 portable baseline
 

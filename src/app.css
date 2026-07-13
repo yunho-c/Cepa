@@ -533,6 +533,7 @@ body {
 .cancelled-callout span { color: var(--muted-foreground); line-height: 1.45; overflow-wrap: anywhere; }
 .error-callout:focus,
 .cancelled-callout:focus,
+.landing h1:focus,
 .results-heading h1:focus,
 .chart-pane h2:focus { outline: none; }
 
