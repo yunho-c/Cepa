@@ -32,6 +32,7 @@ const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
 const MAX_PARTIAL_ITEMS: usize = 8;
 const MAX_LIST_ITEMS: usize = 500;
 const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
+const MAX_CHART_ITEMS_TOTAL: usize = 512;
 const MAX_CHART_DEPTH: usize = 3;
 const MAX_SEARCH_QUERY_CHARS: usize = 128;
 
@@ -77,6 +78,10 @@ pub struct ChartItem {
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
     pub children: Vec<ChartItem>,
+}
+
+pub(crate) fn chart_item_count(item: &ChartItem) -> usize {
+    1 + item.children.iter().map(chart_item_count).sum::<usize>()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -968,6 +973,7 @@ impl ScanSnapshot {
             .map(|child| self.scan_item(*child))
             .collect();
         let chart_item_count = ranked_ids.len().min(MAX_CHART_ITEMS_PER_DIRECTORY);
+        let mut chart_budget = MAX_CHART_ITEMS_TOTAL;
 
         Ok(DirectoryView {
             scan_id,
@@ -987,6 +993,7 @@ impl ScanSnapshot {
                 &ranked_ids[..chart_item_count],
                 total_items,
                 metric,
+                &mut chart_budget,
             ),
         })
     }
@@ -1100,14 +1107,20 @@ impl ScanSnapshot {
         breadcrumbs
     }
 
-    fn chart_children(&self, parent: NodeId, depth: usize, metric: SizeMetric) -> Vec<ChartItem> {
-        if depth >= MAX_CHART_DEPTH {
+    fn chart_children(
+        &self,
+        parent: NodeId,
+        depth: usize,
+        metric: SizeMetric,
+        budget: &mut usize,
+    ) -> Vec<ChartItem> {
+        if depth >= MAX_CHART_DEPTH || *budget == 0 {
             return Vec::new();
         }
 
         let total_items = self.nodes[parent].children.len();
         let ranked_ids = self.ranked_child_ids(parent, MAX_CHART_ITEMS_PER_DIRECTORY, metric);
-        self.chart_items(parent, depth, &ranked_ids, total_items, metric)
+        self.chart_items(parent, depth, &ranked_ids, total_items, metric, budget)
     }
 
     fn chart_items(
@@ -1117,8 +1130,22 @@ impl ScanSnapshot {
         ranked_ids: &[NodeId],
         total_items: usize,
         metric: SizeMetric,
+        budget: &mut usize,
     ) -> Vec<ChartItem> {
-        let mut items: Vec<_> = ranked_ids
+        if *budget == 0 || total_items == 0 {
+            return Vec::new();
+        }
+
+        let mut selected_count = ranked_ids.len().min(*budget);
+        if total_items > selected_count {
+            selected_count = selected_count.min(budget.saturating_sub(1));
+        }
+        let include_aggregate = total_items > selected_count;
+        let current_level_items = selected_count + usize::from(include_aggregate);
+        *budget -= current_level_items;
+        let selected_ids = &ranked_ids[..selected_count];
+
+        let mut items: Vec<_> = selected_ids
             .iter()
             .map(|node_id| {
                 let node = &self.nodes[*node_id];
@@ -1129,13 +1156,13 @@ impl ScanSnapshot {
                     logical_bytes: node.logical_bytes,
                     allocated_bytes: node.allocated_bytes,
                     children: matches!(node.kind, EntryKind::Directory)
-                        .then(|| self.chart_children(*node_id, depth + 1, metric))
+                        .then(|| self.chart_children(*node_id, depth + 1, metric, budget))
                         .unwrap_or_default(),
                 }
             })
             .collect();
 
-        if total_items > ranked_ids.len() {
+        if include_aggregate {
             let total =
                 self.nodes[parent]
                     .children
@@ -1147,7 +1174,7 @@ impl ScanSnapshot {
                             total.1.saturating_add(node.allocated_bytes),
                         )
                     });
-            let selected = ranked_ids.iter().fold((0_u64, 0_u64), |total, node_id| {
+            let selected = selected_ids.iter().fold((0_u64, 0_u64), |total, node_id| {
                 let node = &self.nodes[*node_id];
                 (
                     total.0.saturating_add(node.logical_bytes),
@@ -1156,7 +1183,7 @@ impl ScanSnapshot {
             });
             items.push(ChartItem {
                 id: None,
-                name: format!("{} more items", total_items - ranked_ids.len()),
+                name: format!("{} more items", total_items - selected_count),
                 kind: EntryKind::Other,
                 logical_bytes: total.0.saturating_sub(selected.0),
                 allocated_bytes: total.1.saturating_sub(selected.1),
@@ -2133,6 +2160,110 @@ mod tests {
                 .sum::<u64>(),
             output.result.logical_bytes
         );
+    }
+
+    #[test]
+    fn globally_bounds_deep_chart_views_without_losing_accounted_bytes() {
+        const BRANCHES: usize = MAX_CHART_ITEMS_PER_DIRECTORY + 1;
+
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let root_path = temp.path().canonicalize().expect("canonical fixture root");
+        let mut nodes = vec![InternalNode::root(&root_path)];
+
+        for outer in 0..BRANCHES {
+            let outer_id = nodes.len();
+            nodes.push(test_directory_node(
+                format!("outer-{outer:02}"),
+                0,
+                (BRANCHES * BRANCHES) as u64,
+            ));
+            nodes[0].children.push(outer_id);
+
+            for middle in 0..BRANCHES {
+                let middle_id = nodes.len();
+                nodes.push(test_directory_node(
+                    format!("middle-{middle:02}"),
+                    outer_id,
+                    BRANCHES as u64,
+                ));
+                nodes[outer_id].children.push(middle_id);
+
+                for inner in 0..BRANCHES {
+                    let inner_id = nodes.len();
+                    nodes.push(test_directory_node(
+                        format!("inner-{inner:02}"),
+                        middle_id,
+                        1,
+                    ));
+                    nodes[middle_id].children.push(inner_id);
+                }
+            }
+        }
+
+        let total_bytes = BRANCHES.pow(3) as u64;
+        nodes[0].logical_bytes = total_bytes;
+        nodes[0].allocated_bytes = total_bytes;
+        let snapshot = ScanSnapshot {
+            root: 0,
+            root_path: Arc::from(root_path),
+            nodes,
+            allocated_size_is_estimate: false,
+        };
+
+        let view = snapshot
+            .directory_view(1, 0)
+            .expect("build bounded deep view");
+        let chart_items = view.chart_items.iter().map(chart_item_count).sum::<usize>();
+
+        assert_eq!(chart_items, MAX_CHART_ITEMS_TOTAL);
+        assert_eq!(view.chart_items.len(), MAX_CHART_ITEMS_PER_DIRECTORY + 1);
+        assert_eq!(
+            view.chart_items
+                .iter()
+                .map(|item| item.logical_bytes)
+                .sum::<u64>(),
+            total_bytes
+        );
+        for item in &view.chart_items {
+            assert_chart_children_cover_parent(item);
+        }
+    }
+
+    fn test_directory_node(name: String, parent: NodeId, bytes: u64) -> InternalNode {
+        InternalNode {
+            name: OsString::from(name),
+            parent: Some(parent),
+            children: Vec::new(),
+            kind: EntryKind::Directory,
+            logical_bytes: bytes,
+            allocated_bytes: bytes,
+            file_count: 0,
+            directory_count: 1,
+            scan_revision: None,
+        }
+    }
+
+    fn assert_chart_children_cover_parent(item: &ChartItem) {
+        if item.children.is_empty() {
+            return;
+        }
+        assert_eq!(
+            item.children
+                .iter()
+                .map(|child| child.logical_bytes)
+                .sum::<u64>(),
+            item.logical_bytes
+        );
+        assert_eq!(
+            item.children
+                .iter()
+                .map(|child| child.allocated_bytes)
+                .sum::<u64>(),
+            item.allocated_bytes
+        );
+        for child in &item.children {
+            assert_chart_children_cover_parent(child);
+        }
     }
 
     #[test]

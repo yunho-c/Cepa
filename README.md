@@ -63,8 +63,10 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 Symlinks are reported but never followed. Mounted filesystems are not traversed
 when the portable backend can identify filesystem boundaries. The result view
 returns at most 500 rows for a directory, while the radial chart is bounded to
-16 segments per directory and three visible levels; omitted chart segments are
-combined into an aggregate. These bounds keep bridge and rendering costs
+16 segments per directory, three visible levels, and 512 recursive wire nodes
+in total; omitted chart segments are combined into an aggregate. Offscreen rows
+use standards-based rendering containment without leaving the DOM or changing
+the list's scroll extent. These bounds keep bridge and rendering costs
 predictable even when a scan contains millions of entries.
 
 On macOS, the landing screen collapses the sealed read-only system root and its
@@ -140,6 +142,7 @@ http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
+http://localhost:1420/?mock=stress
 http://localhost:1420/?drop=active
 http://localhost:1420/?roots=preview
 http://localhost:1420/?appearance=dark&roots=preview
@@ -147,7 +150,10 @@ http://localhost:1420/?appearance=dark&roots=preview
 
 The mock workflows, drop affordance, and storage preview are removed from
 production builds. Combine `?mock=complete&roots=preview` to exercise a volume
-selection through the complete mocked scan. The drop preview is visual only;
+selection through the complete mocked scan.
+`?mock=stress` exercises the production bounds of 500 list rows and 512 recursive
+chart nodes and records response-to-painted-frame time on the document's
+`data-cepa-scan-render-ms` development attribute. The drop preview is visual only;
 use `just dev` and drag a real folder from the platform file manager to validate
 the native window event. During frontend development, `?appearance=dark` or
 `?appearance=light` fixes the preview appearance without adding a production

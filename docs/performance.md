@@ -69,6 +69,12 @@ Each run measures:
 - `scannerElapsedMs`: the three scanner phases together.
 - `initialViewMs`: bounded selection and materialization of the initial radial
   chart and top-500 list.
+- `initialResponseBytes`: compact JSON size of the exact initial scan-response
+  shape before Tauri transport.
+- `initialResponseSerializationUs`: `serde_json` serialization of that response;
+  this excludes native IPC framing, transfer, and frontend parsing.
+- `initialListItems` and `initialChartItems`: the recursive wire-node counts that
+  make response-size comparisons auditable.
 - `wallMs`: scanner plus initial view and small harness overhead.
 
 The benchmark deliberately retains the snapshot until after timing, matching
@@ -555,12 +561,60 @@ Use the checked-in benchmark against other directory shapes with:
 just benchmark-search /path/to/folder query 9 auto allocated
 ```
 
+## Bounded chart wire and first render
+
+The list was already capped at 500 direct children, but the original chart bound
+was only per directory. A three-level hierarchy could therefore multiply the
+16-child limit into thousands of serialized nodes even when most deep arcs were
+too small to be useful. Chart materialization now shares a deterministic global
+512-node budget across the existing top-16-per-directory, three-level traversal.
+Each visited level reserves its ranked siblings before descending, and an
+aggregate item retains the logical and allocated bytes of omitted siblings. A
+synthetic unit fixture verifies the global count and recursively checks that any
+materialized child ring still covers its parent's complete byte total.
+
+The Rust baseline used the Apple M4 Pro development machine, release `jwalk`,
+one warmup, and nine measured scans of an APFS fixture containing 5,219
+non-root directories in a 17-way, three-level hierarchy. The response benchmark
+serializes the same `scanId`, `result`, and `view` shape returned by the Tauri
+command, but it does not measure IPC framing or transport.
+
+| Metric | Per-directory bound | Global 512-node bound | Change |
+| --- | ---: | ---: | ---: |
+| Recursive chart nodes | 4,641 | 512 | -89.0% |
+| Initial response bytes | 443,439 | 51,449 | -88.4% |
+| Median response serialization | 359 us | 52 us | -85.5% |
+| Median initial-view construction | 0.371 ms | 0.044 ms | -88.0% |
+
+Frontend rendering was measured separately in the development browser at the
+configured 880 by 620 launch viewport. The deterministic `?mock=stress` workflow
+contains all 500 list rows and 512 drawable SVG paths. Its marker begins when
+the mocked scan response reaches Svelte and ends after the next painted frame;
+it excludes scan and IPC time. Nine fresh runs changed from 141.0-166.8 ms with
+a 149.5 ms median to 94.4-106.4 ms with a 98.6 ms median after applying
+`content-visibility: auto` and a stable 61-pixel intrinsic block size to each
+row, a 34.0% median reduction. All 500 rows remain in the DOM, the 31,000-pixel
+scroll extent is unchanged, and an explicit row-500 interaction verified focus,
+scrolling, inspector expansion, and final selected-row visibility. This follows
+the [CSS Containment contract](https://www.w3.org/TR/css-contain-2/#using-cv-auto)
+that `auto` content remains available to focus, find, and other user-agent
+features while offscreen rendering may be skipped. WebKit added
+[`content-visibility` in Safari 18](https://webkit.org/blog/15443/news-from-wwdc24-webkit-in-safari-18-beta/#content-visibility);
+older engines ignore the optimization and retain the existing layout.
+
+Raw observations are preserved in
+[`performance-results/2026-07-13-chart-wire-budget.csv`](performance-results/2026-07-13-chart-wire-budget.csv)
+and
+[`performance-results/2026-07-13-frontend-render-containment.csv`](performance-results/2026-07-13-frontend-render-containment.csv).
+The browser result is a frontend regression baseline, not native WebKit,
+WebView2, or WebKitGTK proof.
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
 the one real-tree observation is still a single local APFS checkout. They do
-not measure cold storage, network volumes, antivirus interference, Tauri
-serialization, frontend rendering, or other operating systems. The RSS
+not measure cold storage, network volumes, antivirus interference, native IPC
+transport, production platform WebViews, or other operating systems. The RSS
 measurements include the benchmark process and allocator, not just
 snapshot-owned bytes. These results are a regression baseline, not a universal
 speed claim.
@@ -570,7 +624,8 @@ Before generalizing these results beyond the measured workloads, add:
 - additional representative real directory trees and cold-cache runs;
 - snapshot-owned bytes per entry and scaling beyond 100,000 entries;
 - cancellation latency during deliberately long aggregation work;
-- IPC serialization and first-render timing;
+- native Tauri IPC transport and production first-render timing on each platform
+  WebView;
 - broader Linux filesystem/hardware coverage, cold-cache throughput, and
   scheduler profiling without restricted performance counters;
 - broader portable-versus-native parity, cold-cache throughput, and peak-memory

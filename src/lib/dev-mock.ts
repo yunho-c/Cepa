@@ -10,13 +10,15 @@ import type {
   SavingsEstimate,
   SizeMetric,
 } from "./scanner";
+import { createStressDirectoryView, createStressView } from "./dev-stress";
 
 type DevScenario =
   | "complete"
   | "scanning"
   | "error"
   | "navigation-error"
-  | "reveal-error";
+  | "reveal-error"
+  | "stress";
 
 const ROOT = "/Users/demo";
 const scanId = 42;
@@ -25,6 +27,7 @@ export function installDevMock(requestedScenario: string) {
   const scenario: DevScenario = isScenario(requestedScenario)
     ? requestedScenario
     : "complete";
+  const stressView = scenario === "stress" ? createStressView(scanId, ROOT) : null;
   let rejectPendingScan: ((reason: string) => void) | null = null;
   const cancelledEstimateRequests = new Set<number>();
   const cancelledSearchRequests = new Set<number>();
@@ -55,7 +58,7 @@ export function installDevMock(requestedScenario: string) {
           });
         }
         await delay(75);
-        return mockResponse();
+        return stressView ? stressResponse(stressView) : mockResponse();
       }
       case "cancel_scan":
         rejectPendingScan?.("Scan cancelled.");
@@ -66,7 +69,9 @@ export function installDevMock(requestedScenario: string) {
           throw "The mocked snapshot is no longer available.";
         }
         return metricView(
-          mockDirectoryView(Number(args.nodeId)),
+          stressView
+            ? createStressDirectoryView(stressView, Number(args.nodeId))
+            : mockDirectoryView(Number(args.nodeId)),
           args.metric === "logical" ? "logical" : "allocated",
         );
       case "search_scan_directory": {
@@ -79,7 +84,9 @@ export function installDevMock(requestedScenario: string) {
           throw "The mocked folder search could not be completed.";
         }
         const metric = args.metric === "logical" ? "logical" : "allocated";
-        const source = mockDirectoryView(Number(args.nodeId));
+        const source = stressView
+          ? createStressDirectoryView(stressView, Number(args.nodeId))
+          : mockDirectoryView(Number(args.nodeId));
         const hidden: DirectorySearchResult["items"][number] = {
           id: 99,
           name: "hidden-recording.mov",
@@ -189,6 +196,7 @@ function isScenario(value: string): value is DevScenario {
     "error",
     "navigation-error",
     "reveal-error",
+    "stress",
   ].includes(value);
 }
 
@@ -244,6 +252,35 @@ function mockResponse(): ScanResponse {
       sameFilesystemEnforced: true,
     },
     view: metricView(rootView(), "allocated"),
+  };
+}
+
+function stressResponse(view: DirectoryView): ScanResponse {
+  return {
+    scanId,
+    result: {
+      root: view.root,
+      displayName: view.displayName,
+      backend: "getattrlistbulk",
+      logicalBytes: view.logicalBytes,
+      allocatedBytes: view.allocatedBytes,
+      fileCount: view.items.reduce((total, item) => total + item.fileCount, 0),
+      directoryCount: view.items.reduce(
+        (total, item) => total + item.directoryCount,
+        0,
+      ),
+      skippedEntries: 0,
+      skippedFilesystems: 0,
+      duplicateHardLinks: 0,
+      traversalUs: 831_420,
+      aggregationUs: 11_203,
+      indexingUs: 0,
+      elapsedMs: 843,
+      allocatedSizeIsEstimate: false,
+      hardLinkDeduplicationSupported: true,
+      sameFilesystemEnforced: true,
+    },
+    view: metricView(view, "allocated"),
   };
 }
 

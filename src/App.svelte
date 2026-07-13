@@ -379,6 +379,9 @@
     revealingNodeId = null;
     sizeMetric = "allocated";
     compressionCapability = null;
+    if (import.meta.env.DEV) {
+      delete document.documentElement.dataset.cepaScanRenderMs;
+    }
     progress = null;
     result = null;
     view = null;
@@ -402,6 +405,7 @@
         path: requestedPath,
         onEvent,
       });
+      const renderStartedAt = performance.now();
       scanId = response.scanId;
       result = response.result;
       view = response.view;
@@ -409,6 +413,7 @@
       status = "complete";
       await tick();
       resultHeading?.focus();
+      recordDevelopmentRender(renderStartedAt);
       void loadCompressionCapability(response.scanId);
     } catch (error) {
       const message = String(error);
@@ -424,6 +429,17 @@
       await tick();
       stateNotice?.focus();
     }
+  }
+
+  function recordDevelopmentRender(startedAt: number) {
+    if (!import.meta.env.DEV) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.documentElement.dataset.cepaScanRenderMs = (
+          performance.now() - startedAt
+        ).toFixed(3);
+      });
+    });
   }
 
   async function cancelScan() {
@@ -507,6 +523,14 @@
     inspectedEntry = entry;
     compressionState = null;
     isInspectingCompression = true;
+    await tick();
+    if (
+      inspectionSequence === request &&
+      inspectedEntry?.id === entry.id &&
+      inspectionReturnTarget?.closest(".item-list")
+    ) {
+      inspectionReturnTarget.scrollIntoView({ block: "nearest" });
+    }
     try {
       const state = await invoke<CompressionState>("compression_state", {
         scanId: completedScanId,
@@ -535,6 +559,13 @@
     } finally {
       if (inspectionSequence === request) {
         isInspectingCompression = false;
+        await tick();
+        if (
+          inspectedEntry?.id === entry.id &&
+          inspectionReturnTarget?.closest(".item-list")
+        ) {
+          inspectionReturnTarget.scrollIntoView({ block: "nearest" });
+        }
       }
     }
   }

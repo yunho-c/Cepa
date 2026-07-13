@@ -59,6 +59,15 @@ such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
+Completed directory views retain at most 500 list rows. The hierarchical chart
+retains at most 16 ranked children per directory, three levels, and 512 recursive
+wire nodes globally; every omitted sibling set is folded into byte-preserving
+aggregate coverage. Keep the global budget deterministic and metric-aware.
+List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
+offscreen work can be skipped while every row remains in the DOM and reachable
+through focus, find, and scrolling. File inspection realigns a list-origin
+selection after both the initial and final inspector layouts; chart-origin
+inspection must not scroll the page.
 The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side; the compact desktop layout remains side by side
@@ -258,6 +267,8 @@ Start with these files:
 - `src/lib/scanner.ts`: frontend scan protocol types and formatters.
 - `src/lib/dev-mock.ts`: development-only Tauri workflow scenarios loaded by
   the `?mock=` query parameter.
+- `src/lib/dev-stress.ts`: deterministic 500-row, 512-chart-node frontend
+  stress fixture and coherent drill-down views.
 - `src/lib/appearance.ts`: root appearance synchronization and live system-theme
   change handling.
 - `src/lib/folder-drop.ts`: pure native drag-event decisions and privacy-safe

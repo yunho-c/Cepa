@@ -52,6 +52,15 @@ pub struct SearchMeasurement {
     pub items_truncated: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitialResponseMeasurement {
+    pub response_bytes: usize,
+    pub serialization_us: u64,
+    pub list_items: usize,
+    pub chart_items: usize,
+}
+
 impl BenchmarkScan {
     pub fn root_item_count(&self) -> usize {
         self.initial_view.total_items
@@ -76,6 +85,37 @@ impl BenchmarkScan {
             total_matches: result.total_matches,
             returned_items: result.items.len(),
             items_truncated: result.items_truncated,
+        })
+    }
+
+    pub fn measure_initial_response(&self) -> Result<InitialResponseMeasurement, String> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct BorrowedScanResponse<'a> {
+            scan_id: u64,
+            result: &'a ScanResult,
+            view: &'a DirectoryView,
+        }
+
+        let response = BorrowedScanResponse {
+            scan_id: 0,
+            result: &self.result,
+            view: &self.initial_view,
+        };
+        let started_at = Instant::now();
+        let bytes = serde_json::to_vec(&response)
+            .map_err(|error| format!("could not serialize the initial response: {error}"))?;
+
+        Ok(InitialResponseMeasurement {
+            response_bytes: bytes.len(),
+            serialization_us: saturating_duration_us(started_at.elapsed()),
+            list_items: self.initial_view.items.len(),
+            chart_items: self
+                .initial_view
+                .chart_items
+                .iter()
+                .map(scanner::chart_item_count)
+                .sum(),
         })
     }
 }

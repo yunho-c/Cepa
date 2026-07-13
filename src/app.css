@@ -689,7 +689,7 @@ body {
 
 .item-list { min-height: 0; display: grid; flex: 1; align-content: start; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; transition: opacity 120ms ease; }
 .item-list.is-navigating { opacity: 0.45; pointer-events: none; }
-.storage-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: stretch; border-bottom: 1px solid var(--border); transition: background 120ms ease; }
+.storage-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: stretch; border-bottom: 1px solid var(--border); content-visibility: auto; contain-intrinsic-block-size: auto 61px; transition: background 120ms ease; }
 .storage-row:hover,
 .storage-row:focus-within,
 .storage-row[data-selected="true"] { background: var(--muted); }

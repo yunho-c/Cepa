@@ -56,6 +56,10 @@ struct RunMeasurement {
     aggregation_us: u64,
     indexing_us: u64,
     initial_view_ms: f64,
+    initial_response_bytes: usize,
+    initial_response_serialization_us: u64,
+    initial_list_items: usize,
+    initial_chart_items: usize,
     entries_per_second: f64,
 }
 
@@ -72,6 +76,9 @@ struct Summary {
     median_aggregation_us: f64,
     median_indexing_us: f64,
     median_initial_view_ms: f64,
+    median_initial_response_bytes: f64,
+    median_initial_response_serialization_us: f64,
+    median_initial_chart_items: f64,
 }
 
 fn main() {
@@ -99,6 +106,7 @@ fn run() -> Result<(), String> {
         let started_at = Instant::now();
         let scan = benchmark_scan_with_backend(&path, backend)?;
         let wall = started_at.elapsed();
+        let initial_response = scan.measure_initial_response()?;
         let result = &scan.result;
         let mismatches = expected.accounting_mismatches(result);
         if !mismatches.is_empty() {
@@ -128,12 +136,16 @@ fn run() -> Result<(), String> {
             aggregation_us: result.aggregation_us,
             indexing_us: result.indexing_us,
             initial_view_ms: scan.initial_view_ms,
+            initial_response_bytes: initial_response.response_bytes,
+            initial_response_serialization_us: initial_response.serialization_us,
+            initial_list_items: initial_response.list_items,
+            initial_chart_items: initial_response.chart_items,
             entries_per_second,
         });
     }
 
     let report = BenchmarkReport {
-        schema_version: 4,
+        schema_version: 5,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -256,6 +268,14 @@ fn summarize(runs: &[RunMeasurement]) -> Summary {
         median_aggregation_us: median(runs.iter().map(|run| run.aggregation_us as f64)),
         median_indexing_us: median(runs.iter().map(|run| run.indexing_us as f64)),
         median_initial_view_ms: median(runs.iter().map(|run| run.initial_view_ms)),
+        median_initial_response_bytes: median(
+            runs.iter().map(|run| run.initial_response_bytes as f64),
+        ),
+        median_initial_response_serialization_us: median(
+            runs.iter()
+                .map(|run| run.initial_response_serialization_us as f64),
+        ),
+        median_initial_chart_items: median(runs.iter().map(|run| run.initial_chart_items as f64)),
     }
 }
 
