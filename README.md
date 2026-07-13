@@ -19,7 +19,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   hard-link name recovery, and automatic `jwalk` fallback for subfolders,
   non-NTFS volumes, or unavailable volume access
 - Read-only native storage discovery with free/total capacity and a direct scan
-  action for local volumes, while keeping the folder picker as a fallback
+  action for local volumes, while keeping the folder picker visible at the
+  default and minimum window heights
 - Native directory picker on supported desktop platforms
 - Native single-folder drag and drop with a preflight check that preserves the
   current result until the dropped directory is accepted

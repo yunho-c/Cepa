@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   scanRootUsedBytes,
   scanRootUsedPercent,
+  shouldShowScanRoots,
   type ScanRoot,
 } from "./scan-roots";
 
@@ -16,6 +17,14 @@ const root: ScanRoot = {
 };
 
 describe("scan root presentation", () => {
+  test("shows the picker only when it has a visible state", () => {
+    expect(shouldShowScanRoots("idle", 0)).toBe(false);
+    expect(shouldShowScanRoots("ready", 0)).toBe(false);
+    expect(shouldShowScanRoots("loading", 0)).toBe(true);
+    expect(shouldShowScanRoots("error", 0)).toBe(true);
+    expect(shouldShowScanRoots("ready", 1)).toBe(true);
+  });
+
   test("derives used capacity from available bytes", () => {
     expect(scanRootUsedBytes(root)).toBe(750);
     expect(scanRootUsedPercent(root)).toBe(75);

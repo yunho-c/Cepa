@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import {
     scanRootUsedPercent,
+    shouldShowScanRoots,
     type ScanRoot,
     type ScanRootsStatus,
   } from "$lib/scan-roots";
@@ -20,7 +21,7 @@
   let { roots, status, busy, preparingPath, onSelect, onRetry }: Props = $props();
 </script>
 
-{#if status === "loading" || roots.length > 0 || status === "error"}
+{#if shouldShowScanRoots(status, roots.length)}
   <section class="scan-roots" aria-labelledby="scan-roots-title">
     <div class="scan-roots-heading">
       <h2 id="scan-roots-title">Storage</h2>

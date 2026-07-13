@@ -55,6 +55,13 @@ entry: the UI displays `/`, while the scanner uses the Data volume so firmlink
 enforcement does not omit user data. The backend caches display names from the
 discovery response and applies them to the root node without changing its
 authoritative scan path; scan start does not rerun device discovery.
+When the storage picker is visible, the landing view compacts its hero and bounds
+the volume list so the folder picker and manual-path fallback remain visible at
+both 880 by 620 and 620 by 480. At 560 logical pixels tall or less, only the
+decorative app tile is removed and volume rows tighten to 64 pixels. Preserve the
+spacious centered hero when no storage panel is rendered; use
+`shouldShowScanRoots` for both the component and layout state so they cannot
+drift.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 intentional mount-boundary semantics remain available under the collapsed
 `Scan details` disclosure rather than appearing as status badges or a diagnostic

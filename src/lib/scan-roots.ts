@@ -10,6 +10,13 @@ export interface ScanRoot {
 
 export type ScanRootsStatus = "idle" | "loading" | "ready" | "error";
 
+export function shouldShowScanRoots(
+  status: ScanRootsStatus,
+  rootCount: number,
+): boolean {
+  return status === "loading" || status === "error" || rootCount > 0;
+}
+
 export function scanRootUsedBytes(root: ScanRoot): number {
   return Math.max(0, root.totalBytes - root.availableBytes);
 }

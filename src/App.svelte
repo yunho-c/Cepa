@@ -24,7 +24,11 @@
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
-  import { type ScanRoot, type ScanRootsStatus } from "$lib/scan-roots";
+  import {
+    shouldShowScanRoots,
+    type ScanRoot,
+    type ScanRootsStatus,
+  } from "$lib/scan-roots";
   import {
     formatBytes,
     formatBackend,
@@ -218,6 +222,9 @@
     droppedPaths.length === 1
       ? droppedItemName(droppedPaths[0])
       : `${droppedPaths.length} items`,
+  );
+  const showsScanRoots = $derived(
+    shouldShowScanRoots(scanRootsStatus, scanRoots.length),
   );
 
   function clearDropState() {
@@ -997,7 +1004,7 @@
   {/if}
 
   {#if status === "idle" || status === "error" || status === "cancelled"}
-    <main class="landing">
+    <main class="landing" class:landing-with-storage={showsScanRoots}>
       <section class="landing-copy" aria-labelledby="landing-title">
         <div class="app-symbol" aria-hidden="true"><CepaMark /></div>
         <h1 id="landing-title">Find what’s taking up space.</h1>
