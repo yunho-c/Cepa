@@ -3,6 +3,14 @@ set dotenv-load
 export RUSTC_WRAPPER := ""
 export CARGO_BUILD_RUSTC_WRAPPER := ""
 
+# Prefer Apple's system bundle tools and seal local macOS apps with an ad-hoc
+# identity. A supplied Developer ID identity still takes precedence.
+bundle-environment := if os() == "macos" {
+    'PATH="/usr/bin:$PATH" APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"'
+} else {
+    ''
+}
+
 # List available recipes.
 default:
     @just --list
@@ -95,4 +103,4 @@ build:
 
 # Build platform desktop bundles.
 bundle:
-    bun run tauri build
+    {{ bundle-environment }} bun run tauri build

@@ -430,7 +430,10 @@ just bundle    # produce platform desktop bundles
 
 The native recipes deliberately clear configured Rust compiler wrappers so a
 machine-level `sccache` configuration cannot block Cargo. Prefer these recipes
-when validating Rust or Tauri work.
+when validating Rust or Tauri work. On macOS, `just bundle` also prioritizes
+Apple's system bundle tools and defaults to ad-hoc signing when
+`APPLE_SIGNING_IDENTITY` is absent. This produces a sealed local test bundle;
+it is not evidence of Developer ID signing or notarization.
 
 ## Change and validation discipline
 

@@ -345,4 +345,9 @@ just bundle
 ```
 
 `just bundle` generates the platform desktop bundles. Mobile targets are not
-initialized or configured.
+initialized or configured. On macOS, the recipe defaults local builds to an
+ad-hoc identity so the app has a complete resource seal, and prefers Apple's
+system bundle tools over conflicting third-party commands on `PATH`. Supplying
+`APPLE_SIGNING_IDENTITY` preserves that identity for a release build. Ad-hoc
+signing is local integrity validation only; public distribution still requires
+a suitable Developer ID identity and notarization.
