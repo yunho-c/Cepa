@@ -63,6 +63,7 @@
     desktopCommandForKeydown,
     desktopMenuAvailability,
     primaryModifierForPlatform,
+    scanPathPlaceholderForPlatform,
     type DesktopCommand,
     type DesktopCommandContext,
     type DesktopMenuAvailability,
@@ -171,6 +172,7 @@
   let dropSequence = 0;
 
   const primaryModifier = primaryModifierForPlatform(navigator.platform);
+  const scanPathPlaceholder = scanPathPlaceholderForPlatform(navigator.platform);
   const syncDesktopMenuAvailability = createDesktopMenuAvailabilitySync(
     (availability) => invoke("set_desktop_menu_availability", { availability }),
   );
@@ -1210,7 +1212,7 @@
               <Input
                 id="scan-path"
                 class="path-input"
-                placeholder="/Users/you/Documents"
+                placeholder={scanPathPlaceholder}
                 autocomplete="off"
                 spellcheck={false}
                 disabled={isBusy}

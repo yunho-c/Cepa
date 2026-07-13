@@ -5,6 +5,7 @@ import {
   desktopCommandForKeydown,
   desktopMenuAvailability,
   primaryModifierForPlatform,
+  scanPathPlaceholderForPlatform,
   type DesktopCommandContext,
   type ShortcutEvent,
 } from "./shortcuts";
@@ -37,6 +38,16 @@ describe("desktop shortcuts", () => {
     expect(primaryModifierForPlatform("MacIntel")).toBe("meta");
     expect(primaryModifierForPlatform("Win32")).toBe("ctrl");
     expect(primaryModifierForPlatform("Linux x86_64")).toBe("ctrl");
+  });
+
+  test("shows a native path example for manual folder entry", () => {
+    expect(scanPathPlaceholderForPlatform("MacIntel")).toBe("/Users/you/Documents");
+    expect(scanPathPlaceholderForPlatform("Win32")).toBe(
+      "C:\\Users\\you\\Documents",
+    );
+    expect(scanPathPlaceholderForPlatform("Linux x86_64")).toBe(
+      "/home/you/Documents",
+    );
   });
 
   test("maps open, rescan, and search without hijacking modified variants", () => {

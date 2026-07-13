@@ -98,6 +98,12 @@ export function primaryModifierForPlatform(platform: string): PrimaryModifier {
   return /Mac|iPhone|iPad|iPod/i.test(platform) ? "meta" : "ctrl";
 }
 
+export function scanPathPlaceholderForPlatform(platform: string): string {
+  if (/Win/i.test(platform)) return "C:\\Users\\you\\Documents";
+  if (/Mac|iPhone|iPad|iPod/i.test(platform)) return "/Users/you/Documents";
+  return "/home/you/Documents";
+}
+
 export function desktopCommandForKeydown(
   event: ShortcutEvent,
   context: DesktopCommandContext,
