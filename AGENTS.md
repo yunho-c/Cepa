@@ -74,7 +74,12 @@ or rendering bounds. Search is scan-authorized and never accepts a path.
 Completed scans can be rerun against the same root without reopening the folder
 picker. Platform-aware desktop commands live in `src/lib/shortcuts.ts`; keep
 their availability state-driven, preserve IME and modified-key behavior, and
-restore focus when Escape dismisses search or item details.
+restore focus when Escape dismisses search or item details. The native
+application menu in `src-tauri/src/desktop_menu.rs` shares this command path and
+mirrors live availability. Keep backend menu IDs private to Rust, emit only the
+small stable frontend command vocabulary, and revalidate every emitted command
+in the frontend before acting. Serialize and coalesce availability updates so a
+slower IPC completion cannot leave the native menu in an older state.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native
 desktop and store assets. macOS normalizes ICNS output deterministically;
@@ -114,6 +119,10 @@ rejects unavailable or mismatched scan-time revisions before producing a plan.
 This metadata is not a content fingerprint: same-clock-tick inode reuse or data
 rewrites may remain indistinguishable. Do not add an apply command or expose a
 dead-end plan UI until a held-handle/content-integrity design closes that gate.
+The same constraint applies to destructive cleanup. Do not add a path-based
+trash or delete action authorized only by a completed scan: a replacement could
+occupy that path between scanning and mutation. Reclaim actions need an
+identity-safe, race-resistant contract before they can enter the UI.
 
 The intended scanning architecture is:
 
@@ -241,7 +250,7 @@ Start with these files:
 - `src/lib/components/scan-root-picker.svelte`: grouped landing-screen volume
   chooser and its loading, unavailable, and preparing states.
 - `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
-  shortcut conflict rules.
+  shared native-menu availability and shortcut conflict rules.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
   canonical radial-C identity.
 - `public/cepa-icon.svg` and `scripts/generate-icons.ts`: canonical app icon and
@@ -249,6 +258,8 @@ Start with these files:
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
+- `src-tauri/src/desktop_menu.rs`: native menu construction, stable command
+  event mapping, and live item availability.
 - `src-tauri/src/scan_roots.rs`: cross-platform local-volume discovery,
   normalization, APFS system/Data collapsing, and compact wire contract.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and
@@ -311,6 +322,9 @@ when validating Rust or Tauri work.
   preflight, inspect the development-only visual preview, and run a real
   file-manager-to-window drop when desktop UI automation or a manual host is
   available. Do not report the visual preview as proof of a native window event.
+- For native-menu changes, test command/availability mapping, build the desktop
+  shell, and inspect a real packaged or development window. A frontend shortcut
+  test does not prove that the operating-system menu was constructed or updated.
 - For scan-root discovery changes, run the real-host discovery test on each
   supported platform in addition to normalization fixtures. Check that presented
   capacity is contextual volume information rather than claiming it equals the

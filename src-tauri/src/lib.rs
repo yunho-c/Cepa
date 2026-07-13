@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "desktop"), allow(dead_code, unused_imports))]
 
 mod compression;
+#[cfg(feature = "desktop")]
+mod desktop_menu;
 mod file_revision;
 mod scan_roots;
 mod scanner;
@@ -819,8 +821,21 @@ async fn reveal_scan_item(
 }
 
 #[cfg(feature = "desktop")]
+#[tauri::command]
+fn set_desktop_menu_availability(
+    availability: desktop_menu::DesktopMenuAvailability,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    desktop_menu::set_availability(&app, availability)
+}
+
+#[cfg(feature = "desktop")]
 pub fn run() {
     tauri::Builder::default()
+        .menu(desktop_menu::build)
+        .on_menu_event(|app, event| {
+            desktop_menu::emit_command(app, event.id().as_ref());
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(ScanState::default())
@@ -842,7 +857,8 @@ pub fn run() {
             cancel_compression_estimate,
             prepare_compression_plan,
             revalidate_compression_plan,
-            reveal_scan_item
+            reveal_scan_item,
+            set_desktop_menu_availability
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

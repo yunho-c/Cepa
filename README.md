@@ -49,8 +49,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - System-synchronized light and dark appearance, including live operating-system
   changes and theme-aware chart, warning, and native-window surfaces
-- In-place rescanning and platform-native desktop shortcuts for opening a folder,
-  searching, moving to the parent folder, and dismissing transient details
+- Native application menus with state-aware Open Folder, Scan Again, Search,
+  and parent-folder commands, backed by the same guarded desktop shortcuts
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   partial-coverage, and completed states, with routine backend/accounting
   semantics available under a compact scan-details disclosure
@@ -150,11 +150,12 @@ preference; production follows the operating system and updates live.
 
 ## Desktop commands
 
-Keyboard commands follow the host platform and only run when the current app
-state supports them. Modified variants such as Command-Shift-R remain available
-to the host webview instead of being intercepted. Reserved commands that are
-temporarily unavailable are consumed as no-ops so they cannot reload the webview
-or open its built-in find surface.
+The application menu exposes the primary desktop commands and disables each item
+when the current app state cannot perform it. Keyboard commands follow the host
+platform and pass through the same availability checks. Modified variants such
+as Command-Shift-R remain available to the host webview instead of being
+intercepted. Reserved commands that are temporarily unavailable are consumed as
+no-ops so they cannot reload the webview or open its built-in find surface.
 
 | Action | macOS | Windows and Linux |
 | --- | --- | --- |

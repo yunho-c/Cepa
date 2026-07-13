@@ -138,6 +138,7 @@ fn normalize_scan_roots(
     normalized
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn collapse_macos_data_volume(roots: &mut Vec<RawScanRoot>) {
     let system_index = roots.iter().position(|root| root.path == Path::new("/"));
     let data_index = roots

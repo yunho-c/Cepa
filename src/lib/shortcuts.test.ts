@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createDesktopMenuAvailabilitySync,
+  desktopCommandForMenu,
   desktopCommandForKeydown,
+  desktopMenuAvailability,
   primaryModifierForPlatform,
   type DesktopCommandContext,
   type ShortcutEvent,
@@ -117,5 +120,47 @@ describe("desktop shortcuts", () => {
         detailsOpen: true,
       }),
     ).toBe("closeDetails");
+  });
+
+  test("projects only native menu availability fields", () => {
+    expect(desktopMenuAvailability(baseContext)).toEqual({
+      canChooseDirectory: true,
+      canRescan: true,
+      canSearch: true,
+      canNavigateUp: true,
+    });
+  });
+
+  test("accepts supported native menu commands only while available", () => {
+    expect(desktopCommandForMenu("chooseDirectory", baseContext)).toBe(
+      "chooseDirectory",
+    );
+    expect(desktopCommandForMenu("search", baseContext)).toBe("search");
+    expect(
+      desktopCommandForMenu("search", { ...baseContext, canSearch: false }),
+    ).toBeNull();
+    expect(desktopCommandForMenu("closeDetails", baseContext)).toBeNull();
+    expect(desktopCommandForMenu({ command: "rescan" }, baseContext)).toBeNull();
+  });
+
+  test("serializes native menu updates and coalesces pending state", async () => {
+    let releaseFirstUpdate: (() => void) | undefined;
+    const firstUpdate = new Promise<void>((resolve) => {
+      releaseFirstUpdate = resolve;
+    });
+    const updates: boolean[] = [];
+    const sync = createDesktopMenuAvailabilitySync(async (availability) => {
+      updates.push(availability.canRescan);
+      if (updates.length === 1) await firstUpdate;
+    });
+
+    const settled = sync({ ...baseContext, canRescan: false });
+    void sync({ ...baseContext, canRescan: false });
+    void sync({ ...baseContext, canRescan: true });
+    expect(updates).toEqual([false]);
+
+    releaseFirstUpdate?.();
+    await settled;
+    expect(updates).toEqual([false, true]);
   });
 });

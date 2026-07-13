@@ -53,8 +53,14 @@
   } from "$lib/scanner";
   import { createSunburst } from "$lib/sunburst";
   import {
+    createDesktopMenuAvailabilitySync,
+    desktopCommandForMenu,
     desktopCommandForKeydown,
+    desktopMenuAvailability,
     primaryModifierForPlatform,
+    type DesktopCommand,
+    type DesktopCommandContext,
+    type DesktopMenuAvailability,
   } from "$lib/shortcuts";
 
   type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
@@ -145,6 +151,9 @@
   let dropSequence = 0;
 
   const primaryModifier = primaryModifierForPlatform(navigator.platform);
+  const syncDesktopMenuAvailability = createDesktopMenuAvailabilitySync(
+    (availability) => invoke("set_desktop_menu_availability", { availability }),
+  );
   const primaryShortcutLabel = primaryModifier === "meta" ? "⌘" : "Ctrl+";
   const backShortcutLabel = primaryModifier === "meta" ? "⌥←" : "Alt+←";
 
@@ -289,23 +298,45 @@
     }
   }
 
+  $effect(() => {
+    const availability = desktopMenuAvailability(currentDesktopMenuAvailability());
+    if (!isTauri() || hasDevMock) return;
+    void syncDesktopMenuAvailability(availability);
+  });
+
   onMount(() => {
     void loadScanRoots();
     if (!isTauri() || hasDevMock) return;
 
     let disposed = false;
-    let unlisten: (() => void) | null = null;
-    void getCurrentWindow()
+    let unlistenDrop: (() => void) | null = null;
+    let unlistenMenu: (() => void) | null = null;
+    const appWindow = getCurrentWindow();
+    void appWindow
       .onDragDropEvent(handleNativeFolderDrop)
       .then((stopListening) => {
         if (disposed) stopListening();
-        else unlisten = stopListening;
+        else unlistenDrop = stopListening;
+      })
+      .catch(() => {});
+    void appWindow
+      .listen<unknown>("cepa://menu-command", ({ payload }) => {
+        const command = desktopCommandForMenu(
+          payload,
+          currentDesktopCommandContext(),
+        );
+        if (command !== null) runDesktopCommand(command);
+      })
+      .then((stopListening) => {
+        if (disposed) stopListening();
+        else unlistenMenu = stopListening;
       })
       .catch(() => {});
 
     return () => {
       disposed = true;
-      unlisten?.();
+      unlistenDrop?.();
+      unlistenMenu?.();
     };
   });
 
@@ -658,21 +689,27 @@
     }
   }
 
-  function handleDesktopKeydown(event: KeyboardEvent) {
-    const command = desktopCommandForKeydown(event, {
-      primaryModifier,
+  function currentDesktopMenuAvailability(): DesktopMenuAvailability {
+    return {
       canChooseDirectory: !isBusy,
       canRescan: status === "complete" && !isBusy,
       canSearch:
         status === "complete" && view !== null && !isNavigating && !isBusy,
       canNavigateUp:
         status === "complete" && parentId !== null && !isNavigating && !isBusy,
+    };
+  }
+
+  function currentDesktopCommandContext(): DesktopCommandContext {
+    return {
+      ...currentDesktopMenuAvailability(),
+      primaryModifier,
       searchOpen,
       detailsOpen: inspectedEntry !== null,
-    });
-    if (command === null) return;
+    };
+  }
 
-    event.preventDefault();
+  function runDesktopCommand(command: DesktopCommand) {
     switch (command) {
       case "chooseDirectory":
         void chooseDirectory();
@@ -695,6 +732,17 @@
       case "suppress":
         break;
     }
+  }
+
+  function handleDesktopKeydown(event: KeyboardEvent) {
+    const command = desktopCommandForKeydown(
+      event,
+      currentDesktopCommandContext(),
+    );
+    if (command === null) return;
+
+    event.preventDefault();
+    runDesktopCommand(command);
   }
 
   function scheduleDirectorySearch() {
