@@ -793,7 +793,7 @@ body {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 559px) {
   .explorer { height: auto; grid-template-columns: 1fr; }
   .chart-pane { min-height: 420px; border-right: 0; border-bottom: 1px solid var(--border); }
   .sunburst-wrap { width: min(100%, 390px); }
@@ -833,6 +833,67 @@ body {
   .scan-details dl { grid-template-columns: 1fr; }
   .scan-details .compression-detail { grid-column: auto; }
   .path-form { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 560px) and (max-width: 720px),
+       (min-width: 721px) and (max-height: 560px) {
+  .results-view {
+    --compact-explorer-offset: 224px;
+    padding-top: 12px;
+    padding-bottom: 20px;
+  }
+  .results-view:has(.coverage-notice) { --compact-explorer-offset: 266px; }
+  .results-heading {
+    align-items: flex-end;
+    flex-direction: row;
+    gap: 16px;
+  }
+  .results-heading h1 { font-size: 24px; }
+  .result-path { max-width: 360px; margin-top: 3px; }
+  .result-total { justify-items: end; }
+  .result-total strong { font-size: 24px; }
+  .result-summary {
+    margin: 6px 0 9px;
+    gap: 5px 8px;
+    font-size: 11px;
+  }
+  .coverage-notice {
+    margin: 0 0 8px;
+    padding: 6px 9px;
+  }
+  .coverage-notice p { line-height: 1.35; }
+  .explorer-toolbar {
+    margin-bottom: 6px;
+    align-items: center;
+    flex-direction: row;
+  }
+  .metric-switch { align-self: auto; }
+  .explorer {
+    height: calc(100vh - var(--compact-explorer-offset));
+    min-height: 214px;
+  }
+  .chart-center { width: 38%; }
+  .chart-center strong { font-size: 12px; }
+  .chart-center em { font-size: 8px; }
+  .chart-help { display: none; }
+}
+
+@media (min-width: 560px) and (max-width: 720px) {
+  .explorer {
+    grid-template-columns: minmax(196px, 0.72fr) minmax(0, 1.28fr);
+  }
+  .chart-pane {
+    min-height: 0;
+    padding: 16px 10px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+  }
+  .sunburst-wrap { width: min(100%, 170px); }
+  .directory-pane { padding: 12px 10px 10px; }
+  .section-heading { min-height: 38px; padding-bottom: 8px; }
+  .section-heading h2 { font-size: 15px; }
+  .directory-search { width: min(180px, 31vw); }
+  .item-list { max-height: none; flex: 1; }
 }
 
 @media (max-height: 560px) {

@@ -82,10 +82,13 @@ selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
 The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
-and ranked list side by side; the compact desktop layout remains side by side
-through 721 logical pixels without horizontal overflow. Only the narrow fallback
-at 720 pixels and below stacks the two panes. Validate the configured 620 by 480
-minimum as well as the default size when changing result spacing, column bounds,
+and ranked list side by side throughout the native window's supported width range.
+From 560 through 720 logical pixels wide, use the compact two-column explorer;
+only browser previews below 560 pixels stack the panes. The narrow layout always
+compacts the result header; wider views do so at 560 logical pixels tall or less.
+At the configured 620 by 480 minimum, keep the coverage warning, map, and at least
+two ranked rows visible together without horizontal overflow. Validate both the
+configured minimum and default size when changing result spacing, column bounds,
 or breakpoints.
 The desktop shell restores stable window geometry with the official Tauri
 window-state plugin. Track and restore only size, on-screen position, and
