@@ -1,0 +1,12 @@
+record,run,backend,file_count,directory_count,matched,entries_at_request,scan_elapsed_us,cancellation_latency_us
+parity,0,jwalk,4099,33,true,,,
+parity,0,statx,4099,33,true,,,
+cancellation,1,statx,,,,2047,813,90
+cancellation,2,statx,,,,2047,630,72
+cancellation,3,statx,,,,2047,615,84
+cancellation,4,statx,,,,2047,607,102
+cancellation,5,statx,,,,2047,766,67
+cancellation,6,statx,,,,2047,790,72
+cancellation,7,statx,,,,2047,753,87
+cancellation,8,statx,,,,2047,666,85
+cancellation,9,statx,,,,2047,617,56

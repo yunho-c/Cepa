@@ -95,6 +95,20 @@ just install
 just dev
 ```
 
+Backend work can be validated on a machine without Tauri's GTK/WebKit desktop
+libraries:
+
+```sh
+just native-check
+```
+
+This compiles, lints, and tests the production scanner, accounting, search,
+compression inspection, estimation, and plan code with the default `desktop`
+feature disabled. The fixture, parity, scan, search, and cancellation benchmark
+recipes use the same dependency-light feature set. This is native core evidence,
+not proof that the Tauri shell builds or launches; use both `just check` and
+`just build` on a fully provisioned desktop host for that boundary.
+
 `just web` runs only the Vite frontend. Folder selection and scanning require
 the native Tauri application, so the web-only mode is intended for frontend
 layout work. During development, append one of the following mock scenarios to

@@ -1,17 +1,28 @@
+#![cfg_attr(not(feature = "desktop"), allow(dead_code, unused_imports))]
+
 mod compression;
 mod file_revision;
 mod scanner;
 
-use scanner::{CompressionTarget, DirectoryView, ScanProgress, ScanSnapshot, SizeMetric};
+#[cfg(feature = "desktop")]
+use scanner::{CompressionTarget, ScanProgress};
+use scanner::{DirectoryView, ScanSnapshot, SizeMetric};
 use serde::Serialize;
 use std::path::Path;
+#[cfg(feature = "desktop")]
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+#[cfg(feature = "desktop")]
+use std::sync::Mutex;
+#[cfg(feature = "desktop")]
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
+#[cfg(feature = "desktop")]
 use tauri::ipc::Channel;
+#[cfg(feature = "desktop")]
 use tauri_plugin_opener::OpenerExt;
 
 pub use scanner::{ScanBackend, ScanResult};
@@ -166,6 +177,7 @@ fn saturating_duration_us(duration: std::time::Duration) -> u64 {
     duration.as_micros().min(u128::from(u64::MAX)) as u64
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 struct ScanState {
     next_id: AtomicU64,
@@ -173,40 +185,47 @@ struct ScanState {
     completed: Mutex<Option<CompletedScan>>,
 }
 
+#[cfg(feature = "desktop")]
 struct ActiveScan {
     id: u64,
     cancel: Arc<AtomicBool>,
 }
 
+#[cfg(feature = "desktop")]
 struct CompletedScan {
     id: u64,
     snapshot: Arc<ScanSnapshot>,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 struct EstimateState {
     next_token: AtomicU64,
     active: Mutex<Option<ActiveEstimate>>,
 }
 
+#[cfg(feature = "desktop")]
 struct ActiveEstimate {
     token: u64,
     request_id: u64,
     cancel: Arc<AtomicBool>,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 struct SearchState {
     next_token: AtomicU64,
     active: Mutex<Option<ActiveSearch>>,
 }
 
+#[cfg(feature = "desktop")]
 struct ActiveSearch {
     token: u64,
     request_id: u64,
     cancel: Arc<AtomicBool>,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 struct CompressionPlanState {
     next_id: AtomicU64,
@@ -214,11 +233,13 @@ struct CompressionPlanState {
     active: Mutex<Option<ActiveCompressionPlan>>,
 }
 
+#[cfg(feature = "desktop")]
 struct ActiveCompressionPlan {
     generation: u64,
     plan: compression::PreparedCompressionPlan,
 }
 
+#[cfg(feature = "desktop")]
 impl CompressionPlanState {
     fn begin(&self) -> (u64, u64) {
         let plan_id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
@@ -289,6 +310,7 @@ impl CompressionPlanState {
     }
 }
 
+#[cfg(feature = "desktop")]
 impl EstimateState {
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
         let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
@@ -347,6 +369,7 @@ impl EstimateState {
     }
 }
 
+#[cfg(feature = "desktop")]
 impl SearchState {
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
         let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
@@ -402,6 +425,7 @@ impl SearchState {
     }
 }
 
+#[cfg(feature = "desktop")]
 impl ScanState {
     fn begin(&self) -> (u64, Arc<AtomicBool>) {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
@@ -500,6 +524,7 @@ impl ScanState {
     }
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "event", rename_all = "camelCase")]
 enum ScanEvent {
@@ -513,6 +538,7 @@ enum ScanEvent {
     },
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ScanResponse {
@@ -521,6 +547,7 @@ struct ScanResponse {
     view: DirectoryView,
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn scan_directory(
     path: String,
@@ -567,11 +594,13 @@ async fn scan_directory(
     }
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 fn cancel_scan(scan_id: u64, state: tauri::State<'_, ScanState>) -> bool {
     state.cancel(scan_id)
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 fn open_scan_directory(
     scan_id: u64,
@@ -582,6 +611,7 @@ fn open_scan_directory(
     state.directory_view(scan_id, node_id, metric)
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn search_scan_directory(
     scan_id: u64,
@@ -604,11 +634,13 @@ async fn search_scan_directory(
     result?
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 fn cancel_directory_search(request_id: u64, searches: tauri::State<'_, SearchState>) -> bool {
     searches.cancel(request_id)
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn compression_capability(
     scan_id: u64,
@@ -620,6 +652,7 @@ async fn compression_capability(
         .map_err(|error| format!("The compression capability task stopped unexpectedly: {error}"))
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn compression_state(
     scan_id: u64,
@@ -632,6 +665,7 @@ async fn compression_state(
         .map_err(|error| format!("The compression-state task stopped unexpectedly: {error}"))
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn estimate_compression_savings(
     scan_id: u64,
@@ -651,6 +685,7 @@ async fn estimate_compression_savings(
     result
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 fn cancel_compression_estimate(
     request_id: u64,
@@ -659,6 +694,7 @@ fn cancel_compression_estimate(
     estimates.cancel(request_id)
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn prepare_compression_plan(
     scan_id: u64,
@@ -687,6 +723,7 @@ async fn prepare_compression_plan(
     }
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn revalidate_compression_plan(
     plan_id: u64,
@@ -703,6 +740,7 @@ async fn revalidate_compression_plan(
     Ok(validation)
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 async fn reveal_scan_item(
     scan_id: u64,
@@ -720,6 +758,7 @@ async fn reveal_scan_item(
     .map_err(|error| format!("The file manager task stopped unexpectedly: {error}"))?
 }
 
+#[cfg(feature = "desktop")]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -748,15 +787,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "desktop")]
     use super::{
-        CompressionPlanState, EstimateState, ScanBackend, ScanState, SearchState,
-        benchmark_cancellation, compression, scanner,
+        CompressionPlanState, EstimateState, ScanState, SearchState, compression, scanner,
     };
+    use super::{ScanBackend, benchmark_cancellation};
     use std::fs;
+    #[cfg(feature = "desktop")]
     use std::sync::Arc;
+    #[cfg(feature = "desktop")]
     use std::sync::atomic::AtomicBool;
+    #[cfg(feature = "desktop")]
     use std::sync::atomic::Ordering;
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn starting_a_new_scan_cancels_the_previous_one() {
         let state = ScanState::default();
@@ -769,6 +813,7 @@ mod tests {
         assert!(second_cancel.load(Ordering::Relaxed));
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn estimate_requests_cancel_superseded_work() {
         let state = EstimateState::default();
@@ -784,6 +829,7 @@ mod tests {
         assert!(!state.cancel(11));
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn finishing_an_old_estimate_cannot_clear_a_reused_wire_id() {
         let state = EstimateState::default();
@@ -797,6 +843,7 @@ mod tests {
         state.finish(second_token);
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn search_requests_cancel_superseded_and_explicitly_cancelled_work() {
         let state = SearchState::default();
@@ -812,6 +859,7 @@ mod tests {
         assert!(!state.cancel(31));
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn compression_plan_generations_reject_superseded_and_cleared_plans() {
         let temp = tempfile::tempdir().expect("create fixture directory");
@@ -885,6 +933,7 @@ mod tests {
         assert!(measurement.scan_elapsed_us >= measurement.cancellation_latency_us);
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     fn completed_scans_resolve_only_validated_item_paths() {
         let temp = tempfile::tempdir().expect("create fixture directory");
@@ -946,6 +995,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "desktop")]
     #[test]
     #[ignore = "opens the system file manager"]
     fn reveals_an_existing_item_in_the_system_file_manager() {

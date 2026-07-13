@@ -22,6 +22,12 @@ web:
 # Run all static checks and tests.
 check: frontend-check frontend-test rust-fmt rust-check rust-clippy test
 
+# Check scanner, accounting, and compression code without desktop UI libraries.
+native-check: rust-fmt
+    cargo check --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+    cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features -- -D warnings
+    cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+
 # Check the Svelte and TypeScript frontend.
 frontend-check:
     bun run check
@@ -52,23 +58,23 @@ test:
 
 # Generate a deterministic metadata-heavy benchmark fixture at a new path.
 benchmark-fixture path directories="100" files_per_directory="100" logical_bytes_per_file="0":
-    cargo run --release --manifest-path src-tauri/Cargo.toml --example generate_scan_fixture -- "{{ path }}" "{{ directories }}" "{{ files_per_directory }}" "{{ logical_bytes_per_file }}"
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example generate_scan_fixture -- "{{ path }}" "{{ directories }}" "{{ files_per_directory }}" "{{ logical_bytes_per_file }}"
 
 # Benchmark a complete scan and snapshot pipeline (one warmup plus N runs).
 benchmark-scan path iterations="5" backend="jwalk":
-    cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_benchmark -- "{{ path }}" "{{ iterations }}" "{{ backend }}"
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_benchmark -- "{{ path }}" "{{ iterations }}" "{{ backend }}"
 
 # Benchmark bounded current-folder search after one completed scan.
 benchmark-search path query iterations="9" backend="auto" metric="allocated":
-    cargo run --release --manifest-path src-tauri/Cargo.toml --example search_benchmark -- "{{ path }}" "{{ query }}" "{{ iterations }}" "{{ backend }}" "{{ metric }}"
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example search_benchmark -- "{{ path }}" "{{ query }}" "{{ iterations }}" "{{ backend }}" "{{ metric }}"
 
 # Compare backend accounting on a quiescent directory tree.
 validate-scan path left="jwalk" right="auto":
-    cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_parity -- "{{ path }}" "{{ left }}" "{{ right }}"
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_parity -- "{{ path }}" "{{ left }}" "{{ right }}"
 
 # Measure asynchronous cancellation latency after a progress boundary.
 benchmark-cancellation path backend="jwalk" iterations="9" after_entries="2048":
-    cargo run --release --manifest-path src-tauri/Cargo.toml --example scan_cancellation -- "{{ path }}" "{{ backend }}" "{{ iterations }}" "{{ after_entries }}"
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_cancellation -- "{{ path }}" "{{ backend }}" "{{ iterations }}" "{{ after_entries }}"
 
 # Build the frontend and native executable without packaging it.
 build:

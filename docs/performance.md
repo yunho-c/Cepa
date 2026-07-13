@@ -460,7 +460,25 @@ from a 34,668,544-byte median to 38,010,880 bytes, a 3,342,336-byte increase
 consistent with the intentional 32-byte revision field per scanner node plus
 allocator noise.
 
-The native Linux release harness passed 44 tests. On a fresh ext4 fixture with
+The dependency-light production-core path passed check, Clippy with warnings
+denied, and 46 tests under Rust 1.97.0. It compiles the same scanner,
+compression, and benchmark modules as the app while disabling only the default
+Tauri `desktop` feature. The benchmark recipes now use this path, so native
+backend validation no longer depends on GTK/WebKit development packages. It is
+not evidence that the Tauri shell builds or launches.
+
+On a fresh 4,099-file adversarial ext4 fixture, `jwalk` and `statx` again matched
+all accounting fields, including one deduplicated hard link and a directory
+symlink that was listed but not followed. Nine asynchronous `statx` cancellation
+runs returned in 56–102 us, with an 84 us median. These small warm runs validate
+behavior and cancellation wiring, not representative throughput. Raw values are
+preserved in
+[`performance-results/2026-07-12-linux-native-core.csv`](performance-results/2026-07-12-linux-native-core.csv).
+The same dependency-light check and warning-denied Clippy path passed 37 tests
+on native Windows with Rust 1.97.0, including the MFT parser, NTFS path policy,
+and exact LZNT1 estimator coverage.
+
+On a separate fresh ext4 fixture with
 100,001 files and 1,010 directories, nine warm `statx` runs had a 23.86 ms median
 traversal and 25.12 ms median wall time; one `/usr/bin/time -v` observation used
 18,712 KiB peak RSS. Rust 1.97 also advanced the full Tauri compile through the

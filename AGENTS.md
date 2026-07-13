@@ -59,6 +59,14 @@ in-app mark mirrors that geometry, while `just icons` regenerates the native
 desktop and store assets. macOS normalizes ICNS output deterministically;
 non-macOS runs preserve the checked-in ICNS. Do not hand-edit derived PNG, ICNS,
 or ICO files.
+The Rust crate's default `desktop` feature owns Tauri and its plugins. `just
+native-check` disables that feature to compile, lint, and test the exact scanner,
+accounting, search, and compression module graph on hosts without desktop UI
+libraries. Benchmark and parity recipes use the same dependency-light path.
+This is native core evidence, not proof that the desktop shell builds or runs.
+Because Cepa is desktop-only, the library target emits only an `rlib`; do not
+restore mobile-oriented `staticlib` or `cdylib` artifacts without a real target
+and native validation. MinGW debug tests can overflow the DLL export table.
 After completion, the UI requests a volume compression capability using the
 retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
 and always reports that no writer exists. Do not accept a frontend path for this
@@ -238,6 +246,7 @@ just install   # install frontend dependencies from the Bun lockfile
 just icons     # regenerate derived desktop icons from the canonical vector
 just dev       # run the native Tauri application
 just web       # run only the Vite frontend
+just native-check # validate Rust core without Tauri desktop libraries
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles
@@ -267,6 +276,9 @@ when validating Rust or Tauri work.
   that measures different behavior.
 - Run `just check` for normal code changes. Run the narrowest relevant checks
   while iterating, then the full suite before handoff when feasible.
+- Use `just native-check` when a host lacks Tauri system dependencies, but keep
+  that result labeled as scanner/compression core validation. It does not cover
+  Tauri command macros, plugins, the desktop executable, or bundling.
 - Report exactly what was validated and distinguish static checks, mocked or
   fixture-based tests, real local scans, platform-specific validation, and
   end-to-end application proof.

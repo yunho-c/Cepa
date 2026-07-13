@@ -61,6 +61,9 @@ jobs:
       - name: Install frontend dependencies
         run: just install
 
+      - name: Validate dependency-light native core
+        run: just native-check
+
       - name: Run checks and tests
         run: just check
 

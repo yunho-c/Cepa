@@ -11,19 +11,34 @@ edition = "2024"
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "cepa_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Cepa is desktop-only. Mobile-facing static and dynamic library artifacts add
+# no usable target and can overflow MinGW's DLL export table in debug tests.
+crate-type = ["rlib"]
+
+[[bin]]
+name = "cepa"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+desktop = [
+  "dep:tauri",
+  "dep:tauri-plugin-dialog",
+  "dep:tauri-plugin-opener",
+]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = [], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jwalk = "0.8.1"
 regex = "1"
-tauri-plugin-dialog = "2.7.1"
-tauri-plugin-opener = "2.5.4"
+tauri-plugin-dialog = { version = "2.7.1", optional = true }
+tauri-plugin-opener = { version = "2.5.4", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
