@@ -19,6 +19,7 @@
   } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import CepaMark from "$lib/components/cepa-mark.svelte";
   import {
     formatBytes,
     formatBackend,
@@ -691,9 +692,7 @@
 <div class="app-shell">
   <header class="app-header">
     <button class="wordmark" type="button" onclick={reset} aria-label="Cepa home">
-      <span class="wordmark-mark" aria-hidden="true">
-        <span></span><span></span><span></span>
-      </span>
+      <CepaMark class="wordmark-mark" />
       <span>Cepa</span>
     </button>
 
@@ -722,7 +721,7 @@
   {#if status === "idle" || status === "error" || status === "cancelled"}
     <main class="landing">
       <section class="landing-copy" aria-labelledby="landing-title">
-        <div class="app-symbol" aria-hidden="true"><ScanSearch /></div>
+        <div class="app-symbol" aria-hidden="true"><CepaMark /></div>
         <h1 id="landing-title">Find what’s taking up space.</h1>
         <p class="lede">
           Choose a folder to see its largest files and subfolders. Everything

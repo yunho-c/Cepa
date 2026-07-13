@@ -30,6 +30,10 @@ frontend-check:
 frontend-test:
     bun run test:frontend
 
+# Regenerate desktop and store icons from the shared vector source.
+icons:
+    bun run icons
+
 # Check Rust formatting without changing files.
 rust-fmt:
     cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

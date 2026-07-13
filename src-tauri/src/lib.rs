@@ -107,18 +107,24 @@ pub fn benchmark_cancellation(
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_from_thread = cancel.clone();
     let (trigger_sender, trigger_receiver) = mpsc::sync_channel::<u64>(1);
+    let (acknowledge_sender, acknowledge_receiver) = mpsc::sync_channel::<()>(0);
     let canceller = thread::spawn(move || {
         trigger_receiver.recv().ok().map(|entries| {
             let requested_at = Instant::now();
             cancel_from_thread.store(true, Ordering::Relaxed);
+            let _ = acknowledge_sender.send(());
             (entries, requested_at)
         })
     });
 
     let scan_started_at = Instant::now();
+    let mut cancellation_requested = false;
     let scan_result = scanner::scan_path_with_backend(path, cancel, backend, |progress| {
-        if progress.entries_scanned >= cancel_after_entries {
-            let _ = trigger_sender.try_send(progress.entries_scanned);
+        if !cancellation_requested && progress.entries_scanned >= cancel_after_entries {
+            cancellation_requested = trigger_sender.try_send(progress.entries_scanned).is_ok();
+            if cancellation_requested {
+                let _ = acknowledge_receiver.recv();
+            }
         }
     });
     let scan_finished_at = Instant::now();

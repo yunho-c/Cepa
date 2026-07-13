@@ -130,6 +130,27 @@ Closing search or item details restores focus to the control that opened it.
 Rescanning clears snapshot-bound state and returns focus to the completed scan
 heading when the replacement scan finishes.
 
+## App identity
+
+[`public/cepa-icon.svg`](public/cepa-icon.svg) is the source of truth for the
+favicon and every native desktop or Windows Store icon. The in-app wordmark and
+landing tile reuse the same radial-C geometry through
+`src/lib/components/cepa-mark.svelte`, with theme tokens supplying the adaptive
+foreground and accent colors.
+
+After editing the vector, regenerate only the desktop icon family with:
+
+```sh
+just icons
+```
+
+The generator uses a temporary Tauri icon output and copies the macOS, Windows,
+Linux PNG, and Windows Store assets into `src-tauri/icons`; mobile outputs are
+deliberately excluded. On macOS it repacks ICNS frames through `iconutil` for a
+byte-stable result; other platforms preserve the checked-in ICNS while updating
+their native assets. Inspect both `32x32.png` and `icon.png`, then run `just
+bundle` before committing an identity change.
+
 Run `just` to list every available recipe.
 
 ## Performance work

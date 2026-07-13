@@ -54,6 +54,11 @@ Completed scans can be rerun against the same root without reopening the folder
 picker. Platform-aware desktop commands live in `src/lib/shortcuts.ts`; keep
 their availability state-driven, preserve IME and modified-key behavior, and
 restore focus when Escape dismisses search or item details.
+The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
+in-app mark mirrors that geometry, while `just icons` regenerates the native
+desktop and store assets. macOS normalizes ICNS output deterministically;
+non-macOS runs preserve the checked-in ICNS. Do not hand-edit derived PNG, ICNS,
+or ICO files.
 After completion, the UI requests a volume compression capability using the
 retained scan ID. The probe reports `inspectOnly`, `unsupported`, or `unavailable`
 and always reports that no writer exists. Do not accept a frontend path for this
@@ -195,6 +200,10 @@ Start with these files:
   the `?mock=` query parameter.
 - `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
   shortcut conflict rules.
+- `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
+  canonical radial-C identity.
+- `public/cepa-icon.svg` and `scripts/generate-icons.ts`: canonical app icon and
+  bounded desktop-only asset generation.
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.
 - `src/lib/components/ui/`: reusable shadcn-svelte UI primitives.
 - `src-tauri/src/lib.rs`: Tauri commands and active/completed scan lifecycle.
@@ -226,6 +235,7 @@ Use the repository workflows rather than inventing parallel command sequences:
 
 ```sh
 just install   # install frontend dependencies from the Bun lockfile
+just icons     # regenerate derived desktop icons from the canonical vector
 just dev       # run the native Tauri application
 just web       # run only the Vite frontend
 just check     # frontend diagnostics, Rust formatting, checks, and tests
@@ -246,6 +256,9 @@ when validating Rust or Tauri work.
 - Add focused Rust tests for meaningful scanner, accounting, protocol, and
   error-handling logic. Add frontend checks or tests when interaction or state
   behavior becomes nontrivial.
+- For identity changes, regenerate from the canonical SVG, inspect a large
+  raster and at least one 30–32 px asset, then build native bundles. A frontend
+  screenshot alone does not prove that an executable or installer embeds it.
 - For scanning changes, exercise real filesystem fixtures covering ordinary
   trees and the relevant edge cases. A successful build alone is not evidence
   that traversal or accounting works.
