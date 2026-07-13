@@ -674,6 +674,7 @@ where
 
     let started_at = Instant::now();
     let root_filesystem = filesystem_id(&root_metadata);
+    let allocated_size_is_estimate = portable_allocated_size_is_estimate(&root);
     let root_node_path: Arc<Path> = Arc::from(root.clone());
     let mut nodes = vec![InternalNode::root(&root)];
     // jwalk reads directories in parallel but its public iterator yields them
@@ -852,7 +853,7 @@ where
         partial_ranking,
         "jwalk",
         ScanSemantics {
-            allocated_size_is_estimate: !cfg!(unix),
+            allocated_size_is_estimate,
             hard_link_deduplication_supported: cfg!(unix),
             same_filesystem_enforced: root_filesystem.is_some(),
         },
@@ -1541,6 +1542,53 @@ fn allocated_bytes(metadata: &Metadata) -> u64 {
     metadata.len()
 }
 
+fn portable_allocated_size_is_estimate(root: &Path) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        linux_path_allocated_size_is_estimate(root)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = root;
+        !cfg!(unix)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_path_allocated_size_is_estimate(root: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let Ok(root) = std::ffi::CString::new(root.as_os_str().as_bytes()) else {
+        return true;
+    };
+    let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::zeroed();
+    // SAFETY: root is null-terminated and filesystem points to writable storage.
+    if unsafe { libc::statfs(root.as_ptr(), filesystem.as_mut_ptr()) } != 0 {
+        return true;
+    }
+    // SAFETY: statfs succeeded and initialized the output structure.
+    linux_filesystem_allocation_is_estimate(unsafe { filesystem.assume_init() }.f_type)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_file_descriptor_allocated_size_is_estimate(fd: std::os::fd::RawFd) -> bool {
+    let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::zeroed();
+    // SAFETY: fd is open and filesystem points to writable storage.
+    if unsafe { libc::fstatfs(fd, filesystem.as_mut_ptr()) } != 0 {
+        return true;
+    }
+    // SAFETY: fstatfs succeeded and initialized the output structure.
+    linux_filesystem_allocation_is_estimate(unsafe { filesystem.assume_init() }.f_type)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_filesystem_allocation_is_estimate(filesystem_type: libc::c_long) -> bool {
+    // Btrfs reports the uncompressed referenced extent length through st_blocks
+    // for encoded extents. Exact compressed physical length requires privileged
+    // Btrfs-internal inspection, so ordinary scans must not label it exact.
+    filesystem_type == libc::BTRFS_SUPER_MAGIC
+}
+
 #[cfg(unix)]
 fn filesystem_id(metadata: &Metadata) -> Option<u64> {
     use std::os::unix::fs::MetadataExt;
@@ -1577,6 +1625,15 @@ fn scanned_file_revision(_: &Metadata) -> Option<ScannedFileRevision> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn treats_btrfs_allocation_metadata_as_an_estimate() {
+        assert!(linux_filesystem_allocation_is_estimate(
+            libc::BTRFS_SUPER_MAGIC
+        ));
+        assert!(!linux_filesystem_allocation_is_estimate(0));
+    }
 
     #[test]
     fn scans_and_aggregates_a_directory_tree() {

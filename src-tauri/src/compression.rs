@@ -866,6 +866,31 @@ mod tests {
         assert!(!capability.writer_available);
         assert_eq!(capability.algorithms, ["zlib", "lzo", "zstd"]);
 
+        let portable = crate::scanner::scan_path_with_backend(
+            &root,
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            crate::scanner::ScanBackend::Jwalk,
+            |_| {},
+        )
+        .expect("scan Btrfs fixture with jwalk");
+        let native = crate::scanner::scan_path_with_backend(
+            &root,
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            crate::scanner::ScanBackend::Statx,
+            |_| {},
+        )
+        .expect("scan Btrfs fixture with statx");
+        assert!(portable.result.allocated_size_is_estimate);
+        assert!(native.result.allocated_size_is_estimate);
+        assert!(
+            portable
+                .result
+                .accounting_mismatches(&native.result)
+                .is_empty(),
+            "portable and native Btrfs accounting must match"
+        );
+        println!("jwalk/statx: allocated size estimated, accounting matched");
+
         for (name, expected) in [
             ("enabled.bin", CompressionStateKind::Enabled),
             ("disabled.bin", CompressionStateKind::Disabled),

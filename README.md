@@ -27,8 +27,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Responsive cancellation and automatic cancellation of superseded scans
 - Failed stop requests keep the live scan visible and make cancellation retryable
 - Folder-picker failures preserve an existing completed result and remain retryable
-- Logical and allocated byte accounting (allocated size is exact on Unix and
-  the native Windows MFT path; portable Windows scans report an estimate)
+- Logical and allocated byte accounting, with exact allocation on macOS,
+  non-Btrfs Unix filesystems, and native Windows MFT scans; Btrfs and portable
+  Windows scans are explicitly labeled estimates
 - Metric-aware directory ranking and charts switchable between space on disk
   and logical size
 - Deterministic Unix hard-link deduplication and same-filesystem traversal

@@ -1,7 +1,7 @@
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
     PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
-    finish_scan, observe_partial_file,
+    finish_scan, linux_file_descriptor_allocated_size_is_estimate, observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
@@ -11,6 +11,7 @@ use rustix::io::Errno;
 use std::ffi::{CStr, OsString};
 use std::io;
 use std::mem::MaybeUninit;
+use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::sync::Arc;
@@ -132,6 +133,8 @@ where
     if !FileType::from_raw_mode(u32::from(root_stat.stx_mode)).is_dir() {
         return Err(fatal("Choose a directory to scan."));
     }
+    let allocated_size_is_estimate =
+        linux_file_descriptor_allocated_size_is_estimate(root_fd.as_raw_fd());
 
     let started_at = Instant::now();
     let root_node_path: Arc<Path> = Arc::from(root.clone());
@@ -168,7 +171,7 @@ where
         partial_ranking,
         "statx",
         ScanSemantics {
-            allocated_size_is_estimate: false,
+            allocated_size_is_estimate,
             hard_link_deduplication_supported: true,
             same_filesystem_enforced: true,
         },

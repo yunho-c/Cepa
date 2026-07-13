@@ -9,10 +9,11 @@ fixture=512 MiB loopback filesystem mounted inside an ephemeral privileged conta
 runner=scripts/validate-btrfs-compression.sh
 
 running 1 test
+jwalk/statx: allocated size estimated, accounting matched
 enabled.bin: Enabled / FutureWrites
 disabled.bin: Disabled / FutureWrites
 inherited.bin: Inherited / FutureWrites
 replacement-link.bin: Unavailable / None
 test compression::tests::reads_btrfs_capability_and_future_write_policies ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 62 filtered out
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out

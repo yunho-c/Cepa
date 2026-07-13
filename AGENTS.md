@@ -165,8 +165,13 @@ The Linux-only ignored Btrfs fixture verifies the real `statfs` and
 `FS_IOC_GETFLAGS` paths for enabled, disabled, and inherited policy through both
 path and retained-handle inspection, plus link replacement. Run
 `just validate-btrfs-compression /mounted/btrfs/path`; the runner creates and
-removes a uniquely named child fixture. This is metadata-inspection evidence,
-not proof of existing compressed extents, estimator accuracy, or mutation.
+removes a uniquely named child fixture. It also requires both `jwalk` and
+`statx` to mark allocated size as estimated with identical accounting. Btrfs
+`st_blocks` can retain uncompressed referenced length for compressed extents;
+FIEMAP does not expose compressed physical length, and the exact encoded/internal
+queries require `CAP_SYS_ADMIN`. Do not restore an exact allocation claim without
+a safe, unprivileged, measured replacement. This remains metadata evidence, not
+proof of estimator accuracy or mutation.
 Savings estimation begins only from an explicit file action. It reads at most
 three aligned 256 KiB ranges, is cancellable, rejects changed sizes and links, and
 returns lower/upper savings bounds with confidence and algorithm fidelity. Windows

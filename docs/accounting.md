@@ -30,10 +30,17 @@ inspection, estimation, or planning.
 
 - Logical size is the byte length reported for regular files. Directory,
   symbolic-link, and other entry types contribute zero direct bytes.
-- Allocated size is physical blocks multiplied by 512 on Unix, native allocation
-  attributes on macOS, and `FILE_STANDARD_INFO::AllocationSize` in the Windows
-  MFT backend. The portable Windows fallback reports logical size as an estimate
-  and marks that limitation in the result protocol.
+- Allocated size uses native allocation attributes on macOS,
+  `FILE_STANDARD_INFO::AllocationSize` in the Windows MFT backend, and physical
+  blocks multiplied by 512 on other Unix filesystems. The portable Windows
+  fallback reports logical size as an estimate.
+- Btrfs is also explicitly estimated for both `jwalk` and `statx`. Its
+  `st_blocks`/`statx` block count can expose the uncompressed referenced length
+  for encoded extents instead of their compressed physical length. The ordinary
+  scanner cannot recover that exact length cheaply: FIEMAP identifies encoded
+  extents but does not return their compressed length, while Btrfs encoded reads
+  and internal tree search require `CAP_SYS_ADMIN`. Cepa retains the kernel block
+  count for ranking but never labels it exact on Btrfs.
 - Sparse files can therefore have a logical size larger than their allocated
   size. Cepa preserves both values instead of substituting one for the other.
 - A directory's totals are the saturating sum of its accounted descendants.

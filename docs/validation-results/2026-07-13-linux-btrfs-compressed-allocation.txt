@@ -1,0 +1,26 @@
+Cepa Linux Btrfs compressed allocation observation
+date=2026-07-13
+host_kernel=Linux 6.8.0-124-generic x86_64
+container=Ubuntu 24.04
+btrfs_progs=6.6.3
+filesystem=btrfs
+fixture=512 MiB loopback filesystem mounted inside an ephemeral privileged container
+content=8 MiB of repeated nonzero bytes, copied without reflinks, then defragmented with zstd
+
+stat name=/mnt/cepa/source.bin logical_bytes=8388608 blocks_512=16384
+stat name=/mnt/cepa/zstd.bin logical_bytes=8388608 blocks_512=16384
+
+compsize-source
+Processed 1 file, 1 regular extents (1 refs), 0 inline.
+Type       Perc     Disk Usage   Uncompressed Referenced
+TOTAL      100%     8388608      8388608      8388608
+none       100%     8388608      8388608      8388608
+
+compsize-zstd
+Processed 1 file, 64 regular extents (64 refs), 0 inline.
+Type       Perc     Disk Usage   Uncompressed Referenced
+TOTAL        3%     262144       8388608      8388608
+zstd         3%     262144       8388608      8388608
+
+filefrag reported FIEMAP's encoded flag for every shown zstd extent.
+cmp reported byte-identical source and zstd files.

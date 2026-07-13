@@ -164,10 +164,12 @@ one because compression is CPU-, I/O-, and thermal-intensive; a backend may rais
 that only from measurement. The bridge receives aggregate counters and bounded
 recent outcomes, never an event for each data block.
 
-After each successful item Cepa queries compression state and allocated size
-again. After the job it rescans the smallest safe common ancestor so the explorer
-does not display stale physical totals. A successful API return without verified
-state and readable original content is not a successful outcome.
+After each successful item Cepa queries compression state and the strongest
+available allocation evidence again. After the job it rescans the smallest safe
+common ancestor so the explorer does not display stale totals. Btrfs compressed
+physical length remains a separate privileged evidence requirement; its ordinary
+kernel block count is not exact. A successful API return without verified state
+and readable original content is not a successful outcome.
 
 ## Estimation
 
@@ -200,6 +202,12 @@ The current version detects sparse allocation from scan totals but does not map
 individual hole ranges, so it deliberately makes no minimum-savings claim for a
 sparse file. No estimates are cached yet, which avoids violating the
 identity-keyed cache contract above.
+
+Linux Btrfs scans mark their allocation baseline as estimated. On the measured
+fixture, both `st_blocks` and `statx` retained the 8 MiB referenced length after
+Zstd reduced physical data to 256 KiB. The estimator can still describe likely
+content savings, but validating its bounds against post-operation physical bytes
+requires a privileged fixture; the ordinary scanner result is not that proof.
 
 ## User experience
 
@@ -267,9 +275,10 @@ kernel 6.8.0-124 with btrfs-progs 6.6.3. The repo-native fixture verified the
 `inspectOnly` volume capability, all advertised algorithms, an always-false
 writer flag, and both path and retained-handle inspection of explicit enabled,
 explicit disabled, and inherited future-write policies. It also verified that
-a replacement symlink is not followed and that inspection does not change file
-contents. The test remains ignored in the ordinary cross-filesystem suite; on a
-writable mounted Btrfs directory, run:
+a replacement symlink is not followed, inspection does not change file contents,
+and `jwalk` and `statx` produce identical accounting while both label allocated
+size as estimated. The test remains ignored in the ordinary cross-filesystem
+suite; on a writable mounted Btrfs directory, run:
 
 ```sh
 just validate-btrfs-compression /mnt/btrfs
@@ -280,6 +289,17 @@ preserved in
 [`validation-results/2026-07-13-linux-btrfs-compression.txt`](validation-results/2026-07-13-linux-btrfs-compression.txt).
 This closes the Step 1 Btrfs runtime gate only; it does not identify compressed
 extents, measure estimator accuracy, or authorize mutation.
+
+A separate encoded-extent observation explains the estimate label. An 8 MiB
+dense file and its byte-identical Zstd rewrite both reported 16,384 512-byte
+blocks through `stat`, while privileged Btrfs tree inspection measured the
+rewrite at 262,144 physical bytes and FIEMAP marked its extents encoded. Raw
+output is preserved in
+[`validation-results/2026-07-13-linux-btrfs-compressed-allocation.txt`](validation-results/2026-07-13-linux-btrfs-compressed-allocation.txt).
+FIEMAP exposes the encoded flag but no compressed physical length. The encoded
+read ioctl returns raw compressed bytes but requires `CAP_SYS_ADMIN`; neither is
+a suitable ordinary scan-time size query. Cepa therefore keeps the kernel block
+count as a useful ranking estimate and does not claim exact Btrfs physical bytes.
 
 Every platform reports `writerAvailable: false`. Inspection does not estimate
 savings or infer state from logical and allocated bytes. Estimation is a separate
@@ -361,8 +381,9 @@ fixture above validates metadata inspection, not estimator fidelity.
   and [`FILE_BASIC_INFO`](https://learn.microsoft.com/windows/win32/api/winbase/ns-winbase-file_basic_info).
 - Btrfs documentation: [Compression](https://btrfs.readthedocs.io/en/latest/Compression.html),
   [`btrfs-property`](https://btrfs.readthedocs.io/en/latest/btrfs-property.html),
-  and [`btrfs-filesystem defragment`](https://btrfs.readthedocs.io/en/latest/btrfs-filesystem.html#defragment).
-- Linux kernel: [FIEMAP extent mapping](https://www.kernel.org/doc/html/latest/filesystems/fiemap.html).
+  [`btrfs-filesystem defragment`](https://btrfs.readthedocs.io/en/latest/btrfs-filesystem.html#defragment),
+  and the [`BTRFS_IOC_ENCODED_READ` contract](https://btrfs.readthedocs.io/en/latest/btrfs-ioctl.html).
+- Linux kernel: [FIEMAP extent mapping](https://docs.kernel.org/filesystems/fiemap.html).
 - Apple Foundation: [`NSURLVolumeSupportsCompressionKey`](https://developer.apple.com/documentation/foundation/nsurlvolumesupportscompressionkey).
 - Local Apple evidence: `ditto(1)`, `copyfile(3)`, and the macOS 26.2 SDK
   Foundation/FSKit headers installed with Xcode.
