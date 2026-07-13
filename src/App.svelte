@@ -94,10 +94,12 @@
   let savingsEstimate = $state<SavingsEstimate | null>(null);
   let isEstimatingSavings = $state(false);
   let isCancellingEstimate = $state(false);
+  let estimateActionError = $state("");
   let activeEstimateRequestId = $state<number | null>(null);
   let estimateRequestSequence = 0;
   let estimateActionButton: HTMLButtonElement | null = $state(null);
   let estimateCancelButton: HTMLButtonElement | null = $state(null);
+  let estimateActionNotice: HTMLDivElement | undefined = $state();
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
@@ -619,6 +621,7 @@
     savingsEstimate = null;
     isEstimatingSavings = false;
     isCancellingEstimate = false;
+    estimateActionError = "";
     activeEstimateRequestId = null;
   }
 
@@ -636,6 +639,7 @@
     savingsEstimate = null;
     isEstimatingSavings = true;
     isCancellingEstimate = false;
+    estimateActionError = "";
     try {
       await tick();
       estimateCancelButton?.focus();
@@ -675,6 +679,7 @@
       if (activeEstimateRequestId === requestId) {
         isEstimatingSavings = false;
         isCancellingEstimate = false;
+        estimateActionError = "";
         activeEstimateRequestId = null;
         await tick();
         estimateActionButton?.focus();
@@ -684,26 +689,19 @@
 
   async function cancelEstimate() {
     if (activeEstimateRequestId === null || !isEstimatingSavings) return;
+    const requestId = activeEstimateRequestId;
+    estimateActionError = "";
     isCancellingEstimate = true;
     try {
       await invoke("cancel_compression_estimate", {
-        requestId: activeEstimateRequestId,
+        requestId,
       });
     } catch (error) {
+      if (activeEstimateRequestId !== requestId || !isEstimatingSavings) return;
       isCancellingEstimate = false;
-      savingsEstimate = {
-        status: "unavailable",
-        algorithm: null,
-        fidelity: "none",
-        confidence: "none",
-        sampledBytes: 0,
-        logicalBytes: inspectedEntry?.logicalBytes ?? 0,
-        allocatedBytes: inspectedEntry?.allocatedBytes ?? 0,
-        estimatedSavingsLower: null,
-        estimatedSavingsUpper: null,
-        estimatorVersion: 1,
-        detail: `The estimate could not be cancelled: ${String(error)}`,
-      };
+      estimateActionError = String(error);
+      await tick();
+      estimateActionNotice?.focus();
     }
   }
 
@@ -1450,6 +1448,21 @@
                   >
                     Cancel
                   </Button>
+                  {#if estimateActionError}
+                    <div
+                      class="estimate-action-error"
+                      role="alert"
+                      tabindex="-1"
+                      title={estimateActionError}
+                      bind:this={estimateActionNotice}
+                    >
+                      <AlertCircle aria-hidden="true" />
+                      <p>
+                        <strong>Couldn’t stop estimating.</strong>
+                        <span>The estimate is still running. Try again.</span>
+                      </p>
+                    </div>
+                  {/if}
                 </div>
               {:else if savingsEstimate}
                 <div class="estimate-readout" data-status={savingsEstimate.status}>

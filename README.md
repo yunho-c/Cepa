@@ -51,6 +51,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   current decmpfs/NTFS data state and clearly separated Btrfs future-write policy
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
+- Request-owned estimate cancellation so a late stop error cannot replace a
+  valid result, with retry kept available when estimation is still running
 - Keyboard-accessible radial navigation, breadcrumbs, and ranked item lists
 - A coordinated map-and-list explorer that remains side by side in the default
   880 by 620 window and throughout the supported desktop range down to the
@@ -161,6 +163,8 @@ http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=cancel-error
 http://localhost:1420/?mock=picker-error
 http://localhost:1420/?mock=picker-recovery
+http://localhost:1420/?mock=estimate-cancel-error
+http://localhost:1420/?mock=estimate-cancel-late-error
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
@@ -179,6 +183,8 @@ chart nodes and records response-to-painted-frame time on the document's
 scan active after a failed stop request so its recovery state can be exercised.
 `?mock=picker-error` covers a first-launch picker failure, while
 `?mock=picker-recovery` fails only after a completed scan is visible.
+The two estimate-cancel scenarios cover an immediate failed stop request and a
+late failure delivered after the estimate has already completed.
 The drop preview is visual only; use `just dev` and drag a real folder from the
 platform file manager to validate the native window event. During frontend
 development, `?appearance=dark` or `?appearance=light` fixes the preview

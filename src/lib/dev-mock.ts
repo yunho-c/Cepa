@@ -18,6 +18,8 @@ type DevScenario =
   | "cancel-error"
   | "picker-error"
   | "picker-recovery"
+  | "estimate-cancel-error"
+  | "estimate-cancel-late-error"
   | "error"
   | "navigation-error"
   | "reveal-error"
@@ -156,8 +158,14 @@ export function installDevMock(requestedScenario: string) {
           format: null,
           detail: "macOS does not report UF_COMPRESSED for this file.",
         } satisfies CompressionState;
-      case "estimate_compression_savings":
-        for (let step = 0; step < 30; step += 1) {
+      case "estimate_compression_savings": {
+        const estimateSteps =
+          scenario === "estimate-cancel-late-error"
+            ? 15
+            : scenario === "estimate-cancel-error"
+              ? 200
+              : 30;
+        for (let step = 0; step < estimateSteps; step += 1) {
           await delay(20);
           if (cancelledEstimateRequests.delete(Number(args.requestId))) {
             return {
@@ -189,7 +197,15 @@ export function installDevMock(requestedScenario: string) {
           detail:
             "The macOS writer algorithm is undefined, so Cepa uses zlib only as a clearly labeled compressibility proxy. This is not guaranteed filesystem savings.",
         } satisfies SavingsEstimate;
+      }
       case "cancel_compression_estimate":
+        if (scenario === "estimate-cancel-error") {
+          throw "The estimator did not acknowledge the stop request.";
+        }
+        if (scenario === "estimate-cancel-late-error") {
+          await delay(450);
+          throw "The completed estimator returned a late stop error.";
+        }
         cancelledEstimateRequests.add(Number(args.requestId));
         return true;
       case "reveal_scan_item":
@@ -210,6 +226,8 @@ function isScenario(value: string): value is DevScenario {
     "cancel-error",
     "picker-error",
     "picker-recovery",
+    "estimate-cancel-error",
+    "estimate-cancel-late-error",
     "error",
     "navigation-error",
     "reveal-error",

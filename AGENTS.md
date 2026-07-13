@@ -85,6 +85,9 @@ offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin
 selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
+The inspector is an internal scroll container when its contents exceed the
+compact right pane; focused recovery messages must remain visible instead of
+overflowing the explorer at the minimum window height.
 The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side throughout the native window's supported width range.
@@ -154,6 +157,9 @@ uses LZNT1, Btrfs uses 128 KiB-chunked Zstd level 3, and macOS uses a clearly
 labeled zlib proxy because no writer algorithm has been selected. Do not turn a
 proxy estimate into a guaranteed savings number or run estimation automatically
 on hover/selection.
+If an estimate cancellation command fails, keep the still-live estimate visible
+and make Cancel retryable. Guard the failure by request ID so a late stop error
+cannot replace a newer or already-completed estimate.
 Compression-plan preparation is also scan-authorized: the frontend supplies a
 completed scan ID, opaque node ID, and operation, never a path. Rust opens the
 file without following links, retains that read-only handle as the active plan's
