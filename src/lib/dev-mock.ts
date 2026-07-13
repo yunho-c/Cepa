@@ -15,6 +15,7 @@ import { createStressDirectoryView, createStressView } from "./dev-stress";
 type DevScenario =
   | "complete"
   | "scanning"
+  | "cancel-error"
   | "error"
   | "navigation-error"
   | "reveal-error"
@@ -52,7 +53,7 @@ export function installDevMock(requestedScenario: string) {
         if (scenario === "error") {
           throw "Permission denied while reading the selected folder.";
         }
-        if (scenario === "scanning") {
+        if (scenario === "scanning" || scenario === "cancel-error") {
           return new Promise<ScanResponse>((_, reject) => {
             rejectPendingScan = reject;
           });
@@ -61,6 +62,9 @@ export function installDevMock(requestedScenario: string) {
         return stressView ? stressResponse(stressView) : mockResponse();
       }
       case "cancel_scan":
+        if (scenario === "cancel-error") {
+          throw "The scanner did not acknowledge the stop request.";
+        }
         rejectPendingScan?.("Scan cancelled.");
         rejectPendingScan = null;
         return true;
@@ -193,6 +197,7 @@ function isScenario(value: string): value is DevScenario {
   return [
     "complete",
     "scanning",
+    "cancel-error",
     "error",
     "navigation-error",
     "reveal-error",

@@ -79,6 +79,8 @@
   let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
   let errorMessage = $state("");
+  let scanStarted = $state(false);
+  let scanActionError = $state("");
   let navigationError = $state("");
   let navigationErrorTitle = $state("That folder could not be opened.");
   let revealError = $state("");
@@ -99,6 +101,7 @@
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let stateNotice: HTMLDivElement | undefined = $state();
+  let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
   let revealNotice: HTMLDivElement | undefined = $state();
   let searchOpen = $state(false);
@@ -201,6 +204,9 @@
       ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
       : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
   );
+  const scanFailureHeading = $derived(
+    scanStarted ? "The scan couldn’t finish." : "That scan didn’t start.",
+  );
   const searchActive = $derived(searchQuery.trim().length > 0);
   const visibleItems = $derived(
     searchActive && searchResult ? searchResult.items : (view?.items ?? []),
@@ -240,6 +246,8 @@
       navigationNotice?.focus();
     } else {
       status = "error";
+      scanStarted = false;
+      scanActionError = "";
       errorMessage = message;
       await tick();
       stateNotice?.focus();
@@ -362,6 +370,8 @@
         await startScan();
       }
     } catch (error) {
+      scanStarted = false;
+      scanActionError = "";
       errorMessage = `Could not open the folder picker: ${String(error)}`;
       status = "error";
       await tick();
@@ -379,6 +389,8 @@
     clearDropState();
     status = "scanning";
     path = requestedPath;
+    scanStarted = false;
+    scanActionError = "";
     errorMessage = "";
     navigationError = "";
     navigationErrorTitle = "That folder could not be opened.";
@@ -400,8 +412,10 @@
     const onEvent = new Channel<ScanEvent>();
     onEvent.onmessage = (message) => {
       if (message.event === "started") {
+        scanStarted = true;
         scanId = message.scanId;
       } else if (message.event === "progress") {
+        scanStarted = true;
         scanId = message.scanId;
         progress = message.progress;
       }
@@ -413,6 +427,7 @@
         onEvent,
       });
       const renderStartedAt = performance.now();
+      scanStarted = true;
       scanId = response.scanId;
       result = response.result;
       view = response.view;
@@ -423,6 +438,7 @@
       recordDevelopmentRender(renderStartedAt);
       void loadCompressionCapability(response.scanId);
     } catch (error) {
+      scanActionError = "";
       const message = String(error);
       if (isCancellationError(message)) {
         status = "cancelled";
@@ -451,14 +467,17 @@
 
   async function cancelScan() {
     if (scanId === null || !isBusy) return;
+    const cancellingScanId = scanId;
+    scanActionError = "";
     status = "cancelling";
     try {
-      await invoke("cancel_scan", { scanId });
+      await invoke("cancel_scan", { scanId: cancellingScanId });
     } catch (error) {
-      status = "error";
-      errorMessage = `Could not cancel the scan: ${String(error)}`;
+      if (scanId !== cancellingScanId || status !== "cancelling") return;
+      status = "scanning";
+      scanActionError = String(error);
       await tick();
-      stateNotice?.focus();
+      scanActionNotice?.focus();
     }
   }
 
@@ -467,6 +486,8 @@
     preparingScanRoot = null;
     clearDropState();
     status = "idle";
+    scanStarted = false;
+    scanActionError = "";
     scanId = null;
     progress = null;
     result = null;
@@ -531,12 +552,8 @@
     compressionState = null;
     isInspectingCompression = true;
     await tick();
-    if (
-      inspectionSequence === request &&
-      inspectedEntry?.id === entry.id &&
-      inspectionReturnTarget?.closest(".item-list")
-    ) {
-      inspectionReturnTarget.scrollIntoView({ block: "nearest" });
+    if (inspectionSequence === request && inspectedEntry?.id === entry.id) {
+      keepInspectionTargetVisible(inspectionReturnTarget);
     }
     try {
       const state = await invoke<CompressionState>("compression_state", {
@@ -567,13 +584,25 @@
       if (inspectionSequence === request) {
         isInspectingCompression = false;
         await tick();
-        if (
-          inspectedEntry?.id === entry.id &&
-          inspectionReturnTarget?.closest(".item-list")
-        ) {
-          inspectionReturnTarget.scrollIntoView({ block: "nearest" });
+        if (inspectedEntry?.id === entry.id) {
+          keepInspectionTargetVisible(inspectionReturnTarget);
         }
       }
+    }
+  }
+
+  function keepInspectionTargetVisible(
+    target: (HTMLElement | SVGGElement) | null,
+  ) {
+    const list = target?.closest<HTMLElement>(".item-list");
+    if (!target || !list) return;
+
+    const targetBounds = target.getBoundingClientRect();
+    const listBounds = list.getBoundingClientRect();
+    if (targetBounds.top < listBounds.top) {
+      list.scrollTop -= listBounds.top - targetBounds.top;
+    } else if (targetBounds.bottom > listBounds.bottom) {
+      list.scrollTop += targetBounds.bottom - listBounds.bottom;
     }
   }
 
@@ -1067,7 +1096,7 @@
             >
               <AlertCircle />
               <div>
-                <strong>That scan didn’t start.</strong>
+                <strong>{scanFailureHeading}</strong>
                 <span>{errorMessage}</span>
               </div>
             </div>
@@ -1113,8 +1142,23 @@
           </Button>
         </div>
 
+        {#if scanActionError}
+          <div
+            class="error-callout"
+            role="alert"
+            tabindex="-1"
+            bind:this={scanActionNotice}
+          >
+            <AlertCircle />
+            <div>
+              <strong>Couldn’t stop the scan.</strong>
+              <span>{scanActionError} The scan is still running; try again.</span>
+            </div>
+          </div>
+        {/if}
+
         <div class="scan-total">
-          <span>Space found</span>
+          <span>Found so far</span>
           <strong>{formatBytes(displayProgress.allocatedBytes)}</strong>
         </div>
         <p class="scan-path" title={displayProgress.currentPath}>

@@ -25,6 +25,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Native single-folder drag and drop with a preflight check that preserves the
   current result until the dropped directory is accepted
 - Responsive cancellation and automatic cancellation of superseded scans
+- Failed stop requests keep the live scan visible and make cancellation retryable
 - Logical and allocated byte accounting (allocated size is exact on Unix and
   the native Windows MFT path; portable Windows scans report an estimate)
 - Metric-aware directory ranking and charts switchable between space on disk
@@ -156,6 +157,7 @@ exercise the complete workflow without a native process:
 ```text
 http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
+http://localhost:1420/?mock=cancel-error
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
@@ -170,11 +172,13 @@ production builds. Combine `?mock=complete&roots=preview` to exercise a volume
 selection through the complete mocked scan.
 `?mock=stress` exercises the production bounds of 500 list rows and 512 recursive
 chart nodes and records response-to-painted-frame time on the document's
-`data-cepa-scan-render-ms` development attribute. The drop preview is visual only;
-use `just dev` and drag a real folder from the platform file manager to validate
-the native window event. During frontend development, `?appearance=dark` or
-`?appearance=light` fixes the preview appearance without adding a production
-preference; production follows the operating system and updates live.
+`data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
+scan active after a failed stop request so its recovery state can be exercised.
+The drop preview is visual only; use `just dev` and drag a real folder from the
+platform file manager to validate the native window event. During frontend
+development, `?appearance=dark` or `?appearance=light` fixes the preview
+appearance without adding a production preference; production follows the
+operating system and updates live.
 
 ## Desktop commands
 

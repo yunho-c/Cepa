@@ -288,9 +288,9 @@ export function formatSavingsEstimate(estimate: SavingsEstimate): string {
   }
   if (estimate.estimatedSavingsUpper === 0) return "No likely savings";
   if (estimate.estimatedSavingsLower === estimate.estimatedSavingsUpper) {
-    return `${formatBytes(estimate.estimatedSavingsUpper)} potential savings`;
+    return formatBytes(estimate.estimatedSavingsUpper);
   }
-  return `${formatBytes(estimate.estimatedSavingsLower)}–${formatBytes(estimate.estimatedSavingsUpper)} potential savings`;
+  return `${formatBytes(estimate.estimatedSavingsLower)}–${formatBytes(estimate.estimatedSavingsUpper)}`;
 }
 
 export function isCancellationError(error: unknown): boolean {

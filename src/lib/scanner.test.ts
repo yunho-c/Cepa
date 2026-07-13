@@ -42,21 +42,33 @@ describe("scanner presentation helpers", () => {
   });
 
   test("formats savings as a bounded range rather than a guarantee", () => {
+    const estimate = {
+      status: "estimated" as const,
+      algorithm: "zlib-proxy",
+      fidelity: "proxy" as const,
+      confidence: "low" as const,
+      sampledBytes: 786_432,
+      logicalBytes: 10_737_418_240,
+      allocatedBytes: 10_737_418_240,
+      estimatedSavingsLower: 2_147_483_648,
+      estimatedSavingsUpper: 4_294_967_296,
+      estimatorVersion: 1,
+      detail: "Bounded proxy estimate.",
+    };
+    expect(formatSavingsEstimate(estimate)).toBe("2.00 GB–4.00 GB");
     expect(
       formatSavingsEstimate({
-        status: "estimated",
-        algorithm: "zlib-proxy",
-        fidelity: "proxy",
-        confidence: "low",
-        sampledBytes: 786_432,
-        logicalBytes: 10_737_418_240,
-        allocatedBytes: 10_737_418_240,
-        estimatedSavingsLower: 2_147_483_648,
-        estimatedSavingsUpper: 4_294_967_296,
-        estimatorVersion: 1,
-        detail: "Bounded proxy estimate.",
+        ...estimate,
+        estimatedSavingsUpper: estimate.estimatedSavingsLower,
       }),
-    ).toBe("2.00 GB–4.00 GB potential savings");
+    ).toBe("2.00 GB");
+    expect(
+      formatSavingsEstimate({
+        ...estimate,
+        estimatedSavingsLower: 0,
+        estimatedSavingsUpper: 0,
+      }),
+    ).toBe("No likely savings");
   });
 
   test("formats byte and duration boundaries", () => {

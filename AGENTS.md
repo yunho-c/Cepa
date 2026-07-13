@@ -71,6 +71,8 @@ such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
+If a cancellation command fails, the UI keeps the still-live scan visible and
+offers Stop again; do not turn that command failure into a terminal scan error.
 Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving
