@@ -19,6 +19,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   hard-link name recovery, and automatic `jwalk` fallback for subfolders,
   non-NTFS volumes, or unavailable volume access
 - Native directory picker on supported desktop platforms
+- Native single-folder drag and drop with a preflight check that preserves the
+  current result until the dropped directory is accepted
 - Responsive cancellation and automatic cancellation of superseded scans
 - Logical and allocated byte accounting (allocated size is exact on Unix and
   currently an estimate elsewhere)
@@ -120,9 +122,12 @@ http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
+http://localhost:1420/?drop=active
 ```
 
-These mocks are removed from production builds.
+The mock workflows and drop-affordance preview are removed from production
+builds. The drop preview is visual only; use `just dev` and drag a real folder
+from the platform file manager to validate the native window event.
 
 ## Desktop commands
 

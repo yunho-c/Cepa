@@ -34,6 +34,13 @@ render coordinated radial and list views in Svelte. macOS uses an initial
 falls back to `jwalk` when its native API is unavailable or unsuitable; Windows
 subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
+The native window also accepts exactly one dropped folder. Drag state is reduced
+through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
+the root before the existing result is cleared and a scan begins. Invalid or
+ambiguous drops preserve completed results and surface the ordinary scan or
+navigation error treatment. Drops are ignored while another operation is busy.
+This is an entry-point convenience, not a general path-authorized action: all
+post-scan operations retain their completed scan ID and opaque node ID boundary.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 skipped-item semantics remain available under the collapsed `Scan details`
 disclosure rather than appearing as status badges or a diagnostic footer. It
@@ -206,6 +213,8 @@ Start with these files:
 - `src/lib/scanner.ts`: frontend scan protocol types and formatters.
 - `src/lib/dev-mock.ts`: development-only Tauri workflow scenarios loaded by
   the `?mock=` query parameter.
+- `src/lib/folder-drop.ts`: pure native drag-event decisions and privacy-safe
+  dropped-item labels.
 - `src/lib/shortcuts.ts`: platform-aware desktop command resolution and
   shortcut conflict rules.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
@@ -271,6 +280,10 @@ when validating Rust or Tauri work.
 - For scanning changes, exercise real filesystem fixtures covering ordinary
   trees and the relevant edge cases. A successful build alone is not evidence
   that traversal or accounting works.
+- For native drag-and-drop changes, test the pure event reducer and Rust root
+  preflight, inspect the development-only visual preview, and run a real
+  file-manager-to-window drop when desktop UI automation or a manual host is
+  available. Do not report the visual preview as proof of a native window event.
 - For performance changes, report the baseline, comparison, workload, and
   measurement method. Do not claim a speedup from intuition or a synthetic test
   that measures different behavior.

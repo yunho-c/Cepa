@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Channel, invoke } from "@tauri-apps/api/core";
+  import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+  import { getCurrentWindow, type DragDropEvent } from "@tauri-apps/api/window";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import {
     AlertCircle,
     ArrowLeft,
@@ -9,6 +10,7 @@
     CircleStop,
     File,
     Folder,
+    FolderDown,
     FolderOpen,
     FolderSearch,
     Link2,
@@ -20,6 +22,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import CepaMark from "$lib/components/cepa-mark.svelte";
+  import { droppedItemName, folderDropAction } from "$lib/folder-drop";
   import {
     formatBytes,
     formatBackend,
@@ -95,12 +98,26 @@
   let searchSequence = 0;
   let activeSearchRequestId: number | null = null;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
+  const dropPreview =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("drop") === "active";
+  const hasDevMock =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).has("mock");
+  let dropActive = $state(dropPreview);
+  let droppedPaths = $state<string[]>(
+    dropPreview ? ["/Users/demo/Design Archive"] : [],
+  );
+  let isPreparingDroppedFolder = $state(false);
+  let dropSequence = 0;
 
   const primaryModifier = primaryModifierForPlatform(navigator.platform);
   const primaryShortcutLabel = primaryModifier === "meta" ? "⌘" : "Ctrl+";
   const backShortcutLabel = primaryModifier === "meta" ? "⌥←" : "Alt+←";
 
-  const isBusy = $derived(status === "scanning" || status === "cancelling");
+  const isBusy = $derived(
+    status === "scanning" || status === "cancelling" || isPreparingDroppedFolder,
+  );
   const displayProgress = $derived(
     progress ?? {
       entriesScanned: 0,
@@ -152,8 +169,95 @@
             : `${view.totalItems} items`
           : "",
   );
+  const droppedFolderLabel = $derived(
+    droppedPaths.length === 1
+      ? droppedItemName(droppedPaths[0])
+      : `${droppedPaths.length} items`,
+  );
+
+  function clearDropState() {
+    dropActive = false;
+    droppedPaths = [];
+  }
+
+  async function showDroppedFolderError(message: string) {
+    if (status === "complete" && result && view) {
+      navigationErrorTitle = "That item can’t be scanned.";
+      navigationError = message;
+      await tick();
+      navigationNotice?.focus();
+    } else {
+      status = "error";
+      errorMessage = message;
+      await tick();
+      stateNotice?.focus();
+    }
+  }
+
+  async function startDroppedFolder(droppedPath: string) {
+    const request = ++dropSequence;
+    dropActive = false;
+    droppedPaths = [droppedPath];
+    isPreparingDroppedFolder = true;
+    try {
+      const validatedPath = await invoke<string>("validate_scan_root", {
+        path: droppedPath,
+      });
+      if (request !== dropSequence) return;
+      isPreparingDroppedFolder = false;
+      path = validatedPath;
+      await startScan();
+    } catch (error) {
+      if (request !== dropSequence) return;
+      isPreparingDroppedFolder = false;
+      clearDropState();
+      await showDroppedFolderError(String(error));
+    }
+  }
+
+  function handleNativeFolderDrop(event: { payload: DragDropEvent }) {
+    const action = folderDropAction(event.payload, isBusy);
+    switch (action.kind) {
+      case "activate":
+        droppedPaths = action.paths;
+        dropActive = true;
+        break;
+      case "deactivate":
+        clearDropState();
+        break;
+      case "scan":
+        void startDroppedFolder(action.path);
+        break;
+      case "reject":
+        clearDropState();
+        void showDroppedFolderError("Drop one folder at a time.");
+        break;
+      case "ignore":
+        break;
+    }
+  }
+
+  onMount(() => {
+    if (!isTauri() || hasDevMock) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWindow()
+      .onDragDropEvent(handleNativeFolderDrop)
+      .then((stopListening) => {
+        if (disposed) stopListening();
+        else unlisten = stopListening;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  });
 
   async function chooseDirectory() {
+    if (isBusy) return;
     errorMessage = "";
     try {
       const selected = await open({
@@ -179,6 +283,9 @@
     const requestedPath = path.trim();
     if (!requestedPath || isBusy) return;
 
+    dropSequence += 1;
+    isPreparingDroppedFolder = false;
+    clearDropState();
     status = "scanning";
     path = requestedPath;
     errorMessage = "";
@@ -249,6 +356,9 @@
   }
 
   function reset() {
+    dropSequence += 1;
+    isPreparingDroppedFolder = false;
+    clearDropState();
     status = "idle";
     scanId = null;
     progress = null;
@@ -499,10 +609,11 @@
     const command = desktopCommandForKeydown(event, {
       primaryModifier,
       canChooseDirectory: !isBusy,
-      canRescan: status === "complete",
-      canSearch: status === "complete" && view !== null && !isNavigating,
+      canRescan: status === "complete" && !isBusy,
+      canSearch:
+        status === "complete" && view !== null && !isNavigating && !isBusy,
       canNavigateUp:
-        status === "complete" && parentId !== null && !isNavigating,
+        status === "complete" && parentId !== null && !isNavigating && !isBusy,
       searchOpen,
       detailsOpen: inspectedEntry !== null,
     });
@@ -691,7 +802,13 @@
 
 <div class="app-shell">
   <header class="app-header">
-    <button class="wordmark" type="button" onclick={reset} aria-label="Cepa home">
+    <button
+      class="wordmark"
+      type="button"
+      disabled={isBusy}
+      onclick={reset}
+      aria-label="Cepa home"
+    >
       <CepaMark class="wordmark-mark" />
       <span>Cepa</span>
     </button>
@@ -701,6 +818,7 @@
         <Button
           variant="ghost"
           size="icon-sm"
+          disabled={isBusy}
           aria-label="Scan again"
           title={`Scan again (${primaryShortcutLabel}R)`}
           onclick={() => startScan()}
@@ -708,6 +826,7 @@
         <Button
           variant="outline"
           size="sm"
+          disabled={isBusy}
           title={`Choose folder (${primaryShortcutLabel}O)`}
           onclick={chooseDirectory}
         >
@@ -717,6 +836,33 @@
       </div>
     {/if}
   </header>
+
+  {#if dropActive || isPreparingDroppedFolder}
+    <div
+      class="folder-drop-overlay"
+      data-state={isPreparingDroppedFolder ? "preparing" : "ready"}
+      role="status"
+      aria-live="polite"
+    >
+      <div class="folder-drop-copy">
+        <span class="folder-drop-symbol" aria-hidden="true"><FolderDown /></span>
+        <strong>
+          {isPreparingDroppedFolder
+            ? `Opening ${droppedFolderLabel}…`
+            : droppedPaths.length === 1
+              ? `Scan ${droppedFolderLabel}`
+              : "One folder at a time"}
+        </strong>
+        <span>
+          {isPreparingDroppedFolder
+            ? "Checking this folder"
+            : droppedPaths.length === 1
+              ? "Release to explore its contents"
+              : "Drop a single folder to scan"}
+        </span>
+      </div>
+    </div>
+  {/if}
 
   {#if status === "idle" || status === "error" || status === "cancelled"}
     <main class="landing">
@@ -732,6 +878,7 @@
           <Button
             class="choose-button"
             size="lg"
+            disabled={isBusy}
             title={`Choose folder (${primaryShortcutLabel}O)`}
             onclick={chooseDirectory}
           >
@@ -749,9 +896,14 @@
                 placeholder="/Users/you/Documents"
                 autocomplete="off"
                 spellcheck={false}
+                disabled={isBusy}
                 bind:value={path}
               />
-              <Button variant="outline" type="submit" disabled={!path.trim()}>
+              <Button
+                variant="outline"
+                type="submit"
+                disabled={!path.trim() || isBusy}
+              >
                 Scan
               </Button>
             </form>

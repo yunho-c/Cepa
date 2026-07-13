@@ -485,6 +485,19 @@ where
     scan_path_with_backend(root, cancel, ScanBackend::Auto, on_progress)
 }
 
+pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), String> {
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("Could not open {}: {error}", root.display()))?;
+    let metadata = root
+        .metadata()
+        .map_err(|error| format!("Could not read {}: {error}", root.display()))?;
+    if !metadata.is_dir() {
+        return Err("Choose a directory to scan.".to_string());
+    }
+    Ok((root, metadata))
+}
+
 pub(crate) fn scan_path_with_backend<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
@@ -604,16 +617,7 @@ fn scan_path_jwalk<F>(
 where
     F: FnMut(ScanProgress),
 {
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("Could not open {}: {error}", root.display()))?;
-    let root_metadata = root
-        .metadata()
-        .map_err(|error| format!("Could not read {}: {error}", root.display()))?;
-
-    if !root_metadata.is_dir() {
-        return Err("Choose a directory to scan.".to_string());
-    }
+    let (root, root_metadata) = validate_scan_root(root)?;
 
     if cancel.load(Ordering::Relaxed) {
         return Err("Scan cancelled.".to_string());
@@ -1717,6 +1721,24 @@ mod tests {
             .expect_err("file roots must fail");
 
         assert_eq!(error, "Choose a directory to scan.");
+    }
+
+    #[test]
+    fn validates_a_dropped_scan_root_without_starting_traversal() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let file = temp.path().join("file.bin");
+        fs::write(&file, [1_u8]).expect("write fixture file");
+
+        assert_eq!(
+            validate_scan_root(temp.path())
+                .expect("validate directory root")
+                .0,
+            temp.path().canonicalize().expect("canonical fixture root")
+        );
+        assert_eq!(
+            validate_scan_root(&file).expect_err("reject a dropped file"),
+            "Choose a directory to scan."
+        );
     }
 
     #[test]

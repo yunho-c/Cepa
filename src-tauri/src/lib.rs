@@ -549,6 +549,17 @@ struct ScanResponse {
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
+async fn validate_scan_root(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        scanner::validate_scan_root(Path::new(&path))
+            .map(|(root, _)| root.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| format!("The folder check stopped unexpectedly: {error}"))?
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
 async fn scan_directory(
     path: String,
     on_event: Channel<ScanEvent>,
@@ -768,6 +779,7 @@ pub fn run() {
         .manage(SearchState::default())
         .manage(CompressionPlanState::default())
         .invoke_handler(tauri::generate_handler![
+            validate_scan_root,
             scan_directory,
             cancel_scan,
             open_scan_directory,
