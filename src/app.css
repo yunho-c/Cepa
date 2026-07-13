@@ -442,15 +442,21 @@ body {
   white-space: nowrap;
 }
 .scan-root-bar {
+  width: 100%;
   height: 3px;
   margin-top: 7px;
+  border: 0;
   overflow: hidden;
+  appearance: none;
   border-radius: 999px;
   background: var(--progress-track);
 }
-.scan-root-bar > span {
-  display: block;
-  height: 100%;
+.scan-root-bar::-webkit-progress-bar { border-radius: inherit; background: var(--progress-track); }
+.scan-root-bar::-webkit-progress-value {
+  border-radius: inherit;
+  background: var(--progress-fill);
+}
+.scan-root-bar::-moz-progress-bar {
   border-radius: inherit;
   background: var(--progress-fill);
 }
@@ -736,8 +742,10 @@ body {
 .item-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 2px 12px; }
 .item-copy > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 570; letter-spacing: -0.01em; }
 .item-copy > span:not(.item-bar) { grid-row: 2; color: var(--muted-foreground); font-size: 10px; }
-.item-bar { grid-column: 1 / 3; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 999px; background: var(--progress-track); }
-.item-bar span { display: block; height: 100%; border-radius: inherit; background: var(--item-bar-fill); }
+.item-bar { grid-column: 1 / 3; width: 100%; height: 3px; margin-top: 5px; border: 0; overflow: hidden; appearance: none; border-radius: 999px; background: var(--progress-track); }
+.item-bar::-webkit-progress-bar { border-radius: inherit; background: var(--progress-track); }
+.item-bar::-webkit-progress-value { border-radius: inherit; background: var(--item-bar-fill); }
+.item-bar::-moz-progress-bar { border-radius: inherit; background: var(--item-bar-fill); }
 .item-size { min-width: 0; display: grid; justify-items: end; gap: 1px; }
 .item-size strong { font-size: 12px; font-weight: 590; font-variant-numeric: tabular-nums; }
 .item-size span { color: var(--muted-foreground); font-size: 9px; }

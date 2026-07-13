@@ -124,6 +124,12 @@ startup monitor query can be empty and skip position restoration, so
 `desktop_window/placement.rs` reapplies only an on-screen saved position (or
 centers safely when monitor metadata is unavailable). Keep the two-launch
 smoke test green when changing startup ordering or window configuration.
+The packaged webview CSP permits bundled assets and the two Tauri IPC transports;
+it does not allow remote content, inline scripts, or inline styles. The Vite-only
+development policy separately permits its localhost HMR socket and injected
+styles. Keep production and development policies distinct, preserve Tauri's
+automatic asset hash/nonce injection, and prefer semantic elements or classes
+over weakening the packaged policy for dynamic presentation.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend

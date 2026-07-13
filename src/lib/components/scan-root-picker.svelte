@@ -61,9 +61,12 @@
               <span>
                 {root.displayPath}{root.isRemovable ? " · External" : ""}{root.isReadOnly ? " · Read only" : ""}
               </span>
-              <span class="scan-root-bar" aria-hidden="true">
-                <span style:width={`${scanRootUsedPercent(root)}%`}></span>
-              </span>
+              <progress
+                class="scan-root-bar"
+                max="100"
+                value={scanRootUsedPercent(root)}
+                aria-hidden="true"
+              ></progress>
             </span>
             <span class="scan-root-capacity">
               <strong>{formatBytes(root.availableBytes)} free</strong>

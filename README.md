@@ -76,6 +76,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   and maximized state without restoring hidden or fullscreen state
 - Native application menus with state-aware Open Folder, Scan Again, Search,
   and parent-folder commands, backed by the same guarded desktop shortcuts
+- A restrictive packaged-webview Content Security Policy that permits bundled
+  assets and Tauri IPC without remote, inline-script, or inline-style sources
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   partial-coverage, and completed states, with routine backend/accounting
   semantics available under a compact scan-details disclosure
@@ -351,3 +353,9 @@ system bundle tools over conflicting third-party commands on `PATH`. Supplying
 `APPLE_SIGNING_IDENTITY` preserves that identity for a release build. Ad-hoc
 signing is local integrity validation only; public distribution still requires
 a suitable Developer ID identity and notarization.
+
+The packaged webview loads only bundled scripts, styles, and images. Its CSP
+allows the two Tauri IPC transports and denies objects, frames, workers, and
+remote content. The separate development policy adds only Vite's local origin,
+HMR socket, and inline styles used by the development server; it does not weaken
+the packaged policy. Keep new asset sources explicit and narrowly scoped.

@@ -1731,9 +1731,12 @@
                       <span>
                         {describeEntry(item)}
                       </span>
-                      <span class="item-bar" aria-hidden="true">
-                        <span style:width={`${itemPercent(metricBytes(item, sizeMetric))}%`}></span>
-                      </span>
+                      <progress
+                        class="item-bar"
+                        max="100"
+                        value={itemPercent(metricBytes(item, sizeMetric))}
+                        aria-hidden="true"
+                      ></progress>
                     </span>
                     <span class="item-size">
                       <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
