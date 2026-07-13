@@ -159,8 +159,11 @@ The intended scanning architecture is:
   backend. It recovers all hard-link names, queries exact allocation size by
   file ID, and falls back for subfolders and non-NTFS volumes. The checked-in
   evidence from a native fixture covers parity, deterministic ownership,
-  performance, and cancellation; broader real-volume and cold-cache evidence
-  remains required.
+  performance, and cancellation. File-ID measurements stream into a prebuilt
+  node arena through bounded 256-item batches; the eight-worker cap limits the
+  channel to 4,096 measurements. A single representative system-volume
+  observation covers retained-state peak memory, but broader hardware,
+  filesystem, and cold-cache evidence remains required.
 - `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
   to run parity and cancellation fixtures. The first native warm ext4 comparison
   found exact parity and bounded cancellation but slower traversal than `jwalk`;

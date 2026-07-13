@@ -1,8 +1,8 @@
 use super::mft::{self, Record};
 use super::{
-    EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
-    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
-    finish_scan, observe_partial_file,
+    EntryKind, FileIdentity, HardLinkOwner, InternalNode, MeasuredMetadata,
+    PROGRESS_ENTRY_INTERVAL, PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput,
+    ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use std::collections::HashSet;
@@ -36,6 +36,8 @@ use windows_sys::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, MFT_ENUM_DATA_V0};
 
 const ENUM_BUFFER_SIZE: usize = 1024 * 1024;
 const MAX_WORKERS: usize = 8;
+const MEASUREMENT_BATCH_SIZE: usize = 256;
+const RESULT_BATCHES_PER_WORKER: usize = 2;
 const WINDOWS_PATH_BUFFER: usize = 32_768;
 
 pub(super) enum NativeScanError {
@@ -118,22 +120,12 @@ where
         return Err(fatal("Scan cancelled."));
     }
 
-    let measurements = measure_files(
-        &volume_handle,
-        &records,
-        &ordered,
-        volume_serial,
-        &cancel,
-        started_at,
-        &root,
-        on_progress,
-    )?;
-
     let root_node_path: Arc<Path> = Arc::from(root.clone());
     let mut nodes = vec![InternalNode::root(&root)];
     let mut counters = ScanCounters::default();
     let mut partial_ranking = PartialRanking::default();
     let mut node_by_reference = std::collections::HashMap::with_capacity(ordered.len() + 1);
+    let mut file_nodes = Vec::new();
     let mut hard_links = Vec::new();
     node_by_reference.insert(root_reference, 0_usize);
 
@@ -149,23 +141,31 @@ where
             .copied()
             .ok_or(NativeScanError::Unavailable)?;
         let kind = entry_kind(record.attributes);
-        let measurement = measurements[record_index].unwrap_or_default();
-        if measurement.measured.metadata_error {
-            counters.skipped_entries = counters.skipped_entries.saturating_add(1);
-        }
         let name = OsString::from_wide(&record.name);
-        let (node_id, replaced_owner) =
-            counters.push_node(&mut nodes, parent, name, kind, measurement.measured);
-        observe_partial_file(&mut partial_ranking, &nodes, node_id, replaced_owner);
+        let (node_id, _) =
+            counters.push_node(&mut nodes, parent, name, kind, MeasuredMetadata::default());
         node_by_reference.insert(record.reference, node_id);
-        if measurement.link_count > 1 {
-            hard_links.push(HardLinkCandidate {
-                node_id,
-                measured: measurement.measured,
-                link_count: measurement.link_count,
-            });
+        if matches!(kind, EntryKind::File) {
+            file_nodes.push((record_index, node_id));
         }
     }
+    drop(node_by_reference);
+
+    measure_files(
+        &volume_handle,
+        &records,
+        &file_nodes,
+        volume_serial,
+        &mut nodes,
+        &mut counters,
+        &mut partial_ranking,
+        &mut hard_links,
+        &cancel,
+        started_at,
+        &root,
+        on_progress,
+    )?;
+    hard_links.sort_unstable_by_key(|candidate| candidate.node_id);
 
     ingest_hard_links(
         &root,
@@ -271,54 +271,44 @@ where
 fn measure_files<F>(
     volume: &File,
     records: &[Record],
-    ordered: &[usize],
+    file_nodes: &[(usize, usize)],
     volume_serial: u64,
+    nodes: &mut [InternalNode],
+    counters: &mut ScanCounters,
+    partial_ranking: &mut PartialRanking,
+    hard_links: &mut Vec<HardLinkCandidate>,
     cancel: &AtomicBool,
     started_at: Instant,
     root: &Path,
     on_progress: &mut F,
-) -> Result<Vec<Option<WindowsMeasurement>>, NativeScanError>
+) -> Result<(), NativeScanError>
 where
     F: FnMut(ScanProgress),
 {
-    let file_indices = ordered
-        .iter()
-        .copied()
-        .filter(|index| matches!(entry_kind(records[*index].attributes), EntryKind::File))
-        .collect::<Vec<_>>();
-    let directory_count = ordered
-        .iter()
-        .filter(|index| {
-            matches!(
-                entry_kind(records[**index].attributes),
-                EntryKind::Directory
-            )
-        })
-        .count() as u64;
-    let mut measurements = vec![None; records.len()];
-    if file_indices.is_empty() {
-        return Ok(measurements);
+    if file_nodes.is_empty() {
+        return Ok(());
     }
 
     let worker_count = std::thread::available_parallelism()
         .map(usize::from)
         .unwrap_or(1)
         .clamp(1, MAX_WORKERS)
-        .min(file_indices.len());
-    let chunk_size = file_indices.len().div_ceil(worker_count);
+        .min(file_nodes.len());
+    let chunk_size = file_nodes.len().div_ceil(worker_count);
     let volume_handle = volume.as_raw_handle() as usize;
-    let (sender, receiver) = mpsc::channel::<(usize, WindowsMeasurement)>();
+    let result_queue_capacity = worker_count.saturating_mul(RESULT_BATCHES_PER_WORKER);
+    let (sender, receiver) =
+        mpsc::sync_channel::<Vec<(usize, WindowsMeasurement)>>(result_queue_capacity.max(1));
     let mut completed_files = 0_u64;
-    let mut observed_logical = 0_u64;
-    let mut observed_allocated = 0_u64;
-    let mut skipped_entries = 0_u64;
     let mut last_progress_at = Instant::now();
+    let directory_count = counters.directories_scanned;
 
     std::thread::scope(|scope| -> Result<(), NativeScanError> {
-        for chunk in file_indices.chunks(chunk_size) {
+        for chunk in file_nodes.chunks(chunk_size) {
             let sender = sender.clone();
             scope.spawn(move || {
-                for &record_index in chunk {
+                let mut batch = Vec::with_capacity(MEASUREMENT_BATCH_SIZE);
+                for &(record_index, node_id) in chunk {
                     if cancel.load(Ordering::Relaxed) {
                         break;
                     }
@@ -332,29 +322,40 @@ where
                                 },
                                 link_count: 0,
                             });
-                    if sender.send((record_index, measurement)).is_err() {
-                        break;
+                    batch.push((node_id, measurement));
+                    if batch.len() == MEASUREMENT_BATCH_SIZE {
+                        if sender.send(batch).is_err() {
+                            return;
+                        }
+                        batch = Vec::with_capacity(MEASUREMENT_BATCH_SIZE);
                     }
+                }
+                if !batch.is_empty() {
+                    let _ = sender.send(batch);
                 }
             });
         }
         drop(sender);
 
-        while completed_files < file_indices.len() as u64 {
+        let mut cancelled = false;
+        while completed_files < file_nodes.len() as u64 {
             if cancel.load(Ordering::Relaxed) {
-                return Err(fatal("Scan cancelled."));
+                cancelled = true;
+                break;
             }
             match receiver.recv_timeout(PROGRESS_INTERVAL) {
-                Ok((record_index, measurement)) => {
-                    completed_files = completed_files.saturating_add(1);
-                    observed_logical =
-                        observed_logical.saturating_add(measurement.measured.logical_bytes);
-                    observed_allocated =
-                        observed_allocated.saturating_add(measurement.measured.allocated_bytes);
-                    if measurement.measured.metadata_error {
-                        skipped_entries = skipped_entries.saturating_add(1);
+                Ok(batch) => {
+                    completed_files = completed_files.saturating_add(batch.len() as u64);
+                    for (node_id, measurement) in batch {
+                        apply_measurement(
+                            node_id,
+                            measurement,
+                            nodes,
+                            counters,
+                            partial_ranking,
+                            hard_links,
+                        );
                     }
-                    measurements[record_index] = Some(measurement);
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -367,9 +368,9 @@ where
                     entries_scanned: completed_files.saturating_add(directory_count),
                     files_scanned: completed_files,
                     directories_scanned: directory_count,
-                    logical_bytes: observed_logical,
-                    allocated_bytes: observed_allocated,
-                    skipped_entries,
+                    logical_bytes: counters.observed_logical_bytes,
+                    allocated_bytes: counters.observed_allocated_bytes,
+                    skipped_entries: counters.skipped_entries,
                     current_path: root.to_string_lossy().into_owned(),
                     elapsed_ms: super::elapsed_ms(started_at),
                     largest_items: Vec::new(),
@@ -377,10 +378,60 @@ where
                 last_progress_at = Instant::now();
             }
         }
+        if cancelled {
+            drop(receiver);
+            return Err(fatal("Scan cancelled."));
+        }
         Ok(())
     })?;
 
-    Ok(measurements)
+    Ok(())
+}
+
+fn apply_measurement(
+    node_id: usize,
+    measurement: WindowsMeasurement,
+    nodes: &mut [InternalNode],
+    counters: &mut ScanCounters,
+    partial_ranking: &mut PartialRanking,
+    hard_links: &mut Vec<HardLinkCandidate>,
+) {
+    if measurement.measured.metadata_error {
+        counters.skipped_entries = counters.skipped_entries.saturating_add(1);
+        return;
+    }
+
+    let measured = measurement.measured;
+    let node = &mut nodes[node_id];
+    node.logical_bytes = measured.logical_bytes;
+    node.allocated_bytes = measured.allocated_bytes;
+    node.scan_revision = measured.scan_revision;
+    counters.observed_logical_bytes = counters
+        .observed_logical_bytes
+        .saturating_add(measured.logical_bytes);
+    counters.observed_allocated_bytes = counters
+        .observed_allocated_bytes
+        .saturating_add(measured.allocated_bytes);
+
+    if let Some(identity) = measured.file_identity {
+        let previous = counters.hard_link_owners.insert(
+            identity,
+            HardLinkOwner {
+                node_id,
+                logical_bytes: measured.logical_bytes,
+                allocated_bytes: measured.allocated_bytes,
+            },
+        );
+        debug_assert!(previous.is_none(), "MFT references must be unique");
+    }
+    observe_partial_file(partial_ranking, nodes, node_id, None);
+    if measurement.link_count > 1 {
+        hard_links.push(HardLinkCandidate {
+            node_id,
+            measured,
+            link_count: measurement.link_count,
+        });
+    }
 }
 
 fn measure_file_by_id(
@@ -792,5 +843,84 @@ mod tests {
             entry_kind(FILE_ATTRIBUTE_DIRECTORY),
             EntryKind::Directory
         ));
+    }
+
+    #[test]
+    fn streams_file_measurements_into_prebuilt_nodes() {
+        let mut nodes = vec![InternalNode::root(Path::new(r"C:\"))];
+        let mut counters = ScanCounters::default();
+        let mut ranking = PartialRanking::default();
+        let mut hard_links = Vec::new();
+        let (node_id, _) = counters.push_node(
+            &mut nodes,
+            0,
+            OsString::from("shared.bin"),
+            EntryKind::File,
+            MeasuredMetadata::default(),
+        );
+        let identity = FileIdentity(7, 11);
+
+        apply_measurement(
+            node_id,
+            WindowsMeasurement {
+                measured: MeasuredMetadata {
+                    logical_bytes: 4_096,
+                    allocated_bytes: 8_192,
+                    filesystem_id: Some(7),
+                    file_identity: Some(identity),
+                    scan_revision: None,
+                    metadata_error: false,
+                },
+                link_count: 2,
+            },
+            &mut nodes,
+            &mut counters,
+            &mut ranking,
+            &mut hard_links,
+        );
+
+        assert_eq!(nodes[node_id].logical_bytes, 4_096);
+        assert_eq!(nodes[node_id].allocated_bytes, 8_192);
+        assert_eq!(counters.observed_logical_bytes, 4_096);
+        assert_eq!(counters.observed_allocated_bytes, 8_192);
+        assert_eq!(counters.hard_link_owners.len(), 1);
+        assert_eq!(ranking.candidates.len(), 1);
+        assert_eq!(hard_links.len(), 1);
+        assert_eq!(hard_links[0].node_id, node_id);
+    }
+
+    #[test]
+    fn records_failed_streamed_measurements_without_ranking_them() {
+        let mut nodes = vec![InternalNode::root(Path::new(r"C:\"))];
+        let mut counters = ScanCounters::default();
+        let mut ranking = PartialRanking::default();
+        let mut hard_links = Vec::new();
+        let (node_id, _) = counters.push_node(
+            &mut nodes,
+            0,
+            OsString::from("unavailable.bin"),
+            EntryKind::File,
+            MeasuredMetadata::default(),
+        );
+
+        apply_measurement(
+            node_id,
+            WindowsMeasurement {
+                measured: MeasuredMetadata {
+                    metadata_error: true,
+                    ..MeasuredMetadata::default()
+                },
+                link_count: 0,
+            },
+            &mut nodes,
+            &mut counters,
+            &mut ranking,
+            &mut hard_links,
+        );
+
+        assert_eq!(counters.skipped_entries, 1);
+        assert_eq!(nodes[node_id].logical_bytes, 0);
+        assert!(ranking.candidates.is_empty());
+        assert!(hard_links.is_empty());
     }
 }

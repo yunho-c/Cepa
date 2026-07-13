@@ -35,6 +35,18 @@ runs. Progress is written to stderr and schema-versioned JSON to stdout. It
 verifies that counts, byte totals, skipped work, hard-link deduplication, and
 reported accounting semantics stay identical across runs.
 
+Live system volumes may change during the warmup and must not bypass that
+stability check. Record an explicitly single-run observation instead:
+
+```sh
+just observe-scan /path/to/live-volume auto > /tmp/cepa-observation.json
+```
+
+The observation harness performs no warmup and makes no repeatability claim. It
+reports the complete result, initial-view and response measurements, environment,
+and wall time for that one workload snapshot. Compare counts alongside timing
+when using several observations of a changing volume.
+
 Compare two backends on a quiescent tree:
 
 ```sh
@@ -549,6 +561,20 @@ traversal and 25.12 ms median wall time; one `/usr/bin/time -v` observation used
 dependency MSRV gate; it now stops at the host's missing `dbus-1.pc`, outside the
 scanner module graph.
 
+The current tree was revalidated on that native Linux host after its compiler
+was updated to Rust 1.97.0 on 2026-07-13. Dependency-light formatting, check,
+warning-denied Clippy, and 61 library/example tests passed; Svelte diagnostics
+were clean and all 34 frontend tests passed under Bun 1.2.21. On a fresh
+4,099-file ext4 fixture, `jwalk` and `statx` matched all accounting fields,
+including one deduplicated hard link and a directory symlink that was not
+followed. Three `statx` cancellations returned in 70–155 us, and the new
+single-run observation harness completed the same fixture through `statx`. A
+desktop-feature Cargo check still stops specifically at the absent system
+`dbus-1.pc`; the compiler update therefore closes the Rust MSRV question but
+does not supply Linux desktop development packages. Smoke values are preserved
+in
+[`performance-results/2026-07-13-linux-rust197-smoke.csv`](performance-results/2026-07-13-linux-rust197-smoke.csv).
+
 The native Windows release harness passed 35 tests. Eleven interleaved runs on
 an 8,001-file NTFS fixture compared otherwise identical binaries before and
 after the extra `FileBasicInfo` query. Median MFT traversal changed from 122.22
@@ -560,7 +586,7 @@ systems. Summary samples are preserved in
 ### 2026-07-12 Windows NTFS MFT validation
 
 The Windows backend was compiled and run natively over SSH on an AMD64 Windows
-machine (`DESKTOP-1NSAB4F`) with Rust 1.97.0 GNU and an NTFS virtual disk. The
+machine with Rust 1.97.0 GNU and an NTFS virtual disk. The
 release fixture contained 8,192 empty files plus a nested three-file tree, one
 hard link, and a junction targeting another volume. The volume also contained
 the normal recycle-bin and system-volume-information directories. Both backends
@@ -590,6 +616,44 @@ hardware performance. The MFT control and record contracts follow Microsoft's
 and
 [`FindFirstFileNameW`](https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-findfirstfilenamew)
 documentation.
+
+### 2026-07-13 Windows MFT measurement streaming
+
+The original Windows traversal retained a `WindowsMeasurement` slot for every
+primary file until all file-ID workers finished, then copied those measurements
+into the node arena. On a large volume this duplicated the scanner's dominant
+per-file state. The revised traversal builds the deterministic node arena first
+and applies measurements as workers return bounded 256-item batches. At the
+eight-worker cap, the synchronized channel holds at most 16 batches, or 4,096
+measurements. Hard-link candidates are sorted by node ID before name recovery,
+preserving deterministic lexicographic ownership independently of worker order.
+
+One release observation per implementation scanned a changing, approximately
+1 TB NTFS system volume on a Ryzen 9 5900HS system with 16 logical CPUs, about
+40 GB RAM, 4 KiB clusters, a 5.28 GB MFT, Windows build 26200, and Rust 1.97.0.
+An external PowerShell sampler polled working set every 100 ms. The baseline
+retained 5,563,351 entries and peaked at 2,816,573,440 bytes; bounded batching
+retained 5,567,232 entries and peaked at 2,139,058,176 bytes. That is a 24.1%
+peak-working-set reduction despite the later observation containing 0.07% more
+entries. The live workload changed between runs, so its roughly 326-second scan
+times are not a controlled speed comparison.
+
+A separate quiescent NTFS virtual disk supplied the controlled comparison. Its
+8,197 files, five directories, 16,788,236 logical bytes, 12,560 allocated bytes,
+one deduplicated hard link, and zero skipped entries matched exactly in every
+warm run before and after the change. Across nine runs, median wall time fell
+from 194.48 ms to 145.58 ms (25.1%), and median traversal fell from 192,815 us
+to 144,161 us (25.2%). Nine asynchronous cancellations requested after the
+2,048-entry boundary returned in 1,062–2,082 us, with a 1,249 us median. Native
+formatting, checks, warning-denied Clippy, and all 54 library/example tests also
+passed on Windows. These warm results cover one machine and do not establish
+cold-cache or broad hardware performance.
+
+Raw evidence is preserved in
+[`performance-results/2026-07-13-windows-real-volume.csv`](performance-results/2026-07-13-windows-real-volume.csv),
+[`performance-results/2026-07-13-windows-mft-streaming.csv`](performance-results/2026-07-13-windows-mft-streaming.csv),
+and
+[`performance-results/2026-07-13-windows-mft-cancellation.csv`](performance-results/2026-07-13-windows-mft-cancellation.csv).
 
 ## Current-folder search
 

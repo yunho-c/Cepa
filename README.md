@@ -84,7 +84,12 @@ error, and concurrent-mutation semantics.
 
 Broader native-filesystem and cold-cache validation, additional Windows and
 Linux hardware measurements, and compression mutation remain roadmap work. The
-first native Linux ext4 comparison found exact accounting parity and responsive
+Windows MFT backend now streams file-ID measurements into its retained node
+arena through bounded batches; on one 5.57-million-entry system-volume
+observation this reduced peak working set by 24.1%, while a stable 8,202-entry
+fixture improved median traversal by 25.2% with identical accounting. These are
+single-machine warm measurements, not a universal speed claim. The first native
+Linux ext4 comparison found exact accounting parity and responsive
 cancellation, but `statx` was slower than `jwalk` on all three warm workloads;
 Cepa does not claim a Linux speedup. It remains the automatic Linux backend
 because the measured native process uses less than half the peak RSS and has a
@@ -223,6 +228,7 @@ release mode with:
 ```sh
 just benchmark-fixture /tmp/cepa-fixture 1000 100 0
 just benchmark-scan /tmp/cepa-fixture 9 jwalk
+just observe-scan /path/to/live-volume auto
 just benchmark-search /path/to/wide-folder file- 9 auto allocated
 ```
 
@@ -230,6 +236,11 @@ The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
 or `auto`. Platform-specific backends reject explicit use on the wrong OS. MFT
 is deliberately limited to an NTFS volume root because whole-volume enumeration
 has a fixed cost that is unsuitable for arbitrary subfolders.
+
+The repeat benchmark rejects any workload that changes after warmup. Use the
+single-run observation command for a live system volume that cannot be made
+quiescent; compare each observation's own entry counts and timings instead of
+presenting it as a stable repeated benchmark.
 
 The search benchmark scans once, warms one current-folder query, then reports
 repeat latency and bounded result counts without rescanning between runs.

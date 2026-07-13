@@ -1,0 +1,3 @@
+variant,backend,logical_cpus,files,directories,entries,duplicate_hard_links,skipped_entries,logical_bytes,allocated_bytes,traversal_us,aggregation_us,elapsed_ms,wall_ms,initial_view_ms,response_bytes,serialization_us,chart_items,peak_working_set_bytes
+baseline,mft,16,4874470,688881,5563351,379168,270,782451058892,781760359600,323334294,68583,323402,323961.1799,3.3253,68290,267,512,2816573440
+bounded_batches,mft,16,4877868,689364,5567232,379203,369,783911439682,783220541520,326045823,70744,326116,326621.3552,3.2174,68290,314,512,2139058176

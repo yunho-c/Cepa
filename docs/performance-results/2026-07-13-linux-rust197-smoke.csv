@@ -1,0 +1,7 @@
+phase,backend,iteration,files,directories,logical_bytes,allocated_bytes,duplicate_hard_links,trigger_after_entries,entries_at_request,traversal_or_scan_elapsed_us,cancellation_latency_us,wall_ms,response_bytes
+parity,jwalk,1,4099,33,16777411,8192,1,,,1826,,,
+parity,statx,1,4099,33,16777411,8192,1,,,1512,,,
+cancellation,statx,1,,,,,1,1024,2047,681,70,,
+cancellation,statx,2,,,,,1,1024,2047,737,155,,
+cancellation,statx,3,,,,,1,1024,2047,646,88,,
+observation,statx,1,4099,33,16777411,8192,1,,,,,2.152476,30000
