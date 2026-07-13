@@ -130,6 +130,11 @@ development policy separately permits its localhost HMR socket and injected
 styles. Keep production and development policies distinct, preserve Tauri's
 automatic asset hash/nonce injection, and prefer semantic elements or classes
 over weakening the packaged policy for dynamic presentation.
+Distribution metadata is explicit and project-owned: `LICENSE`, `package.json`,
+`src-tauri/Cargo.toml`, and the Tauri bundle configuration agree on the MIT
+license, repository, version, and `Cepa contributors` attribution. Keep the npm
+package private and the Rust crate non-publishable; Cepa ships as native desktop
+bundles. `src-tauri/tests/tauri_config.rs` guards this contract.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 Completed items can be revealed in the platform file manager through a backend
@@ -440,6 +445,9 @@ when validating Rust or Tauri work. On macOS, `just bundle` also prioritizes
 Apple's system bundle tools and defaults to ad-hoc signing when
 `APPLE_SIGNING_IDENTITY` is absent. This produces a sealed local test bundle;
 it is not evidence of Developer ID signing or notarization.
+Canonical frontend and Tauri recipes use `bun --bun` so host Node versions do
+not leak into Vite, Svelte, or Tauri builds. Preserve that runtime boundary in
+both `Justfile` and Tauri's `beforeDevCommand`/`beforeBuildCommand` hooks.
 
 ## Change and validation discipline
 

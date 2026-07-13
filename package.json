@@ -1,8 +1,11 @@
 {
   "name": "cepa",
   "version": "0.1.0",
+  "private": true,
   "packageManager": "bun@1.3.14",
   "description": "A fast, cross-platform disk space analyzer.",
+  "homepage": "https://github.com/yunho-c/Cepa",
+  "repository": "https://github.com/yunho-c/Cepa",
   "type": "module",
   "scripts": {
     "dev": "vite",

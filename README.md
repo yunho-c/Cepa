@@ -335,7 +335,9 @@ cancellation, invalid roots, nested directory views, and hard-link accounting,
 plus symlink and result-bound behavior.
 
 Native recipes clear the machine's configured `sccache` wrapper so it cannot
-block Cargo.
+block Cargo. Frontend and Tauri recipes also force Bun's runtime for JavaScript
+tools, so an unrelated system Node installation cannot change or block the
+canonical build.
 
 The `CI` workflow repeats `just install`, `just check`, and `just build` on
 native Ubuntu 22.04, macOS, and Windows runners. Local workflow lint and macOS
@@ -359,3 +361,10 @@ allows the two Tauri IPC transports and denies objects, frames, workers, and
 remote content. The separate development policy adds only Vite's local origin,
 HMR socket, and inline styles used by the development server; it does not weaken
 the packaged policy. Keep new asset sources explicit and narrowly scoped.
+
+## License
+
+Cepa is available under the [MIT License](LICENSE). The frontend package and
+Rust crate are marked private/non-publishable because this repository produces
+desktop applications, not npm or crates.io packages. Native bundle metadata is
+kept consistent with the two manifests by the configuration regression tests.

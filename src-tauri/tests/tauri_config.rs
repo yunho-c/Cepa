@@ -106,3 +106,74 @@ fn development_policy_limits_relaxation_to_vite_styles_and_hmr() {
     assert!(!serialized.contains("https:"));
     assert!(!serialized.contains("wss:"));
 }
+
+#[test]
+fn distribution_metadata_is_complete_and_consistent() {
+    let config: Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+        .expect("tauri.conf.json must be valid JSON");
+    let package: Value = serde_json::from_str(include_str!("../../package.json"))
+        .expect("package.json must be valid JSON");
+    let bundle = &config["bundle"];
+    let repository = "https://github.com/yunho-c/Cepa";
+
+    assert_eq!(config["version"], package["version"]);
+    assert_eq!(config["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(package["private"], true);
+    assert_eq!(package["license"], env!("CARGO_PKG_LICENSE"));
+    assert_eq!(package["homepage"], env!("CARGO_PKG_HOMEPAGE"));
+    assert_eq!(package["repository"], env!("CARGO_PKG_REPOSITORY"));
+    assert_eq!(package["repository"], repository);
+
+    let cargo_manifest = include_str!("../Cargo.toml");
+    assert!(cargo_manifest.lines().any(|line| line == "publish = false"));
+    assert!(
+        cargo_manifest
+            .lines()
+            .any(|line| line == "authors = [\"Cepa contributors\"]")
+    );
+
+    assert_eq!(bundle["publisher"], "Cepa contributors");
+    assert_eq!(bundle["homepage"], repository);
+    assert_eq!(bundle["copyright"], "Copyright © 2026 Cepa contributors");
+    assert_eq!(bundle["license"], "MIT");
+    assert_eq!(bundle["licenseFile"], "../LICENSE");
+    assert_eq!(bundle["category"], "Utility");
+    assert!(
+        bundle["shortDescription"]
+            .as_str()
+            .is_some_and(|description| !description.trim().is_empty())
+    );
+    assert!(
+        bundle["longDescription"]
+            .as_str()
+            .is_some_and(|description| description.contains("stays on this device"))
+    );
+
+    let license = include_str!("../../LICENSE");
+    assert!(license.starts_with("MIT License\n"));
+    assert!(license.contains("Copyright (c) 2026 Cepa contributors"));
+    assert!(license.contains("THE SOFTWARE IS PROVIDED \"AS IS\""));
+}
+
+#[test]
+fn canonical_javascript_workflows_force_the_bun_runtime() {
+    let config: Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+        .expect("tauri.conf.json must be valid JSON");
+    assert_eq!(config["build"]["beforeDevCommand"], "bun --bun run dev");
+    assert_eq!(config["build"]["beforeBuildCommand"], "bun --bun run build");
+
+    let justfile = include_str!("../../Justfile");
+    for command in [
+        "bun --bun run desktop:dev",
+        "bun --bun run dev",
+        "bun --bun run check",
+        "bun --bun run icons",
+        "bun --bun run tauri build --no-bundle",
+        "bun --bun run tauri build",
+    ] {
+        assert!(
+            justfile.contains(command),
+            "canonical Justfile must contain {command}"
+        );
+    }
+}

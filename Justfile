@@ -21,11 +21,11 @@ install:
 
 # Run the native Tauri application in development mode.
 dev:
-    bun run desktop:dev
+    bun --bun run desktop:dev
 
 # Run only the Vite frontend.
 web:
-    bun run dev
+    bun --bun run dev
 
 # Run all static checks and tests.
 check: frontend-check frontend-test rust-fmt rust-check rust-clippy test
@@ -47,7 +47,7 @@ window-state-smoke:
 
 # Check the Svelte and TypeScript frontend.
 frontend-check:
-    bun run check
+    bun --bun run check
 
 # Run deterministic frontend unit tests.
 frontend-test:
@@ -55,7 +55,7 @@ frontend-test:
 
 # Regenerate desktop and store icons from the shared vector source.
 icons:
-    bun run icons
+    bun --bun run icons
 
 # Check Rust formatting without changing files.
 rust-fmt:
@@ -99,8 +99,8 @@ benchmark-cancellation path backend="jwalk" iterations="9" after_entries="2048":
 
 # Build the frontend and native executable without packaging it.
 build:
-    bun run tauri build --no-bundle
+    bun --bun run tauri build --no-bundle
 
 # Build platform desktop bundles.
 bundle:
-    {{ bundle-environment }} bun run tauri build
+    {{ bundle-environment }} bun --bun run tauri build

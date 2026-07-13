@@ -2,6 +2,11 @@
 name = "cepa"
 version = "0.1.0"
 description = "A fast, cross-platform disk space analyzer"
+authors = ["Cepa contributors"]
+license = "MIT"
+homepage = "https://github.com/yunho-c/Cepa"
+repository = "https://github.com/yunho-c/Cepa"
+publish = false
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.yunhocho.cepa",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun --bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun --bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -55,6 +55,14 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Cepa contributors",
+    "homepage": "https://github.com/yunho-c/Cepa",
+    "copyright": "Copyright © 2026 Cepa contributors",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "category": "Utility",
+    "shortDescription": "Fast, private disk space analysis.",
+    "longDescription": "Cepa is a fast, cross-platform disk space analyzer. Explore local storage through a coordinated radial map and ranked directory view; scanning stays on this device.",
     "targets": ["app", "dmg", "deb", "rpm", "appimage", "nsis", "msi"],
     "icon": [
       "icons/32x32.png",
