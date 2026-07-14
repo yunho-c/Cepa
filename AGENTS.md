@@ -63,7 +63,9 @@ When the storage picker is visible, the landing view compacts its hero and bound
 the volume list so the folder picker and manual-path fallback remain visible at
 both 880 by 620 and 620 by 480. At 560 logical pixels tall or less, only the
 decorative app tile is removed and volume rows tighten to 64 pixels. Preserve the
-spacious centered hero when no storage panel is rendered; use
+free-capacity value in the 560 through 720 logical-pixel compact desktop range;
+only browser previews below 560 pixels omit it. Preserve the spacious centered
+hero when no storage panel is rendered; use
 `shouldShowScanRoots` for both the component and layout state so they cannot
 drift.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
