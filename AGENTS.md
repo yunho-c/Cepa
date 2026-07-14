@@ -332,6 +332,11 @@ string conversions, repeated metadata syscalls, synchronization contention,
 serialization volume, and overly frequent frontend updates. Prefer bounded
 parallelism and bounded queues. Faster traversal must not cause unbounded memory
 growth, nondeterministic accounting, or sluggish cancellation.
+Deterministic hard-link ownership reuses two scan-local node-ID buffers when it
+compares relative paths. Their capacity grows only to the deepest compared path,
+they are cleared between duplicate names, and they are not retained in the
+completed snapshot. Preserve that allocation bound instead of rebuilding two
+ancestor vectors for every duplicate hard link.
 
 Use the portable backend as the behavioral reference for optimized backends.
 Add parity tests for shared semantics and platform-specific tests for native

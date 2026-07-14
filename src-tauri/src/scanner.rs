@@ -302,6 +302,8 @@ struct ScanCounters {
     observed_logical_bytes: u64,
     observed_allocated_bytes: u64,
     hard_link_owners: HashMap<FileIdentity, HardLinkOwner>,
+    hard_link_path_left: Vec<NodeId>,
+    hard_link_path_right: Vec<NodeId>,
     #[cfg(unix)]
     revision_filesystem_id: Option<u64>,
 }
@@ -434,7 +436,15 @@ impl ScanCounters {
         let mut replaced_owner = None;
         if let Some(identity) = measured.file_identity {
             if let Some(owner) = previous_owner {
-                if compare_relative_node_paths(nodes, node_id, owner.node_id).is_lt() {
+                if compare_relative_node_paths(
+                    nodes,
+                    node_id,
+                    owner.node_id,
+                    &mut self.hard_link_path_left,
+                    &mut self.hard_link_path_right,
+                )
+                .is_lt()
+                {
                     nodes[owner.node_id].logical_bytes = 0;
                     nodes[owner.node_id].allocated_bytes = 0;
                     nodes[node_id].logical_bytes = measured.logical_bytes;
@@ -1420,21 +1430,29 @@ fn compare_relative_node_paths(
     nodes: &[InternalNode],
     left: NodeId,
     right: NodeId,
+    left_components: &mut Vec<NodeId>,
+    right_components: &mut Vec<NodeId>,
 ) -> std::cmp::Ordering {
-    let mut left_components = relative_node_path(nodes, left);
-    let mut right_components = relative_node_path(nodes, right);
-    left_components.reverse();
-    right_components.reverse();
-    left_components.cmp(&right_components)
+    relative_node_path(nodes, left, left_components);
+    relative_node_path(nodes, right, right_components);
+    left_components
+        .iter()
+        .rev()
+        .map(|node_id| nodes[*node_id].name())
+        .cmp(
+            right_components
+                .iter()
+                .rev()
+                .map(|node_id| nodes[*node_id].name()),
+        )
 }
 
-fn relative_node_path(nodes: &[InternalNode], mut node_id: NodeId) -> Vec<&OsStr> {
-    let mut components = Vec::new();
+fn relative_node_path(nodes: &[InternalNode], mut node_id: NodeId, components: &mut Vec<NodeId>) {
+    components.clear();
     while let Some(parent) = nodes[node_id].parent {
-        components.push(nodes[node_id].name());
+        components.push(node_id);
         node_id = parent;
     }
-    components
 }
 
 fn compare_node_ids_by_metric(
@@ -2144,6 +2162,77 @@ mod tests {
 
         observed.skipped_entries = observed.skipped_entries.saturating_add(1);
         assert_eq!(result.accounting_mismatches(&observed), ["skipped_entries"]);
+    }
+
+    #[test]
+    fn relative_path_comparison_reuses_scratch_buffers() {
+        let mut nodes = vec![InternalNode::root(Path::new("root"))];
+        let mut counters = ScanCounters::default();
+        let alpha = counters
+            .push_node(
+                &mut nodes,
+                0,
+                OsString::from("alpha"),
+                EntryKind::Directory,
+                MeasuredMetadata::default(),
+            )
+            .0;
+        let zeta = counters
+            .push_node(
+                &mut nodes,
+                0,
+                OsString::from("zeta"),
+                EntryKind::Directory,
+                MeasuredMetadata::default(),
+            )
+            .0;
+        let left = counters
+            .push_node(
+                &mut nodes,
+                alpha,
+                OsString::from("z-last"),
+                EntryKind::File,
+                MeasuredMetadata::default(),
+            )
+            .0;
+        let right = counters
+            .push_node(
+                &mut nodes,
+                zeta,
+                OsString::from("a-first"),
+                EntryKind::File,
+                MeasuredMetadata::default(),
+            )
+            .0;
+        let mut left_scratch = Vec::new();
+        let mut right_scratch = Vec::new();
+
+        assert!(
+            compare_relative_node_paths(
+                &nodes,
+                left,
+                right,
+                &mut left_scratch,
+                &mut right_scratch,
+            )
+            .is_lt()
+        );
+        let capacities = (left_scratch.capacity(), right_scratch.capacity());
+
+        assert!(
+            compare_relative_node_paths(
+                &nodes,
+                right,
+                left,
+                &mut left_scratch,
+                &mut right_scratch,
+            )
+            .is_gt()
+        );
+        assert_eq!(
+            (left_scratch.capacity(), right_scratch.capacity()),
+            capacities
+        );
     }
 
     #[cfg(unix)]

@@ -225,6 +225,35 @@ baseline, so these numbers establish a new correctness-change baseline rather
 than a like-for-like speedup or regression claim. The raw runs are preserved in
 [`performance-results/2026-07-11-m4-pro-hardlink-ownership.csv`](performance-results/2026-07-11-m4-pro-hardlink-ownership.csv).
 
+### 2026-07-13 hard-link path comparison reuse
+
+Deterministic ownership compares the complete relative paths of duplicate hard
+links. The original comparison allocated two ancestor vectors for every
+duplicate name. The scanner now retains two node-ID scratch buffers for the
+duration of one scan, clears them between comparisons, and grows them only when
+a deeper path requires more capacity. They are traversal-only state and do not
+enter the retained snapshot.
+
+The Rust 1.97.0 ext4 workstation compared the committed baseline and candidate
+as separate release binaries. Fifteen single-run pairs alternated execution
+order; each invocation performed its own unmeasured warmup first. Values below
+are medians.
+
+| Workload | Backend | Baseline traversal | Reused buffers | Change | Improved pairs |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 50,302-entry controlled tree, 50,000 duplicate links | `jwalk` | 10.287 ms | 9.402 ms | -8.6% | 13/15 |
+| 50,302-entry controlled tree, 50,000 duplicate links | `statx` | 11.159 ms | 10.770 ms | -3.5% | 12/15 |
+| 435,960-entry development workspace, 41,660 duplicate links | `jwalk` | 123.688 ms | 119.122 ms | -3.7% | 14/15 |
+| 435,960-entry development workspace, 41,660 duplicate links | `statx` | 157.468 ms | 150.376 ms | -4.5% | 10/15 |
+
+Baseline and candidate workload/accounting fields matched for every comparison.
+The controlled tree also retained exact `jwalk`/`statx` parity for file and
+directory counts, bytes, duplicate ownership, skipped work, and accounting
+flags. The candidate's real-workspace `statx` sample contained one 210.60 ms
+outlier, so the result supports eliminating repeated allocation rather than a
+universal traversal-speed claim. Raw runs are preserved in
+[`performance-results/2026-07-13-hardlink-path-scratch.csv`](performance-results/2026-07-13-hardlink-path-scratch.csv).
+
 ## Snapshot memory baseline
 
 Peak resident memory was measured by running one warmup plus one measured scan
