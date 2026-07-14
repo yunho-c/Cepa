@@ -95,7 +95,9 @@ Pointer previews begin on actual pointer movement, not merely because a scan or
 directory transition rendered a segment or row beneath a stationary cursor.
 This keeps a newly completed view anchored on its current directory until the
 user deliberately explores it. Keyboard focus must continue to preview its item
-immediately.
+immediately. Drive chart emphasis, row emphasis, and the row Reveal affordance
+from that same selected-entry state; raw CSS `:hover` must not reintroduce a
+visual preview that disagrees with the coordinated map/list state.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin

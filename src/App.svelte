@@ -1758,6 +1758,7 @@
                       aria-label={`Reveal ${item.name} in the system file manager`}
                       title="Reveal in file manager"
                       onclick={() => revealItem(item.id)}
+                      onpointermove={() => previewEntry(item)}
                       onfocus={() => {
                         listFocusId = item.id;
                         selectedEntry = item;
