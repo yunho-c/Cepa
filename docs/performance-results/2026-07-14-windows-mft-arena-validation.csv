@@ -1,0 +1,16 @@
+kind,variant,iteration,entries,files,directories,duplicate_hard_links,wall_ms,scan_elapsed_us,snapshot_retained_bytes,snapshot_release_ms,entries_at_request,cancellation_latency_us
+hardlink-scan,baseline,1,100116,100006,110,1,1270.9737,,20128705,2.8995,,
+hardlink-scan,baseline,2,100116,100006,110,1,1426.7963,,20128705,2.7436,,
+hardlink-scan,baseline,3,100116,100006,110,1,1453.3227,,20128705,2.8185,,
+hardlink-scan,candidate,1,100116,100006,110,1,1350.5667,,15918825,2.8127,,
+hardlink-scan,candidate,2,100116,100006,110,1,1413.6672,,15918825,2.9552,,
+hardlink-scan,candidate,3,100116,100006,110,1,1444.3897,,15918825,3.0124,,
+cancellation,candidate,1,100116,,,,,314029,,,10606,6853
+cancellation,candidate,2,100116,,,,,306151,,,12654,6804
+cancellation,candidate,3,100116,,,,,294642,,,12654,6768
+cancellation,candidate,4,100116,,,,,305807,,,12654,6557
+cancellation,candidate,5,100116,,,,,309863,,,10606,6865
+cancellation,candidate,6,100116,,,,,316389,,,8558,7616
+cancellation,candidate,7,100116,,,,,348575,,,8558,10485
+cancellation,candidate,8,100116,,,,,327464,,,8558,10446
+cancellation,candidate,9,100116,,,,,343073,,,8558,7768

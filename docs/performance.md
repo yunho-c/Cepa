@@ -817,6 +817,57 @@ Raw evidence is preserved in
 and
 [`performance-results/2026-07-13-windows-mft-cancellation.csv`](performance-results/2026-07-13-windows-mft-cancellation.csv).
 
+### 2026-07-14 Windows MFT node-arena preallocation
+
+After MFT enumeration and subtree ordering, the native backend knows exactly
+how many primary records it will place in the retained node arena. Letting that
+`Vec` grow geometrically left a large power-of-two tail resident for the life of
+the completed scan. The selected implementation uses a fallible exact reserve
+before arena construction, so primary insertion performs no capacity growth and
+needs no post-scan shrink or full-arena copy.
+
+Hard-link names are recovered only after streamed file measurement, so primary
+preallocation alone was unsafe. On the 100,115-entry fixture, adding just one
+hard-link alias made that prototype grow from its exact primary capacity to a
+29,534,465-byte retained payload. The final implementation sums each measured
+file's possible extra names, checks cancellation, and makes one fallible exact
+reserve before alias ingestion. The same one-alias fixture retained 15,918,825
+bytes with exact accounting, versus 20,128,705 bytes for the committed
+geometric-growth baseline. This upper bound may reserve names that are later
+filtered or unavailable, but it prevents per-alias growth and remains below the
+baseline on the measured fixture.
+
+The controlled comparison used the existing 20 GB NTFS virtual disk on the
+Ryzen 9 5900HS Windows host, Rust 1.97.0, and exact baseline/candidate release
+binaries. Every invocation performed one warmup and one measured MFT scan; pair
+order alternated.
+
+| Workload | Pairs | Retained bytes, before | Retained bytes, after | Reduction | Median paired wall delta | Paired wall range |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,115 entries | 15 | 2,461,117 | 1,608,669 | 852,448 (34.6%) | -0.712 ms | -6.662 to +6.606 ms |
+| 100,115 entries | 9 | 20,128,685 | 15,918,669 | 4,210,016 (20.9%) | -56.473 ms | -168.917 to +505.671 ms |
+
+Nine of fifteen small-fixture pairs and six of nine large-fixture pairs favored
+the candidate. One large candidate run was delayed by 506 ms, making traversal
+noise much larger than any arena-construction effect; no throughput improvement
+is claimed. Five additional processes sampled working set every 10 ms. Median
+peak working set was 35,536,896 bytes before and 35,414,016 bytes after, an
+effectively flat 122,880-byte difference. The directly measured retained
+payload reduction therefore does not establish a whole-process peak-memory
+reduction.
+
+On the final 100,116-entry hard-link fixture, nine asynchronous MFT
+cancellations returned in 6,557–10,485 us with a 6,865 us median. Requests were
+observed at the next bounded progress batch, after 8,558, 10,606, or 12,654
+entries. Exact-source
+Windows formatting, 62 dependency-light library tests, four configuration
+tests, warning-denied all-target Clippy, and a default-feature release build
+passed. Raw observations are preserved in
+[`performance-results/2026-07-14-windows-mft-arena-pairs.csv`](performance-results/2026-07-14-windows-mft-arena-pairs.csv),
+[`performance-results/2026-07-14-windows-mft-arena-memory.csv`](performance-results/2026-07-14-windows-mft-arena-memory.csv),
+and
+[`performance-results/2026-07-14-windows-mft-arena-validation.csv`](performance-results/2026-07-14-windows-mft-arena-validation.csv).
+
 ## Current-folder search
 
 Search operates on a completed in-memory snapshot and scans every direct child

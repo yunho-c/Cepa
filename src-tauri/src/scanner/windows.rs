@@ -121,7 +121,7 @@ where
     }
 
     let root_node_path: Arc<Path> = Arc::from(root.clone());
-    let mut nodes = vec![InternalNode::root(&root)];
+    let mut nodes = preallocate_node_arena(&root, ordered.len())?;
     let mut counters = ScanCounters::default();
     let mut partial_ranking = PartialRanking::default();
     let mut node_by_reference = std::collections::HashMap::with_capacity(ordered.len() + 1);
@@ -508,6 +508,11 @@ fn ingest_hard_links(
     candidates: &[HardLinkCandidate],
     cancel: &AtomicBool,
 ) -> Result<(), NativeScanError> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(fatal("Scan cancelled."));
+    }
+    reserve_hard_link_nodes(nodes, candidates)?;
+
     for candidate in candidates {
         if cancel.load(Ordering::Relaxed) {
             return Err(fatal("Scan cancelled."));
@@ -554,6 +559,22 @@ fn ingest_hard_links(
         }
     }
     Ok(())
+}
+
+fn reserve_hard_link_nodes(
+    nodes: &mut Vec<InternalNode>,
+    candidates: &[HardLinkCandidate],
+) -> Result<(), NativeScanError> {
+    let additional_nodes = candidates.iter().try_fold(0_usize, |total, candidate| {
+        total.checked_add(candidate.link_count.saturating_sub(1) as usize)
+    });
+    let additional_nodes = additional_nodes
+        .ok_or_else(|| fatal("The NTFS hard-link index contains too many names."))?;
+    nodes.try_reserve_exact(additional_nodes).map_err(|error| {
+        fatal(format!(
+            "Could not reserve memory for {additional_nodes} NTFS hard-link names: {error}"
+        ))
+    })
 }
 
 fn enumerate_hard_links(path: &Path) -> io::Result<Vec<PathBuf>> {
@@ -775,6 +796,23 @@ fn entry_kind(attributes: u32) -> EntryKind {
     }
 }
 
+fn preallocate_node_arena(
+    root: &Path,
+    additional_nodes: usize,
+) -> Result<Vec<InternalNode>, NativeScanError> {
+    let capacity = additional_nodes
+        .checked_add(1)
+        .ok_or_else(|| fatal("The NTFS index contains too many entries."))?;
+    let mut nodes = Vec::new();
+    nodes.try_reserve_exact(capacity).map_err(|error| {
+        fatal(format!(
+            "Could not reserve memory for {capacity} NTFS entries: {error}"
+        ))
+    })?;
+    nodes.push(InternalNode::root(root));
+    Ok(nodes)
+}
+
 fn unavailable_error(error: &io::Error) -> bool {
     matches!(
         error.raw_os_error().map(|code| code as u32),
@@ -843,6 +881,114 @@ mod tests {
             entry_kind(FILE_ATTRIBUTE_DIRECTORY),
             EntryKind::Directory
         ));
+    }
+
+    #[test]
+    fn preallocated_node_arena_holds_the_known_subtree_without_growth() {
+        let Ok(mut nodes) = preallocate_node_arena(Path::new(r"C:\"), 17) else {
+            panic!("the test node arena should fit in memory");
+        };
+        let reserved_capacity = nodes.capacity();
+        let mut counters = ScanCounters::default();
+
+        for index in 0..17 {
+            counters.push_node(
+                &mut nodes,
+                0,
+                OsString::from(format!("file-{index}")),
+                EntryKind::File,
+                MeasuredMetadata::default(),
+            );
+        }
+
+        assert_eq!(nodes.len(), 18);
+        assert_eq!(nodes.capacity(), reserved_capacity);
+    }
+
+    #[test]
+    fn rejects_an_unrepresentable_ntfs_node_count() {
+        let Err(NativeScanError::Fatal(error)) =
+            preallocate_node_arena(Path::new(r"C:\"), usize::MAX)
+        else {
+            panic!("an overflowing node count must be rejected");
+        };
+
+        assert_eq!(error, "The NTFS index contains too many entries.");
+    }
+
+    #[test]
+    fn hard_link_alias_reservation_prevents_geometric_arena_growth() {
+        let Ok(mut nodes) = preallocate_node_arena(Path::new(r"C:\"), 2) else {
+            panic!("the test node arena should fit in memory");
+        };
+        let mut counters = ScanCounters::default();
+        for index in 0..2 {
+            counters.push_node(
+                &mut nodes,
+                0,
+                OsString::from(format!("primary-{index}")),
+                EntryKind::File,
+                MeasuredMetadata::default(),
+            );
+        }
+        let candidates = [
+            HardLinkCandidate {
+                node_id: 1,
+                measured: MeasuredMetadata::default(),
+                link_count: 3,
+            },
+            HardLinkCandidate {
+                node_id: 2,
+                measured: MeasuredMetadata::default(),
+                link_count: 2,
+            },
+        ];
+        let Ok(()) = reserve_hard_link_nodes(&mut nodes, &candidates) else {
+            panic!("the hard-link alias reservation should fit in memory");
+        };
+        let reserved_capacity = nodes.capacity();
+
+        for index in 0..3 {
+            counters.push_node(
+                &mut nodes,
+                0,
+                OsString::from(format!("link-{index}")),
+                EntryKind::File,
+                MeasuredMetadata::default(),
+            );
+        }
+
+        assert_eq!(nodes.len(), 6);
+        assert_eq!(nodes.capacity(), reserved_capacity);
+    }
+
+    #[test]
+    fn hard_link_cancellation_precedes_alias_reservation() {
+        let Ok(mut nodes) = preallocate_node_arena(Path::new(r"C:\"), 0) else {
+            panic!("the test node arena should fit in memory");
+        };
+        let original_capacity = nodes.capacity();
+        let candidates = [HardLinkCandidate {
+            node_id: 0,
+            measured: MeasuredMetadata::default(),
+            link_count: 100,
+        }];
+        let mut counters = ScanCounters::default();
+        let mut ranking = PartialRanking::default();
+        let error = ingest_hard_links(
+            Path::new(r"C:\"),
+            &mut nodes,
+            &mut counters,
+            &mut ranking,
+            &candidates,
+            &AtomicBool::new(true),
+        );
+        let Err(NativeScanError::Fatal(error)) = error else {
+            panic!("hard-link ingestion must observe cancellation");
+        };
+
+        assert_eq!(error, "Scan cancelled.");
+        assert_eq!(nodes.capacity(), original_capacity);
     }
 
     #[test]

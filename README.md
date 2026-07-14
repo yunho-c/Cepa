@@ -119,7 +119,12 @@ Windows MFT backend now streams file-ID measurements into its retained node
 arena through bounded batches; on one 5.57-million-entry system-volume
 observation this reduced peak working set by 24.1%, while a stable 8,202-entry
 fixture improved median traversal by 25.2% with identical accounting. These are
-single-machine warm measurements, not a universal speed claim. The first native
+single-machine warm measurements, not a universal speed claim. The MFT node
+arena also reserves its known primary records and later hard-link-name
+upper bound exactly instead of retaining geometric growth slack. On a controlled
+100,116-entry NTFS fixture with one duplicate hard link, this reduced measured
+retained payload by 20.9%; sampled process peak working set remained effectively
+flat, so this is not a whole-process memory claim. The first native
 Linux ext4 comparison found exact accounting parity and responsive
 cancellation, but `statx` was slower than `jwalk` on all three warm workloads;
 Cepa does not claim a Linux speedup. It remains the automatic Linux backend

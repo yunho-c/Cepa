@@ -297,7 +297,12 @@ The intended scanning architecture is:
   evidence from a native fixture covers parity, deterministic ownership,
   performance, and cancellation. File-ID measurements stream into a prebuilt
   node arena through bounded 256-item batches; the eight-worker cap limits the
-  channel to 4,096 measurements. A single representative system-volume
+  channel to 4,096 measurements. After subtree ordering, reserve the known
+  primary node count exactly. After measurement, reserve the summed possible
+  hard-link aliases once before ingestion; a primary-only exact arena can double
+  from a single recovered alias. Keep both reservations fallible and preserve
+  the cancellation check before alias allocation rather than adding a post-scan
+  arena copy. A single representative system-volume
   observation covers retained-state peak memory, but broader hardware,
   filesystem, and cold-cache evidence remains required.
 - `getdents64` + `statx` as the implemented Linux backend. Native CI is configured
