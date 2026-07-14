@@ -41,7 +41,9 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
+            libfuse2 \
             patchelf \
+            rpm \
             xdg-utils
 
       - name: Install Rust
@@ -81,3 +83,25 @@ jobs:
 
       - name: Build native application
         run: just build
+
+      - name: Build and validate Linux distribution bundles
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          just bundle
+          just validate-linux-bundles
+          (
+            cd src-tauri/target/release/bundle
+            tar -czf "$RUNNER_TEMP/cepa-linux-bundles.tar.gz" \
+              deb/*.deb rpm/*.rpm appimage/*.AppImage
+          )
+
+      - name: Retain Linux distribution bundles
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cepa-linux-${{ github.sha }}
+          path: ${{ runner.temp }}/cepa-linux-bundles.tar.gz
+          if-no-files-found: error
+          retention-days: 14

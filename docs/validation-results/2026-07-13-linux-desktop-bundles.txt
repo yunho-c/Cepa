@@ -1,0 +1,42 @@
+Cepa Linux desktop and bundle validation
+date=2026-07-13
+host_kernel=Linux 6.8.0-124-generic x86_64
+container=Ubuntu 22.04
+rustc=1.97.0 (2d8144b78 2026-07-07)
+cargo=1.97.0 (c980f4866 2026-06-30)
+bun=1.2.21
+source=exact clean archive of commit 5110414
+
+frontend diagnostics: 0 errors, 0 warnings
+frontend tests: 43 passed
+Rust library tests: 82 passed, 2 intentionally ignored
+Tauri configuration tests: 4 passed
+example tests: 11 passed
+warning-denied all-target Clippy: passed
+release desktop build: passed
+bundle structure validator: passed
+three-package tar archive: passed; AppImage executable mode preserved
+
+bundle=Cepa_0.1.0_amd64.deb
+sha256=75e3c14dc32189cf596c146cf466f13bc60073b2ef5d901ad37cb9a1a261af9e
+package=cepa 0.1.0 amd64
+installed_size_kib=19132
+depends=libwebkit2gtk-4.1-0, libgtk-3-0
+
+bundle=Cepa-0.1.0-1.x86_64.rpm
+sha256=1d0d74a4c8aae6dc79e557fc4c7cfb2d5a908043393b52b6e7c26134d9de319d
+package=cepa 0.1.0-1 x86_64
+payload_size_bytes=19538405
+
+bundle=Cepa_0.1.0_amd64.AppImage
+sha256=30a27f744f651e5684c8174fb989323beef98bfbb2941e6d6f34a19d1660f109
+format=ELF 64-bit static PIE launcher
+
+raw release launch under DBus and Xvfb: survived 8-second smoke window
+installed DEB launch under DBus and Xvfb: survived 8-second smoke window
+AppImage launch with APPIMAGE_EXTRACT_AND_RUN=1 under DBus and Xvfb: survived 8-second smoke window
+
+The headless smoke proves process startup and WebKit event-loop survival. It does
+not prove physical display integration, file-manager dialogs, native drag and
+drop, or interactive scanning through the packaged window. The RPM payload and
+metadata were inspected on Ubuntu but were not installed on an RPM-based host.

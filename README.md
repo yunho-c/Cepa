@@ -332,6 +332,9 @@ current baseline, raw evidence, and interpretation limits.
 ```sh
 just check
 just build
+just bundle
+# Linux only, after bundling:
+just validate-linux-bundles
 ```
 
 `just check` runs Svelte diagnostics, frontend unit tests, Rust formatting
@@ -349,9 +352,12 @@ tools, so an unrelated system Node installation cannot change or block the
 canonical build.
 
 The `CI` workflow repeats `just install`, `just check`, and `just build` on
-native Ubuntu 22.04, macOS, and Windows runners. Local workflow lint and macOS
-execution validate the definition before handoff; only an actual GitHub Actions
-run proves the Linux and Windows jobs.
+native Ubuntu 22.04, macOS, and Windows runners. Linux additionally creates and
+validates DEB, RPM, and AppImage packages, then retains them as one tar archive
+for 14 days. The archive preserves the AppImage executable bit that an ordinary
+workflow-artifact ZIP would discard. Local workflow lint and native execution
+validate the definition before handoff; only an actual GitHub Actions run proves
+the hosted jobs and artifact upload.
 
 ```sh
 just bundle
@@ -364,6 +370,12 @@ system bundle tools over conflicting third-party commands on `PATH`. Supplying
 `APPLE_SIGNING_IDENTITY` preserves that identity for a release build. Ad-hoc
 signing is local integrity validation only; public distribution still requires
 a suitable Developer ID identity and notarization.
+
+On Linux, `just validate-linux-bundles` requires `dpkg-deb`, `rpm`, and `file`.
+It requires exactly one package of each supported Linux type, verifies their
+version, architecture, executable, desktop-entry surface, and AppImage format,
+then prints SHA-256 digests. It is structural package evidence, not an installed
+desktop smoke test or signature verification.
 
 The packaged webview loads only bundled scripts, styles, and images. Its CSP
 allows the two Tauri IPC transports and denies objects, frames, workers, and

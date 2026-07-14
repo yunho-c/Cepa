@@ -438,6 +438,8 @@ Start with these files:
 - `docs/compression.md`: proposed transparent-compression contract and rollout gates.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
+- `scripts/validate-linux-bundles.sh`: exact Linux DEB/RPM/AppImage structure,
+  metadata, and digest validation after bundling.
 - `.github/workflows/ci.yml`: native Linux, macOS, and Windows check/build matrix.
 
 Frontend helper and visualization tests live beside their modules as
@@ -460,6 +462,7 @@ just window-state-smoke # prove native geometry persistence across two launches
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles
+just validate-linux-bundles # validate completed Linux bundle metadata and files
 ```
 
 The native recipes deliberately clear configured Rust compiler wrappers so a
@@ -512,6 +515,10 @@ both `Justfile` and Tauri's `beforeDevCommand`/`beforeBuildCommand` hooks.
 - Report exactly what was validated and distinguish static checks, mocked or
   fixture-based tests, real local scans, platform-specific validation, and
   end-to-end application proof.
+- For Linux distribution changes, run `just bundle` and
+  `just validate-linux-bundles`, then distinguish raw executable launch,
+  installed-package launch, AppImage launch, and RPM metadata inspection. A
+  headless DBus/Xvfb survival window does not prove physical desktop interaction.
 - Treat local workflow lint as wiring validation, not proof that remote Linux or
   Windows jobs passed; inspect the actual GitHub Actions run before claiming it.
 

@@ -105,6 +105,10 @@ benchmark-aggregation-cancellation nodes="1000000" iterations="9" after_nodes="5
 build:
     bun --bun run tauri build --no-bundle
 
+# Validate the metadata and installed-file surface of completed Linux bundles.
+validate-linux-bundles bundle_root="src-tauri/target/release/bundle":
+    bash scripts/validate-linux-bundles.sh "{{ bundle_root }}"
+
 # Build platform desktop bundles.
 bundle:
     {{ bundle-environment }} bun --bun run tauri build
