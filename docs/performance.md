@@ -75,7 +75,8 @@ Each run measures:
 
 - `traversalUs`: backend traversal, metadata reads, arena insertion, and path
   indexing.
-- `aggregationUs`: bottom-up propagation of file and directory totals.
+- `aggregationUs`: bottom-up propagation of file and directory totals plus
+  release of excess retained child-index capacity.
 - `indexingUs`: post-aggregation index finalization. This is currently zero
   because the arena builds its indexes incrementally during traversal.
 - `scannerElapsedMs`: the three scanner phases together.
@@ -977,6 +978,44 @@ finish before memory is reclaimed, so callers must not interpret command return
 as an RSS boundary. Raw runs, including the macOS before/after comparison, are
 preserved in
 [`performance-results/2026-07-13-aggregation-cancellation.csv`](performance-results/2026-07-13-aggregation-cancellation.csv).
+
+### 2026-07-14 retained child-index compaction
+
+Directory child-ID vectors grow geometrically during traversal, so their
+capacity can exceed their final length for the entire retained-snapshot
+lifetime. The selected implementation calls `shrink_to_fit` while the existing
+reverse aggregation pass already has each directory hot, avoiding a second
+linear walk over a potentially multi-million-node arena. The root is compacted
+after that loop. Existing cancellation checkpoints run before compaction at
+each polling boundary, and one final check precedes root compaction.
+
+The comparison used exact baseline and candidate binaries with alternating
+order. Each process performed its own warmup followed by one measured scan. The
+APFS run used an Apple M4 Pro and `getattrlistbulk`; the ext4 run used the native
+i9-13900K Rust 1.97.0 host and `statx`. Both fixtures contained 100,001 files.
+The directory-rich shape had 10,100 directories and 110,101 total entries; the
+wide shape had 101 directories and 100,102 total entries.
+
+| Platform and shape | Pairs | Retained bytes, before | Retained bytes, after | Reduction | Median aggregation delta | Median wall delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| macOS APFS, directory-rich | 11 | 18,773,279 | 18,270,663 | 502,616 (2.68%) | +0.154 ms | +1.345 ms |
+| macOS APFS, wide | 11 | 18,050,701 | 18,031,261 | 19,440 (0.11%) | +0.016 ms | +0.897 ms |
+| Linux ext4, directory-rich | 9 | 18,773,251 | 18,270,635 | 502,616 (2.68%) | +0.174 ms | -3.313 ms |
+| Linux ext4, wide | 9 | 18,050,673 | 18,031,233 | 19,440 (0.11%) | +0.125 ms | +1.543 ms |
+
+Paired wall deltas ranged from -12.03 to +20.48 ms on the directory-rich APFS
+fixture, -15.69 to +54.88 ms on wide APFS, -8.62 to +18.73 ms on directory-rich
+ext4, and -3.95 to +4.84 ms on wide ext4. The traversal noise is much larger
+than the measured aggregation cost, so these data support the retained-payload
+reduction but no scan-throughput claim. Snapshot release deltas were likewise
+small and mixed. `snapshotRetainedBytes` excludes allocator bookkeeping, and no
+process RSS or peak-memory measurement was made.
+
+Formatting, the focused compaction and cancellation tests, and warning-denied
+dependency-light Clippy passed from the exact candidate source on Rust 1.97.0
+Linux and Windows. The exact Windows source also completed a default-feature
+release build. Raw paired observations are preserved in
+[`performance-results/2026-07-14-child-index-compaction.csv`](performance-results/2026-07-14-child-index-compaction.csv).
 
 ## Interpretation and next measurements
 

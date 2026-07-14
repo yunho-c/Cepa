@@ -929,6 +929,8 @@ where
     let aggregation_completed_at = Instant::now();
     let aggregation_us =
         duration_us(aggregation_completed_at.duration_since(traversal_completed_at));
+    let indexing_completed_at = Instant::now();
+    let indexing_us = duration_us(indexing_completed_at.duration_since(aggregation_completed_at));
 
     let root_totals = &nodes[0];
     let logical_bytes = root_totals.logical_bytes;
@@ -936,8 +938,6 @@ where
     let file_count = root_totals.file_count;
     let directory_count = root_totals.directory_count.saturating_sub(1);
 
-    let indexing_completed_at = Instant::now();
-    let indexing_us = duration_us(indexing_completed_at.duration_since(aggregation_completed_at));
     let elapsed_ms = duration_ms(indexing_completed_at.duration_since(started_at));
 
     on_progress(ScanProgress {
@@ -1005,6 +1005,7 @@ where
                 return Err("Scan cancelled.".to_string());
             }
         }
+        compact_child_indexes(&mut nodes[node_id]);
         let parent = nodes[node_id]
             .parent_id()
             .expect("non-root scan nodes always have a parent");
@@ -1021,7 +1022,17 @@ where
         nodes[parent].file_count = nodes[parent].file_count.saturating_add(totals.2);
         nodes[parent].directory_count = nodes[parent].directory_count.saturating_add(totals.3);
     }
+    if cancel.load(Ordering::Relaxed) {
+        return Err("Scan cancelled.".to_string());
+    }
+    compact_child_indexes(&mut nodes[0]);
     Ok(())
+}
+
+fn compact_child_indexes(node: &mut InternalNode) {
+    if node.children.len() < node.children.capacity() {
+        node.children.shrink_to_fit();
+    }
 }
 
 fn release_nodes_off_thread<F>(nodes: Vec<InternalNode>, on_released: F) -> Result<(), String>
@@ -1789,6 +1800,33 @@ mod tests {
             .recv_timeout(Duration::from_secs(1))
             .expect("cancelled arena must be released in the background");
         assert_ne!(release_thread, caller_thread);
+    }
+
+    #[test]
+    fn compacts_excess_child_index_capacity() {
+        let mut root = InternalNode::root(Path::new("compact-children"));
+        root.children = Vec::with_capacity(32);
+        root.children.extend([1, 2]);
+        let original_capacity = root.children.capacity();
+        compact_child_indexes(&mut root);
+
+        assert_eq!(root.children, [1, 2]);
+        assert!(root.children.capacity() < original_capacity);
+    }
+
+    #[test]
+    fn aggregation_cancellation_precedes_child_index_compaction() {
+        let mut root = InternalNode::root(Path::new("cancelled-compaction"));
+        root.children = Vec::with_capacity(32);
+        root.children.push(1);
+        let original_capacity = root.children.capacity();
+        let mut nodes = vec![root, InternalNode::root(Path::new("child"))];
+
+        let error = aggregate_nodes(&mut nodes, &AtomicBool::new(true), |_| {})
+            .expect_err("aggregation must observe cancellation before compacting");
+
+        assert_eq!(error, "Scan cancelled.");
+        assert_eq!(nodes[0].children.capacity(), original_capacity);
     }
 
     #[cfg(target_os = "linux")]

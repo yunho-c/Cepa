@@ -263,6 +263,11 @@ revision. `scan_benchmark` schema 7 reports capacity-aware retained snapshot
 payload, bytes per entry, and isolated synchronous snapshot-release time,
 excluding allocator bookkeeping and the separate initial response view. Keep
 those evidence boundaries distinct from peak RSS and UI latency.
+During the existing reverse aggregation pass, completed directory nodes release
+excess child-ID vector capacity before entering the retained snapshot; the root
+does so after the loop. Cancellation checkpoints precede compaction, including
+a final root check, and `aggregationUs` includes this work. Preserve that
+single-pass placement rather than adding another full arena traversal.
 Bottom-up aggregation polls cancellation every 2,048 nodes. If cancellation is
 observed there, move the now-unreachable node arena to the named background
 release thread so foreground response does not wait for a million-node
