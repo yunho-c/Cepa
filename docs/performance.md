@@ -709,6 +709,41 @@ revision as a later no-follow standard metadata snapshot. Windows passed the
 same exact-revision regression and a default-feature release build; its retained
 revision layout is unchanged.
 
+### 2026-07-13 compact retained parent IDs
+
+Every retained node previously stored its optional parent as `Option<usize>`.
+Because every bit pattern is a valid `usize`, that optional value occupies two
+machine words. The arena now stores the parent index plus one in a
+`NonZeroUsize`, preserving zero as the root's `None` niche. The wire node ID,
+child indexes, path reconstruction, and accounting contracts are unchanged. A
+layout regression requires the optional encoded parent to remain exactly one
+machine word and checks round trips through the largest usable index.
+
+The controlled release comparison ran on the same 64-bit Rust 1.97.0 Linux
+environment described above, using NVMe-backed ext4 and the `statx` backend.
+Both fresh metadata-heavy fixtures contained empty files plus the fixture
+manifest. Each binary performed one warmup followed by five measured runs.
+
+| Fixture | Entries | Baseline payload | Compact payload | Reduction |
+| --- | ---: | ---: | ---: | ---: |
+| 100 directories x 1,000 files | 100,102 | 19,099,252 B | 18,050,676 B | 1,048,576 B (5.49%) |
+| 500 directories x 2,000 files | 1,000,506 | 157,423,128 B | 149,034,520 B | 8,388,608 B (5.33%) |
+
+The reduction is exactly eight bytes for every reserved node-arena slot at
+both scales. Capacity-aware bytes per completed entry fell from 190.80 to
+180.32 in the smaller fixture and from 157.34 to 148.96 in the million-entry
+fixture. All benchmark workload and accounting fields were identical between
+the two binaries. The five-run wall-time samples overlapped and were not
+interleaved, so they support neither a speedup nor a regression claim. Process
+RSS was not measured; this is retained-payload evidence only. Raw runs are in
+[`performance-results/2026-07-13-linux-compact-parent-ids.csv`](performance-results/2026-07-13-linux-compact-parent-ids.csv).
+
+The exact candidate passed the full macOS `just check` suite and a release
+Tauri build. On Linux, Rust 1.97.0 passed formatting, 67 dependency-light
+library tests plus four doc tests, and warning-denied all-target Clippy. On
+Windows, Rust 1.97.0 passed 56 dependency-light native tests plus four doc
+tests, warning-denied all-target Clippy, and a default-feature release build.
+
 ### 2026-07-12 Windows NTFS MFT validation
 
 The Windows backend was compiled and run natively over SSH on an AMD64 Windows
@@ -956,7 +991,8 @@ speed claim.
 Before generalizing these results beyond the measured workloads, add:
 
 - additional representative real directory trees and cold-cache runs;
-- snapshot-owned bytes per entry and scaling beyond 500,000 entries;
+- snapshot-owned bytes and process-RSS scaling on representative million-entry
+  trees with diverse names and directory shapes;
 - native Tauri IPC transport and production first-render timing on each platform
   WebView;
 - broader Linux filesystem/hardware coverage, cold-cache throughput, and

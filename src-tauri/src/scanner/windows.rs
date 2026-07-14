@@ -628,7 +628,7 @@ fn resolve_link_parent<'a>(
 
 fn node_path(root: &Path, nodes: &[InternalNode], mut node_id: usize) -> PathBuf {
     let mut ancestors = Vec::new();
-    while let Some(parent) = nodes[node_id].parent {
+    while let Some(parent) = nodes[node_id].parent_id() {
         ancestors.push(node_id);
         node_id = parent;
     }

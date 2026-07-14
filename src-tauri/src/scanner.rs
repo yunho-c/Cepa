@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::Metadata;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -272,6 +273,24 @@ pub(crate) struct CompressionTarget {
 
 type NodeId = usize;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+struct ParentId(NonZeroUsize);
+
+impl ParentId {
+    fn new(node_id: NodeId) -> Self {
+        let encoded = node_id
+            .checked_add(1)
+            .and_then(NonZeroUsize::new)
+            .expect("scan node IDs fit in the compact parent representation");
+        Self(encoded)
+    }
+
+    fn node_id(self) -> NodeId {
+        self.0.get() - 1
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct MeasuredMetadata {
     logical_bytes: u64,
@@ -331,7 +350,7 @@ struct ScanSemantics {
 #[derive(Debug)]
 struct InternalNode {
     name: OsString,
-    parent: Option<NodeId>,
+    parent: Option<ParentId>,
     children: Vec<NodeId>,
     kind: EntryKind,
     logical_bytes: u64,
@@ -358,6 +377,10 @@ impl InternalNode {
 
     fn name(&self) -> &OsStr {
         &self.name
+    }
+
+    fn parent_id(&self) -> Option<NodeId> {
+        self.parent.map(ParentId::node_id)
     }
 }
 
@@ -423,7 +446,7 @@ impl ScanCounters {
         nodes[parent].children.push(node_id);
         nodes.push(InternalNode {
             name,
-            parent: Some(parent),
+            parent: Some(ParentId::new(parent)),
             children: Vec::new(),
             kind,
             logical_bytes,
@@ -983,7 +1006,7 @@ where
             }
         }
         let parent = nodes[node_id]
-            .parent
+            .parent_id()
             .expect("non-root scan nodes always have a parent");
         debug_assert!(parent < node_id);
         let totals = (
@@ -1037,7 +1060,7 @@ where
     nodes.push(InternalNode::root(Path::new("aggregation-benchmark")));
     nodes.extend((0..node_count).map(|_| InternalNode {
         name: OsString::new(),
-        parent: Some(0),
+        parent: Some(ParentId::new(0)),
         children: Vec::new(),
         kind: EntryKind::File,
         logical_bytes: 1,
@@ -1261,7 +1284,7 @@ impl ScanSnapshot {
             if current_id == self.root {
                 break;
             }
-            current = node.parent;
+            current = node.parent_id();
         }
 
         breadcrumbs.reverse();
@@ -1369,7 +1392,7 @@ impl ScanSnapshot {
         while current != self.root {
             ancestors.push(current);
             current = self.nodes[current]
-                .parent
+                .parent_id()
                 .expect("non-root scan nodes always have a parent");
         }
 
@@ -1449,7 +1472,7 @@ fn compare_relative_node_paths(
 
 fn relative_node_path(nodes: &[InternalNode], mut node_id: NodeId, components: &mut Vec<NodeId>) {
     components.clear();
-    while let Some(parent) = nodes[node_id].parent {
+    while let Some(parent) = nodes[node_id].parent_id() {
         components.push(node_id);
         node_id = parent;
     }
@@ -1722,6 +1745,18 @@ fn scanned_file_revision(_: &Metadata) -> Option<ScannedFileRevision> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn compact_parent_id_round_trips_in_one_machine_word() {
+        assert_eq!(
+            std::mem::size_of::<Option<ParentId>>(),
+            std::mem::size_of::<NodeId>()
+        );
+
+        for node_id in [0, 1, usize::MAX - 1] {
+            assert_eq!(ParentId::new(node_id).node_id(), node_id);
+        }
+    }
 
     #[test]
     fn aggregation_cancellation_bounds_work_after_the_request() {
@@ -2646,7 +2681,7 @@ mod tests {
     fn test_directory_node(name: String, parent: NodeId, bytes: u64) -> InternalNode {
         InternalNode {
             name: OsString::from(name),
-            parent: Some(parent),
+            parent: Some(ParentId::new(parent)),
             children: Vec::new(),
             kind: EntryKind::Directory,
             logical_bytes: bytes,
@@ -2693,7 +2728,7 @@ mod tests {
             root.children.push(node_id);
             nodes.push(InternalNode {
                 name: OsString::from(format!("dense-{index:04}.bin")),
-                parent: Some(0),
+                parent: Some(ParentId::new(0)),
                 children: Vec::new(),
                 kind: EntryKind::File,
                 logical_bytes: 10,
@@ -2707,7 +2742,7 @@ mod tests {
         root.children.push(sparse_id);
         nodes.push(InternalNode {
             name: OsString::from("sparse.bin"),
-            parent: Some(0),
+            parent: Some(ParentId::new(0)),
             children: Vec::new(),
             kind: EntryKind::File,
             logical_bytes: 10_000,
@@ -2762,7 +2797,7 @@ mod tests {
             root.children.push(node_id);
             nodes.push(InternalNode {
                 name: OsString::from(format!("item-{:05}.bin", child_count - index)),
-                parent: Some(0),
+                parent: Some(ParentId::new(0)),
                 children: Vec::new(),
                 kind: EntryKind::File,
                 logical_bytes: ((index * 3_571) % 15_000) as u64,
@@ -2845,7 +2880,7 @@ mod tests {
         assert!(snapshot.root_path.is_absolute());
 
         for (node_id, node) in snapshot.nodes.iter().enumerate() {
-            if let Some(parent_id) = node.parent {
+            if let Some(parent_id) = node.parent_id() {
                 assert!(parent_id < node_id);
                 assert!(snapshot.nodes[parent_id].children.contains(&node_id));
             } else {
@@ -2853,7 +2888,7 @@ mod tests {
             }
 
             for child_id in &node.children {
-                assert_eq!(snapshot.nodes[*child_id].parent, Some(node_id));
+                assert_eq!(snapshot.nodes[*child_id].parent_id(), Some(node_id));
             }
 
             assert!(!node.name.is_empty());

@@ -144,6 +144,10 @@ package private and the Rust crate non-publishable; Cepa ships as native desktop
 bundles. `src-tauri/tests/tauri_config.rs` guards this contract.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
+The retained arena encodes optional parent indexes in one machine word by
+storing the parent ID plus one as a nonzero value. Keep the root as the only
+missing parent and preserve the layout regression when changing node identity
+or ancestry; the saving is material at million-entry scale.
 Completed items can be revealed in the platform file manager through a backend
 command that validates the retained scan and opaque node ID before reconstructing
 the path; do not replace that boundary with a frontend-supplied arbitrary path.
