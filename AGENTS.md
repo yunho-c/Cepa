@@ -115,7 +115,10 @@ screen-reader instructions and recover focus ownership when search results or
 the current directory change. Do not make all 500 rows and actions tabbable.
 The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
-overflowing the explorer at the minimum window height.
+overflowing the explorer at the minimum window height. In the 560 through 720
+logical-pixel compact two-column layout, keep the primary Estimate prompt inline
+so its action remains visible at 620 by 480; secondary metadata may stay below
+the inspector fold. Browser previews below 560 pixels use the stacked prompt.
 The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side throughout the native window's supported width range.

@@ -906,6 +906,11 @@ body {
   .section-heading { min-height: 38px; padding-bottom: 8px; }
   .section-heading h2 { font-size: 15px; }
   .directory-search { width: min(180px, 31vw); }
+  .selection-inspector { margin-top: 8px; padding: 11px 12px; }
+  .inspection-state { margin-top: 9px; padding-top: 8px; }
+  .estimate-prompt,
+  .estimate-readout { margin-top: 8px; padding-top: 8px; }
+  .estimate-prompt { align-items: center; flex-direction: row; }
   .item-list { max-height: none; flex: 1; }
 }
 
