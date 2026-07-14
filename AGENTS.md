@@ -238,6 +238,13 @@ revision. `scan_benchmark` schema 7 reports capacity-aware retained snapshot
 payload, bytes per entry, and isolated synchronous snapshot-release time,
 excluding allocator bookkeeping and the separate initial response view. Keep
 those evidence boundaries distinct from peak RSS and UI latency.
+Bottom-up aggregation polls cancellation every 2,048 nodes. If cancellation is
+observed there, move the now-unreachable node arena to the named background
+release thread so foreground response does not wait for a million-node
+destructor. `aggregation_cancellation` deterministically measures the production
+loop and waits for reclamation between runs while reporting foreground latency
+and background release separately. Do not present its synthetic flat arena as a
+filesystem, traversal, Tauri IPC, or RSS benchmark.
 This metadata is not a content fingerprint: same-clock-tick data rewrites may
 remain indistinguishable. The current anchor is read-only and does
 not prove that a future writer can mutate and verify through that exact handle.

@@ -36,6 +36,9 @@ use tauri_plugin_opener::OpenerExt;
 
 pub use scanner::{ScanBackend, ScanResult};
 
+pub const AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES: usize =
+    scanner::AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES;
+
 /// A completed benchmark scan. Retaining the snapshot keeps benchmark timing
 /// aligned with the application, which stores it for interactive drill-down.
 pub struct BenchmarkScan {
@@ -152,6 +155,16 @@ pub struct CancellationMeasurement {
     pub cancellation_latency_us: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AggregationCancellationMeasurement {
+    pub nodes_at_request: usize,
+    pub nodes_at_return: usize,
+    pub foreground_elapsed_us: u64,
+    pub cancellation_latency_us: u64,
+    pub background_release_us: u64,
+}
+
 /// Runs the same portable scan and snapshot construction used by the desktop
 /// application while retaining the completed snapshot through measurement.
 pub fn benchmark_scan(path: &Path) -> Result<BenchmarkScan, String> {
@@ -241,6 +254,101 @@ pub fn benchmark_cancellation(
         entries_at_request,
         scan_elapsed_us: saturating_duration_us(scan_finished_at.duration_since(scan_started_at)),
         cancellation_latency_us: saturating_duration_us(cancellation_latency),
+    })
+}
+
+/// Measures cancellation requested from a separate thread while the production
+/// bottom-up aggregation loop is processing a synthetic retained-node arena.
+pub fn benchmark_aggregation_cancellation(
+    node_count: usize,
+    cancel_after_nodes: usize,
+) -> Result<AggregationCancellationMeasurement, String> {
+    if node_count <= AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES {
+        return Err(format!(
+            "node count must exceed the {}-node cancellation interval",
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES
+        ));
+    }
+    if cancel_after_nodes == 0 || cancel_after_nodes >= node_count {
+        return Err("cancel-after nodes must be between one and node-count minus one".to_string());
+    }
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_from_thread = cancel.clone();
+    let (trigger_sender, trigger_receiver) = mpsc::sync_channel::<usize>(1);
+    let (acknowledge_sender, acknowledge_receiver) = mpsc::sync_channel::<()>(0);
+    let canceller = thread::spawn(move || {
+        trigger_receiver.recv().ok().map(|nodes| {
+            let requested_at = Instant::now();
+            cancel_from_thread.store(true, Ordering::Relaxed);
+            let _ = acknowledge_sender.send(());
+            (nodes, requested_at)
+        })
+    });
+
+    let mut aggregation_started_at = None;
+    let mut nodes_at_return = 0;
+    let mut cancellation_requested = false;
+    let (released_sender, released_receiver) = mpsc::sync_channel::<Instant>(1);
+    let aggregation_result = scanner::aggregate_synthetic_nodes(
+        node_count,
+        &cancel,
+        || aggregation_started_at = Some(Instant::now()),
+        |processed| {
+            nodes_at_return = processed;
+            if !cancellation_requested && processed >= cancel_after_nodes {
+                cancellation_requested = trigger_sender.try_send(processed).is_ok();
+                if cancellation_requested {
+                    let _ = acknowledge_receiver.recv();
+                }
+            }
+        },
+        move || {
+            let _ = released_sender.send(Instant::now());
+        },
+    );
+    let aggregation_finished_at = Instant::now();
+    drop(trigger_sender);
+
+    let request = canceller
+        .join()
+        .map_err(|_| "the aggregation cancellation thread panicked".to_string())?;
+    let Some((nodes_at_request, requested_at)) = request else {
+        return match aggregation_result {
+            Ok(()) => Err(format!(
+                "aggregation completed before reaching {cancel_after_nodes} nodes"
+            )),
+            Err(error) => Err(error),
+        };
+    };
+
+    match aggregation_result {
+        Err(error) if error == "Scan cancelled." => {}
+        Err(error) => return Err(error),
+        Ok(()) => {
+            return Err(
+                "aggregation completed before asynchronous cancellation was observed".to_string(),
+            );
+        }
+    }
+
+    let aggregation_started_at =
+        aggregation_started_at.ok_or_else(|| "aggregation did not report its start".to_string())?;
+    let release_finished_at = released_receiver
+        .recv()
+        .map_err(|_| "the cancelled aggregation arena was not released".to_string())?;
+    Ok(AggregationCancellationMeasurement {
+        nodes_at_request,
+        nodes_at_return,
+        foreground_elapsed_us: saturating_duration_us(
+            aggregation_finished_at.duration_since(aggregation_started_at),
+        ),
+        cancellation_latency_us: saturating_duration_us(
+            aggregation_finished_at.duration_since(requested_at),
+        ),
+        background_release_us: saturating_duration_us(
+            release_finished_at.duration_since(aggregation_finished_at),
+        ),
     })
 }
 
@@ -1010,12 +1118,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES, ScanBackend,
+        benchmark_aggregation_cancellation, benchmark_cancellation,
+    };
     #[cfg(feature = "desktop")]
     use super::{
         CompressionPlanState, EstimateState, ScanState, SearchState, compression,
         discard_scan_state, scanner,
     };
-    use super::{ScanBackend, benchmark_cancellation};
     use std::fs;
     #[cfg(feature = "desktop")]
     use std::sync::Arc;
@@ -1194,6 +1305,25 @@ mod tests {
 
         assert!(measurement.entries_at_request >= 2_048);
         assert!(measurement.scan_elapsed_us >= measurement.cancellation_latency_us);
+    }
+
+    #[test]
+    fn measures_asynchronous_aggregation_cancellation() {
+        let measurement = benchmark_aggregation_cancellation(
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES * 4,
+            1,
+        )
+        .expect("measure aggregation cancellation");
+
+        assert_eq!(
+            measurement.nodes_at_request,
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES
+        );
+        assert_eq!(
+            measurement.nodes_at_return,
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES * 2
+        );
+        assert!(measurement.foreground_elapsed_us >= measurement.cancellation_latency_us);
     }
 
     #[cfg(feature = "desktop")]

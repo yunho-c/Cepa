@@ -25,6 +25,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Native single-folder drag and drop with a preflight check that preserves the
   current result until the dropped directory is accepted
 - Responsive cancellation and automatic cancellation of superseded scans
+- Aggregation polls cancellation every 2,048 retained nodes and releases a
+  cancelled full scan arena away from the foreground response path
 - Failed stop requests keep the live scan visible and make cancellation retryable
 - Folder-picker failures preserve an existing completed result and remain retryable
 - Logical and allocated byte accounting, with exact allocation on macOS,
@@ -294,6 +296,7 @@ just benchmark-fixture /tmp/cepa-fixture 1000 100 0
 just benchmark-scan /tmp/cepa-fixture 9 jwalk
 just observe-scan /path/to/live-volume auto
 just benchmark-search /path/to/wide-folder file- 9 auto allocated
+just benchmark-aggregation-cancellation 1000000 9 500001
 ```
 
 The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
@@ -308,6 +311,9 @@ presenting it as a stable repeated benchmark.
 
 The search benchmark scans once, warms one current-folder query, then reports
 repeat latency and bounded result counts without rescanning between runs.
+The aggregation-cancellation benchmark uses a synthetic retained-node arena and
+reports foreground cancellation separately from background reclamation; it does
+not access the filesystem or measure traversal.
 
 Validate aggregate parity on a quiescent tree and measure asynchronous
 cancellation latency with:

@@ -880,6 +880,40 @@ Raw trials are preserved in
 and
 [`performance-results/2026-07-13-directory-ranking-macos-memory.csv`](performance-results/2026-07-13-directory-ranking-macos-memory.csv).
 
+### 2026-07-13 aggregation cancellation and abandoned-arena release
+
+Traversal progress cannot deterministically request cancellation after discovery
+has ended, so the ordinary cancellation harness did not cover bottom-up
+aggregation. The new `aggregation_cancellation` harness constructs a synthetic
+million-node arena, runs the same production aggregation loop, and asks a
+separate thread to cancel immediately after the first polling boundary beyond
+500,001 processed nodes. The loop polls every 2,048 nodes; every measured run
+therefore processed exactly 2,048 additional nodes before observing the request.
+The benchmark waits for background reclamation before starting its next run, but
+reports that work separately from foreground response latency.
+
+The first macOS pass exposed that cancellation detection was already bounded,
+but returning still synchronously destroyed the abandoned arena. Moving only
+that cancelled arena's destruction to a named background thread changed the
+nine-run median foreground cancellation latency from 23,394 us to 3,050 us, an
+87.0% reduction. The post-change macOS range was 63–14,217 us; background
+reclamation had a 6,001 us median. The wide spread makes this responsiveness
+evidence, not a stable aggregation-throughput comparison.
+
+An exact-source Rust 1.97.0 Linux run used the same release workload. Its nine
+foreground cancellations were 46–192 us with a 60 us median, and background
+release was 11,595 us median. Formatting, the focused synchronous and
+separate-thread regressions, and warning-denied Clippy across all dependency-
+light targets also passed there.
+
+This synthetic flat arena isolates aggregation arithmetic, polling, thread
+handoff, and destruction. It does not measure traversal, filesystem behavior,
+the Tauri bridge, or process-RSS reclamation. Foreground cancellation can now
+finish before memory is reclaimed, so callers must not interpret command return
+as an RSS boundary. Raw runs, including the macOS before/after comparison, are
+preserved in
+[`performance-results/2026-07-13-aggregation-cancellation.csv`](performance-results/2026-07-13-aggregation-cancellation.csv).
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
@@ -894,7 +928,6 @@ Before generalizing these results beyond the measured workloads, add:
 
 - additional representative real directory trees and cold-cache runs;
 - snapshot-owned bytes per entry and scaling beyond 500,000 entries;
-- cancellation latency during deliberately long aggregation work;
 - native Tauri IPC transport and production first-render timing on each platform
   WebView;
 - broader Linux filesystem/hardware coverage, cold-cache throughput, and

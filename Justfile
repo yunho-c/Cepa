@@ -97,6 +97,10 @@ validate-scan path left="jwalk" right="auto":
 benchmark-cancellation path backend="jwalk" iterations="9" after_entries="2048":
     cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_cancellation -- "{{ path }}" "{{ backend }}" "{{ iterations }}" "{{ after_entries }}"
 
+# Measure asynchronous cancellation inside bottom-up scan aggregation.
+benchmark-aggregation-cancellation nodes="1000000" iterations="9" after_nodes="500001":
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example aggregation_cancellation -- "{{ nodes }}" "{{ iterations }}" "{{ after_nodes }}"
+
 # Build the frontend and native executable without packaging it.
 build:
     bun --bun run tauri build --no-bundle

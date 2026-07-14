@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
@@ -36,6 +37,8 @@ mod windows;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
+pub(crate) const AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES: usize =
+    PROGRESS_ENTRY_INTERVAL as usize;
 const MAX_PARTIAL_ITEMS: usize = 8;
 const MAX_LIST_ITEMS: usize = 500;
 const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
@@ -883,25 +886,11 @@ where
 {
     let traversal_us = duration_us(traversal_completed_at.duration_since(started_at));
 
-    for node_id in (1..nodes.len()).rev() {
-        if node_id % PROGRESS_ENTRY_INTERVAL as usize == 0 && cancel.load(Ordering::Relaxed) {
-            return Err("Scan cancelled.".to_string());
+    if let Err(error) = aggregate_nodes(&mut nodes, cancel, |_| {}) {
+        if error == "Scan cancelled." {
+            let _ = release_nodes_off_thread(nodes, || {});
         }
-        let parent = nodes[node_id]
-            .parent
-            .expect("non-root scan nodes always have a parent");
-        debug_assert!(parent < node_id);
-        let totals = (
-            nodes[node_id].logical_bytes,
-            nodes[node_id].allocated_bytes,
-            nodes[node_id].file_count,
-            nodes[node_id].directory_count,
-        );
-
-        nodes[parent].logical_bytes = nodes[parent].logical_bytes.saturating_add(totals.0);
-        nodes[parent].allocated_bytes = nodes[parent].allocated_bytes.saturating_add(totals.1);
-        nodes[parent].file_count = nodes[parent].file_count.saturating_add(totals.2);
-        nodes[parent].directory_count = nodes[parent].directory_count.saturating_add(totals.3);
+        return Err(error);
     }
 
     let aggregation_completed_at = Instant::now();
@@ -965,6 +954,96 @@ where
         },
         snapshot,
     })
+}
+
+fn aggregate_nodes<F>(
+    nodes: &mut [InternalNode],
+    cancel: &AtomicBool,
+    mut on_checkpoint: F,
+) -> Result<(), String>
+where
+    F: FnMut(usize),
+{
+    for (processed, node_id) in (1..nodes.len()).rev().enumerate() {
+        if processed.is_multiple_of(AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES) {
+            let cancelled = cancel.load(Ordering::Relaxed);
+            on_checkpoint(processed);
+            if cancelled {
+                return Err("Scan cancelled.".to_string());
+            }
+        }
+        let parent = nodes[node_id]
+            .parent
+            .expect("non-root scan nodes always have a parent");
+        debug_assert!(parent < node_id);
+        let totals = (
+            nodes[node_id].logical_bytes,
+            nodes[node_id].allocated_bytes,
+            nodes[node_id].file_count,
+            nodes[node_id].directory_count,
+        );
+
+        nodes[parent].logical_bytes = nodes[parent].logical_bytes.saturating_add(totals.0);
+        nodes[parent].allocated_bytes = nodes[parent].allocated_bytes.saturating_add(totals.1);
+        nodes[parent].file_count = nodes[parent].file_count.saturating_add(totals.2);
+        nodes[parent].directory_count = nodes[parent].directory_count.saturating_add(totals.3);
+    }
+    Ok(())
+}
+
+fn release_nodes_off_thread<F>(nodes: Vec<InternalNode>, on_released: F) -> Result<(), String>
+where
+    F: FnOnce() + Send + 'static,
+{
+    thread::Builder::new()
+        .name("cepa-scan-arena-release".to_string())
+        .spawn(move || {
+            drop(nodes);
+            on_released();
+        })
+        .map(|_| ())
+        .map_err(|error| format!("could not release the cancelled scan in the background: {error}"))
+}
+
+pub(crate) fn aggregate_synthetic_nodes<R, F, D>(
+    node_count: usize,
+    cancel: &AtomicBool,
+    on_ready: R,
+    on_checkpoint: F,
+    on_released: D,
+) -> Result<(), String>
+where
+    R: FnOnce(),
+    F: FnMut(usize),
+    D: FnOnce() + Send + 'static,
+{
+    let arena_len = node_count
+        .checked_add(1)
+        .ok_or_else(|| "aggregation benchmark node count is too large".to_string())?;
+    let mut nodes = Vec::new();
+    nodes
+        .try_reserve_exact(arena_len)
+        .map_err(|error| format!("could not allocate aggregation benchmark arena: {error}"))?;
+    nodes.push(InternalNode::root(Path::new("aggregation-benchmark")));
+    nodes.extend((0..node_count).map(|_| InternalNode {
+        name: OsString::new(),
+        parent: Some(0),
+        children: Vec::new(),
+        kind: EntryKind::File,
+        logical_bytes: 1,
+        allocated_bytes: 1,
+        file_count: 1,
+        directory_count: 0,
+        scan_revision: None,
+    }));
+    on_ready();
+    match aggregate_nodes(&mut nodes, cancel, on_checkpoint) {
+        Err(error) if error == "Scan cancelled." => {
+            release_nodes_off_thread(nodes, on_released)?;
+            Err(error)
+        }
+        result => result,
+    }
 }
 
 impl ScanSnapshot {
@@ -1625,6 +1704,39 @@ fn scanned_file_revision(_: &Metadata) -> Option<ScannedFileRevision> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn aggregation_cancellation_bounds_work_after_the_request() {
+        let cancel = AtomicBool::new(false);
+        let mut nodes_processed = 0;
+        let caller_thread = thread::current().id();
+        let (released_tx, released_rx) = std::sync::mpsc::sync_channel(1);
+        let error = aggregate_synthetic_nodes(
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES * 3,
+            &cancel,
+            || {},
+            |processed| {
+                nodes_processed = processed;
+                if processed == 0 {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            },
+            move || {
+                let _ = released_tx.send(thread::current().id());
+            },
+        )
+        .expect_err("aggregation must observe cancellation");
+
+        assert_eq!(error, "Scan cancelled.");
+        assert_eq!(
+            nodes_processed,
+            AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES
+        );
+        let release_thread = released_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("cancelled arena must be released in the background");
+        assert_ne!(release_thread, caller_thread);
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
