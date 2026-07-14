@@ -189,6 +189,7 @@
   const isPreparingDroppedFolder = $derived(
     preparingScanRoot !== null && droppedPaths.length > 0,
   );
+  const dropOverlayVisible = $derived(dropActive || isPreparingDroppedFolder);
   const displayProgress = $derived(
     progress ?? {
       entriesScanned: 0,
@@ -1112,7 +1113,11 @@
 </svelte:head>
 
 <div class="app-shell">
-  <header class="app-header">
+  <header
+    class="app-header"
+    inert={dropOverlayVisible}
+    aria-hidden={dropOverlayVisible ? "true" : undefined}
+  >
     <button
       class="wordmark"
       type="button"
@@ -1148,7 +1153,7 @@
     {/if}
   </header>
 
-  {#if dropActive || isPreparingDroppedFolder}
+  {#if dropOverlayVisible}
     <div
       class="folder-drop-overlay"
       data-state={isPreparingDroppedFolder ? "preparing" : "ready"}
@@ -1176,7 +1181,12 @@
   {/if}
 
   {#if status === "idle" || status === "error" || status === "cancelled"}
-    <main class="landing" class:landing-with-storage={showsScanRoots}>
+    <main
+      class="landing"
+      class:landing-with-storage={showsScanRoots}
+      inert={dropOverlayVisible}
+      aria-hidden={dropOverlayVisible ? "true" : undefined}
+    >
       <section class="landing-copy" aria-labelledby="landing-title">
         <div class="app-symbol" aria-hidden="true"><CepaMark /></div>
         <h1 id="landing-title" tabindex="-1" bind:this={landingHeading}>
@@ -1266,7 +1276,12 @@
       </section>
     </main>
   {:else if status === "scanning" || status === "cancelling"}
-    <main class="scan-view" aria-busy="true">
+    <main
+      class="scan-view"
+      aria-busy="true"
+      inert={dropOverlayVisible}
+      aria-hidden={dropOverlayVisible ? "true" : undefined}
+    >
       <p class="sr-only" aria-live="polite">{scanAnnouncement}</p>
       <section class="scan-progress" aria-labelledby="scan-progress-title">
         <div class="scan-titlebar">
@@ -1345,7 +1360,11 @@
       </section>
     </main>
   {:else if result && view}
-    <main class="results-view">
+    <main
+      class="results-view"
+      inert={dropOverlayVisible}
+      aria-hidden={dropOverlayVisible ? "true" : undefined}
+    >
       <section class="results-heading">
         <div class="result-title">
           <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>

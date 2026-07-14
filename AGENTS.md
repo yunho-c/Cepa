@@ -82,6 +82,10 @@ offers Stop again; do not turn that command failure into a terminal scan error.
 Folder-picker failures are likewise contextual: preserve a completed result and
 show the error inline, while a first-launch failure remains on the landing view
 with a picker-specific heading rather than pretending a scan began.
+The native folder-drop overlay is interaction-exclusive while a drag is active
+or its single dropped folder is being validated. Keep the covered header and
+current main view inert and out of the accessibility tree; keyboard and screen
+reader users must encounter the overlay status rather than hidden controls.
 Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving
