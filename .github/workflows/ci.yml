@@ -24,10 +24,16 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-22.04
+            artifact: cepa-linux
+            archive: cepa-linux-bundles.tar.gz
           - name: macOS
             runner: macos-latest
+            artifact: cepa-macos
+            archive: cepa-macos-bundles.tar.gz
           - name: Windows
             runner: windows-latest
+            artifact: cepa-windows
+            archive: cepa-windows-bundles.zip
 
     steps:
       - name: Check out source
@@ -84,12 +90,14 @@ jobs:
       - name: Build native application
         run: just build
 
-      - name: Build and validate Linux distribution bundles
-        if: runner.os == 'Linux'
+      - name: Build distribution bundles
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: just bundle
+
+      - name: Validate and archive Linux distribution bundles
+        if: runner.os == 'Linux'
         run: |
-          just bundle
           just validate-linux-bundles
           (
             cd src-tauri/target/release/bundle
@@ -97,11 +105,32 @@ jobs:
               deb/*.deb rpm/*.rpm appimage/*.AppImage
           )
 
-      - name: Retain Linux distribution bundles
-        if: runner.os == 'Linux'
+      - name: Validate and archive macOS distribution bundles
+        if: runner.os == 'macOS'
+        run: |
+          just validate-macos-bundles
+          (
+            cd src-tauri/target/release/bundle
+            tar -czf "$RUNNER_TEMP/cepa-macos-bundles.tar.gz" \
+              macos/*.app dmg/*.dmg
+          )
+
+      - name: Validate and archive Windows distribution bundles
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          just validate-windows-bundles
+          $bundleRoot = "src-tauri/target/release/bundle"
+          $packages = @(
+            Get-ChildItem "$bundleRoot/msi/*.msi"
+            Get-ChildItem "$bundleRoot/nsis/*.exe"
+          )
+          Compress-Archive -LiteralPath $packages.FullName -DestinationPath "$env:RUNNER_TEMP/cepa-windows-bundles.zip"
+
+      - name: Retain distribution bundles
         uses: actions/upload-artifact@v7
         with:
-          name: cepa-linux-${{ github.sha }}
-          path: ${{ runner.temp }}/cepa-linux-bundles.tar.gz
+          name: ${{ matrix.artifact }}-${{ github.sha }}
+          path: ${{ runner.temp }}/${{ matrix.archive }}
           if-no-files-found: error
           retention-days: 14

@@ -1,0 +1,36 @@
+Cepa Windows desktop and installer validation
+date=2026-07-14
+system=Windows 11 Home 10.0.26200 build 26200 x86_64
+rustc=1.97.0 (2d8144b78 2026-07-07)
+cargo=1.97.0 (c980f4866 2026-06-30)
+bun=1.3.14
+source=exact clean archive of commit 8f5a131
+
+frozen frontend install: passed
+release application and installer build: passed
+bundle validator: passed
+two-package ZIP archive and extraction: passed
+
+executable=cepa.exe
+size_bytes=12439040
+sha256=05c220185eeed3294294e75eede5e607fa3b9e40ae0e12857e50dfc834bbbd15
+
+bundle=Cepa_0.1.0_x64_en-US.msi
+sha256=08b70efd19ea0a9ac96731d4ec9ef8fcb2b78b097d4b323d645ef2172691c2b0
+metadata=Cepa 0.1.0; manufacturer Cepa contributors
+payload=administrative extraction produced one versioned cepa.exe
+authenticode=NotSigned
+
+bundle=Cepa_0.1.0_x64-setup.exe
+sha256=83a4b7422a7679036e092bf9fbf5888b6aac36e37120d7d95f19fe6832bb3937
+metadata=Cepa 0.1.0; product description and copyright verified
+authenticode=NotSigned
+
+release executable launch: survived 8-second smoke window in an SSH session
+
+The MSI administrative extraction validates its executable payload without
+installing or changing package registration. The NSIS and MSI installers were
+not installed interactively, and their uninstall, shortcut, elevation,
+SmartScreen, and WebView2 bootstrap behavior was not exercised. Neither installer
+is signed; these artifacts are native packaging evidence, not public release
+candidates.

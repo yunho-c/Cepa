@@ -1,0 +1,31 @@
+Cepa macOS desktop and bundle validation
+date=2026-07-14
+system=macOS 15.6 (24G84) arm64
+rustc=1.94.0-nightly (e7d44143a 2025-12-24)
+cargo=1.94.0-nightly (3861f60f6 2025-12-19)
+bun=1.3.14
+source=exact clean archive of commit 8f5a131
+
+release application build: passed
+bundle validator: passed
+two-package tar archive: passed; application executable mode preserved
+
+bundle=Cepa.app
+identifier=com.yunhocho.cepa
+version=0.1.0
+format=Mach-O arm64 application bundle
+executable_sha256=5e5a90f5b33dc1de598b41422d875bda72c10acc0bbfd594ad2d1f26654ca79e
+codesign=deep strict verification passed; ad-hoc hardened-runtime signature
+
+bundle=Cepa_0.1.0_aarch64.dmg
+sha256=d0fb2247b336fb9a8c8d883badf865415f33720f84609c6ab74c650a87260242
+hdiutil_verify=passed
+mounted_payload=one code-sealed Cepa.app and /Applications symlink
+
+packaged application launch: survived 8-second smoke window with an isolated HOME
+
+The ad-hoc seal proves local bundle integrity, not developer identity,
+notarization, or Gatekeeper acceptance on another Mac. The direct executable
+smoke proves process startup and event-loop survival in the current desktop
+session; it does not prove first-launch Gatekeeper UX, drag installation,
+file-dialog interaction, or scanning from the mounted disk image.

@@ -109,6 +109,14 @@ build:
 validate-linux-bundles bundle_root="src-tauri/target/release/bundle":
     bash scripts/validate-linux-bundles.sh "{{ bundle_root }}"
 
+# Validate the metadata, code seal, and mounted payload of completed macOS bundles.
+validate-macos-bundles bundle_root="src-tauri/target/release/bundle":
+    bash scripts/validate-macos-bundles.sh "{{ bundle_root }}"
+
+# Validate the metadata and executable payload of completed Windows installers.
+validate-windows-bundles bundle_root="src-tauri/target/release/bundle":
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-windows-bundles.ps1 "{{ bundle_root }}"
+
 # Build platform desktop bundles.
 bundle:
     {{ bundle-environment }} bun --bun run tauri build

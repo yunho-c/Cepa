@@ -83,6 +83,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   and parent-folder commands, backed by the same guarded desktop shortcuts
 - A restrictive packaged-webview Content Security Policy that permits bundled
   assets and Tauri IPC without remote, inline-script, or inline-style sources
+- Native package validators for macOS app/DMG integrity, Windows MSI/NSIS
+  metadata and payloads, and Linux DEB/RPM/AppImage structure
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   partial-coverage, and completed states, with routine backend/accounting
   semantics available under a compact scan-details disclosure
@@ -351,13 +353,14 @@ block Cargo. Frontend and Tauri recipes also force Bun's runtime for JavaScript
 tools, so an unrelated system Node installation cannot change or block the
 canonical build.
 
-The `CI` workflow repeats `just install`, `just check`, and `just build` on
-native Ubuntu 22.04, macOS, and Windows runners. Linux additionally creates and
-validates DEB, RPM, and AppImage packages, then retains them as one tar archive
-for 14 days. The archive preserves the AppImage executable bit that an ordinary
-workflow-artifact ZIP would discard. Local workflow lint and native execution
-validate the definition before handoff; only an actual GitHub Actions run proves
-the hosted jobs and artifact upload.
+The `CI` workflow repeats `just install`, `just check`, `just build`, and
+`just bundle` on native Ubuntu 22.04, macOS, and Windows runners. Each job runs
+its platform package validator and retains one exact distributable archive for
+14 days. Linux and macOS use tar archives so executable modes, application
+contents, and symlinks survive workflow-artifact transport; Windows retains a
+ZIP containing only its MSI and NSIS installers. Local workflow lint and native
+execution validate the definition before handoff; only an actual GitHub Actions
+run proves the hosted jobs and artifact upload.
 
 ```sh
 just bundle
@@ -376,6 +379,18 @@ It requires exactly one package of each supported Linux type, verifies their
 version, architecture, executable, desktop-entry surface, and AppImage format,
 then prints SHA-256 digests. It is structural package evidence, not an installed
 desktop smoke test or signature verification.
+
+On macOS, `just validate-macos-bundles` checks the application plist and
+executable, performs strict deep code-seal verification, verifies and mounts the
+DMG, revalidates the mounted app, and checks its `/Applications` link. Ad-hoc
+signing is accepted for local integrity evidence; it is not notarization or a
+public distribution identity.
+
+On Windows, `just validate-windows-bundles` checks MSI product metadata and its
+administratively extracted executable, plus the NSIS version resource. An
+Authenticode signature may be absent for local and CI builds; any present
+signature must validate. This does not replace interactive install, uninstall,
+elevation, SmartScreen, or WebView2 bootstrap testing.
 
 The packaged webview loads only bundled scripts, styles, and images. Its CSP
 allows the two Tauri IPC transports and denies objects, frames, workers, and

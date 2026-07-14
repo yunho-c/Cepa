@@ -142,6 +142,12 @@ Distribution metadata is explicit and project-owned: `LICENSE`, `package.json`,
 license, repository, version, and `Cepa contributors` attribution. Keep the npm
 package private and the Rust crate non-publishable; Cepa ships as native desktop
 bundles. `src-tauri/tests/tauri_config.rs` guards this contract.
+CI produces and retains exact native package archives on every platform.
+Platform validators check the macOS app seal and mounted DMG, the Windows MSI
+metadata and administratively extracted executable plus NSIS metadata, and the
+Linux package structures. These are unsigned or ad-hoc native packaging gates,
+not proof of notarization, Authenticode reputation, interactive installation, or
+public release readiness.
 Hard-linked bytes are deterministically assigned to the lexicographically first
 relative path so parallel discovery order cannot change directory totals.
 The retained arena encodes optional parent indexes in one machine word by
@@ -438,8 +444,8 @@ Start with these files:
 - `docs/compression.md`: proposed transparent-compression contract and rollout gates.
 - `src-tauri/Cargo.toml` and `package.json`: Rust and frontend dependencies.
 - `Justfile`: canonical development, checking, building, and bundling commands.
-- `scripts/validate-linux-bundles.sh`: exact Linux DEB/RPM/AppImage structure,
-  metadata, and digest validation after bundling.
+- `scripts/validate-{linux,macos,windows}-bundles.*`: platform package structure,
+  metadata, payload, integrity, and digest validation after bundling.
 - `.github/workflows/ci.yml`: native Linux, macOS, and Windows check/build matrix.
 
 Frontend helper and visualization tests live beside their modules as
@@ -463,6 +469,8 @@ just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles
 just validate-linux-bundles # validate completed Linux bundle metadata and files
+just validate-macos-bundles # validate a code-sealed app and mounted DMG
+just validate-windows-bundles # validate MSI and NSIS metadata and MSI payload
 ```
 
 The native recipes deliberately clear configured Rust compiler wrappers so a
@@ -519,8 +527,12 @@ both `Justfile` and Tauri's `beforeDevCommand`/`beforeBuildCommand` hooks.
   `just validate-linux-bundles`, then distinguish raw executable launch,
   installed-package launch, AppImage launch, and RPM metadata inspection. A
   headless DBus/Xvfb survival window does not prove physical desktop interaction.
-- Treat local workflow lint as wiring validation, not proof that remote Linux or
-  Windows jobs passed; inspect the actual GitHub Actions run before claiming it.
+- For macOS distribution changes, verify the app seal before and after mounting
+  the DMG. For Windows, inspect both installer formats and administratively
+  extract the MSI payload. Keep signing/notarization and interactive installer
+  evidence distinct from structural package validation on every platform.
+- Treat local workflow lint as wiring validation, not proof that hosted jobs
+  passed; inspect the actual GitHub Actions run before claiming it.
 
 When a requested change conflicts with correctness, portability, user safety,
 or measured performance, surface the tradeoff explicitly instead of silently
