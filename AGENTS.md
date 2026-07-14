@@ -414,6 +414,12 @@ error.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 
+Responsive hiding must not remove status updates from the accessibility tree.
+Folder search uses one polite live region for its asynchronous state and result
+count; it remains visible at ordinary widths and becomes visually hidden, not
+`display: none`, in the compact layout. Keep error alerts separate, and do not
+add a second live region to the visual searching or empty-result panels.
+
 ## Repository map
 
 Start with these files:

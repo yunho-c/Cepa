@@ -243,7 +243,9 @@
     }
   });
   const directoryCountLabel = $derived(
-    isSearching
+    searchActive && searchError
+      ? ""
+      : isSearching
       ? "Searching…"
       : searchActive && searchResult
         ? searchResult.itemsTruncated
@@ -1539,7 +1541,12 @@
           <div class="section-heading">
             <h2>{view.displayName}</h2>
             <div class="section-actions">
-              <span aria-live="polite">{directoryCountLabel}</span>
+              <span
+                id="directory-search-status"
+                class="directory-count"
+                aria-live="polite"
+                aria-atomic="true"
+              >{directoryCountLabel}</span>
               {#if searchOpen}
                 <div class="directory-search">
                   <Search aria-hidden="true" />
@@ -1547,6 +1554,7 @@
                     type="search"
                     placeholder="Find in this folder"
                     aria-label={`Find in ${view.displayName}`}
+                    aria-describedby="directory-search-status"
                     maxlength={128}
                     autocomplete="off"
                     spellcheck={false}
@@ -1692,12 +1700,12 @@
               <Button variant="outline" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
             </div>
           {:else if searchActive && isSearching && !searchResult}
-            <div class="search-message" role="status" aria-live="polite">
+            <div class="search-message">
               <Search />
               <strong>Searching this folder…</strong>
             </div>
           {:else if searchActive && !isSearching && searchResult?.totalMatches === 0}
-            <div class="search-message" role="status">
+            <div class="search-message">
               <Search />
               <strong>No matches in this folder</strong>
               <span>Try a shorter or different name.</span>

@@ -49,7 +49,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Adaptive metric ranking that keeps ordinary-folder selection fast while
   capping transient child-ID storage at 2 MiB for extremely wide directories
 - Case-insensitive current-folder search across every retained direct child,
-  bounded to 500 metric-ranked results after matching
+  bounded to 500 metric-ranked results after matching, with one responsive-safe
+  live result-count announcement
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
 - Compact scan-time file identity and revision retention across native and
   portable backends, used to reject changed files before compression planning
