@@ -38,7 +38,11 @@ The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row and the largest files observed so far.
 Keep Stop immediately available and unavailable-item counts visible, but do not
 restore a dashboard card, metric-tile grid, repeated privacy slogan, or backend
-vocabulary to this state.
+vocabulary to this state. During an ordinary scan at the 620 by 480 minimum,
+keep the first observed file row visible below the facts instead of ending the
+viewport on an orphaned `Largest so far` heading. Preserve the more spacious
+rhythm above 560 logical pixels tall; contextual failure callouts take priority
+and may make the remaining progress content scroll.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or

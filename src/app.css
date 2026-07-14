@@ -910,6 +910,15 @@ body {
 }
 
 @media (max-height: 560px) {
+  .scan-view { padding-top: 24px; padding-bottom: 32px; }
+  .scan-titlebar h1 { margin-top: 4px; font-size: 24px; }
+  .scan-total { margin-top: 24px; }
+  .scan-path { margin-top: 9px; }
+  .scan-line { margin: 18px 0 12px; }
+  .scan-facts { padding-block: 10px; }
+  .partial-results { margin-top: 16px; }
+  .partial-results h2 { margin-bottom: 4px; }
+
   .landing-with-storage { padding-top: 18px; padding-bottom: 24px; }
   .landing-with-storage .app-symbol { display: none; }
   .landing.landing-with-storage h1 { font-size: 30px; }
