@@ -143,6 +143,7 @@
   let scanProgressHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let sunburstElement: SVGSVGElement | undefined = $state();
+  let chartBackButton: HTMLButtonElement | null = $state(null);
   let chartFocusId: number | null = $state(null);
   let itemListElement: HTMLDivElement | undefined = $state();
   let listFocusId: number | null = $state(null);
@@ -1000,7 +1001,7 @@
         void openDirectorySearch();
         break;
       case "navigateUp":
-        void openDirectory(parentId);
+        navigateUpFromDesktopCommand();
         break;
       case "closeSearch":
         void closeDirectorySearch();
@@ -1011,6 +1012,12 @@
       case "suppress":
         break;
     }
+  }
+
+  function navigateUpFromDesktopCommand() {
+    if (parentId === null || isResultBusy) return;
+    chartBackButton?.focus();
+    void openDirectory(parentId);
   }
 
   function handleDesktopKeydown(event: KeyboardEvent) {
@@ -1767,6 +1774,7 @@
               class="chart-back"
               variant="ghost"
               size="sm"
+              bind:ref={chartBackButton}
               aria-disabled={isResultBusy}
               title={`Up (${backShortcutLabel})`}
               onclick={() => openDirectory(parentId)}

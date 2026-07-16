@@ -1688,6 +1688,36 @@ rejection and rescan. Exact source, commands, cross-target checks, and Linux Rus
 This does not certify a screen reader, physical keyboard, Windows WebView2, or
 Linux WebKitGTK runtime.
 
+### 2026-07-16 desktop Up focus handoff
+
+Alt+Left and the native Navigate Up menu command can begin directory navigation
+while focus belongs to any persistent completed-result control. In the audited
+case, Search owned focus in a subfolder. The shortcut began navigation, its
+native `disabled` binding activated, and focus fell to the document body even
+though the visible Up control already provided the correct guarded pending
+surface. An open search field had the same ownership problem because navigation
+closes that transient field before IPC settles.
+
+The shared desktop command now focuses the rendered Up control synchronously,
+then starts the ordinary guarded navigation path. This keeps command validation,
+backend authorization, retry behavior, and final heading focus unchanged. It
+does not make every unrelated header or search control artificially focusable
+during navigation; it gives the command a single semantically accurate owner for
+its pending interval.
+
+At 620 by 480 in light appearance, the 1.2-second `stale-actions` fixture began
+Alt+Left from a focused Search control. Up immediately received focus, exposed
+`aria-disabled=true` without a native disabled attribute, retained focus without
+horizontal overflow, and handed focus to the root view heading on success. The
+production macOS WebView repeated the stronger active-search-field case through
+the real `open_scan_directory` command and then passed list-origin navigation,
+Home discard, stale-ID rejection, and rescan with no page errors. Exact source,
+commands, cross-target checks, and Linux Rust 1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-desktop-up-focus.txt`](validation-results/2026-07-16-desktop-up-focus.txt).
+This is deterministic browser and programmatic production-WebView evidence. It
+does not certify physical keyboard input, assistive technology, Windows WebView2,
+or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

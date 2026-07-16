@@ -1,0 +1,100 @@
+Cepa desktop Up focus handoff validation
+Date: 2026-07-16
+Baseline commit: 31658cbb33c091252535183ba9409c5b1b5dac0e
+
+Changed source SHA-256
+a79cc5a27075bc4db095398ba850fc3be202eded36d688554e14dd1bfbdfac14  src/App.svelte
+8a1c5d0a986861b22c5806ca67481811f89937f1a53f17d241a889aeeeb62faf  src/lib/style-sources.test.ts
+8d1e68c95138161862fc572bde328c90a4849bf92d326ff12bd98fb6332c2c2b  src-tauri/examples/native_scan_smoke.rs
+1337b16d87a8b7c38665bec7482e78479a003d4f701668d30e28386ddf015460  AGENTS.md
+e1cc4b39d7f399d3f101553c04a4397ba5c60e2b360fea8b1085fd3e9e2e913f  README.md
+a268f6e86841dab8469bc7c493e51f15631aa7a1c9652008798d74817c07870a  docs/performance.md
+
+Reproduction before the fix
+- Opened Library in mock=stale-actions at 620x480 light and focused Search.
+- Dispatched the shared Alt+Left desktop command while the focused Search
+  control remained mounted.
+- Navigation set native disabled on Search; activeElement became BODY. The Up
+  control already exposed aria-disabled=true but did not own focus.
+- An active search input would likewise be removed before navigation settled.
+
+Deterministic browser validation after the fix
+- Repeated Alt+Left from focused Search with the 1.2-second delayed request.
+- The visible Up control received focus synchronously, exposed
+  aria-disabled=true without a native disabled attribute, kept BODY unfocused,
+  and produced no horizontal overflow.
+- After navigation settled, the root storage-map heading received focus.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion /tmp/.../cancellation
+
+Fixtures:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+- cancellation: 100000 requested leaf directories x 1 empty file
+
+The harness focused the active folder-search input, dispatched Alt+Left through
+the production shortcut path, and required Up to own the guarded pending state
+before the real open_scan_directory command completed.
+
+Selected report fields:
+  backendLabel=macOS native
+  pendingShortcutNavigationFocusRetained=true
+  pendingChartNavigationFocusRetained=true
+  pendingNavigationFocusRetained=true
+  pendingHomeFocusRetained=true
+  landingFocusRestored=true
+  staleScanRejected=true
+  discardedScanId=2
+  cancellationPendingFocusRetained=true
+  cancellationStopped=true
+  cancellationMs=64
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+
+The measured pageReadyMs and processToReportMs included an approximately
+10-second cold production-process startup delay in this run. They are retained
+as lifecycle evidence, not presented as a startup-performance observation.
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+  production-bundle development-string search
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 60 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- Development-only stale-action strings were absent from the production bundle.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Frontend diagnostics, all 60 tests, and the production Vite build passed.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This is deterministic browser, programmatic production-macOS-WebView, local
+Windows cross-target, and Linux Rust 1.97 native-core evidence. It does not
+certify physical keyboard or screen-reader input, Windows WebView2, a Linux
+WebKitGTK runtime, or installed packages.

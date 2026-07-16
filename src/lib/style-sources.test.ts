@@ -119,4 +119,25 @@ describe("production style sources", () => {
     expect(stylesheet).toContain('.wordmark[aria-disabled="true"] { cursor: wait; }');
     expect(stylesheet).not.toContain(".wordmark:disabled");
   });
+
+  test("moves desktop Up focus to its stable pending control", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const commandStart = component.indexOf("function runDesktopCommand(");
+    const commandHandler = component.slice(
+      commandStart,
+      component.indexOf("function handleDesktopKeydown(", commandStart),
+    );
+    const backStart = component.indexOf('class="chart-back"');
+    const backButton = component.slice(backStart, component.indexOf("</Button>", backStart));
+
+    expect(commandHandler).toContain('case "navigateUp":');
+    expect(commandHandler).toContain("navigateUpFromDesktopCommand();");
+    expect(commandHandler).toContain("if (parentId === null || isResultBusy) return;");
+    expect(commandHandler).toContain("chartBackButton?.focus();");
+    expect(commandHandler).toContain("void openDirectory(parentId);");
+    expect(backStart).toBeGreaterThan(-1);
+    expect(backButton).toContain("bind:ref={chartBackButton}");
+    expect(backButton).toContain("aria-disabled={isResultBusy}");
+    expect(backButton).not.toMatch(/^\s*disabled=/m);
+  });
 });

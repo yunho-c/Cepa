@@ -192,7 +192,9 @@ Pending directory navigation and Reveal must not native-disable the control that
 owns focus. Keep chart segments, list, breadcrumb, Up, and recovery actions
 focusable with guarded `aria-disabled` state while their request is live; reject
 repeat activation and freeze that action kind's roving-arrow movement until it
-settles.
+settles. Desktop-shortcut and native-menu Up can begin while focus is elsewhere;
+move focus to the visible Up control before starting that request so it owns the
+pending interval, then move to the destination heading on success.
 Successful navigation moves focus to the new view heading, while Reveal success
 leaves focus on its original action. Preserve the restrained pending opacity and
 wait cursor without dropping focus to the document body.
@@ -345,7 +347,10 @@ finish so the final large-arena destructor cannot run on a command/runtime
 thread. Platform-aware desktop commands live in
 `src/lib/shortcuts.ts`; keep
 their availability state-driven, preserve IME and modified-key behavior, and
-restore focus when Escape dismisses search or item details. The native
+restore focus when Escape dismisses search or item details. The shared Up
+command must focus the rendered Up control before invoking navigation instead
+of native-disabling whichever unrelated persistent control happened to own
+focus. The native
 application menu in `src-tauri/src/desktop_menu.rs` shares this command path and
 mirrors live availability. Keep backend menu IDs private to Rust, emit only the
 small stable frontend command vocabulary, and revalidate every emitted command

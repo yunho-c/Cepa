@@ -256,6 +256,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["navigationChangedFolder"].as_bool() == Some(true)
         && report["pendingChartNavigationFocusRetained"].as_bool() == Some(true)
         && report["pendingNavigationFocusRetained"].as_bool() == Some(true)
+        && report["pendingShortcutNavigationFocusRetained"].as_bool() == Some(true)
         && report["searchStatus"]
             .as_str()
             .is_some_and(|status| status.contains("match"))
@@ -588,7 +589,20 @@ void (async () => {{
     phase('testing-pending-navigation-focus');
     const upButton = document.querySelector('.chart-back');
     if (!upButton) throw new Error('The navigated chart has no Up action.');
-    upButton.click();
+    searchInput.focus();
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {{
+        key: 'ArrowLeft',
+        altKey: true,
+        bubbles: true,
+      }}),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingShortcutNavigationFocusRetained =
+      document.activeElement === upButton
+      && upButton.getAttribute('aria-disabled') === 'true'
+      && !upButton.hasAttribute('disabled');
     await waitFor(
       () => document.querySelector('.section-heading h2')?.textContent?.trim() === rootHeading,
       'return to root for pending navigation',
@@ -674,6 +688,7 @@ void (async () => {{
       pendingChartNavigationFocusRetained:
         pendingChartNavigationFocusRetained && pendingChartNavigationFocusFrozen,
       pendingNavigationFocusRetained,
+      pendingShortcutNavigationFocusRetained,
       searchStatus,
       searchedRows,
       noMatchStatus,
@@ -760,6 +775,7 @@ mod tests {
             "navigationChangedFolder": true,
             "pendingChartNavigationFocusRetained": true,
             "pendingNavigationFocusRetained": true,
+            "pendingShortcutNavigationFocusRetained": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
             "noMatchStatus": "0 matches",
@@ -834,6 +850,11 @@ mod tests {
         let mut pending_chart_navigation_focus_lost = complete.clone();
         pending_chart_navigation_focus_lost["pendingChartNavigationFocusRetained"] = false.into();
         assert!(!validate_report(&pending_chart_navigation_focus_lost, 2));
+
+        let mut pending_shortcut_navigation_focus_lost = complete.clone();
+        pending_shortcut_navigation_focus_lost["pendingShortcutNavigationFocusRetained"] =
+            false.into();
+        assert!(!validate_report(&pending_shortcut_navigation_focus_lost, 2));
 
         let mut scan_heading_focus_lost = complete.clone();
         scan_heading_focus_lost["initialScanHeadingFocused"] = false.into();
