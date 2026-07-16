@@ -206,6 +206,7 @@ http://localhost:1420/?mock=estimate-error
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
+http://localhost:1420/?mock=search-error
 http://localhost:1420/?mock=stale-actions
 http://localhost:1420/?mock=stress
 http://localhost:1420/?drop=active
@@ -231,6 +232,8 @@ Cancel fails, matching the production contract that the live operation and its
 retry action must remain visible.
 `?mock=estimate-error` verifies cause-neutral primary copy, disclosed failure
 evidence, and the Estimate again recovery action after estimation itself fails.
+`?mock=search-error` fails the first folder search and then succeeds, covering
+the disclosed cause, same-query retry, and preserved search-field focus.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

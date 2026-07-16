@@ -28,6 +28,7 @@ type DevScenario =
   | "inspection-error"
   | "navigation-error"
   | "reveal-error"
+  | "search-error"
   | "stale-actions"
   | "stress";
 
@@ -41,6 +42,7 @@ export function installDevMock(requestedScenario: string) {
     : "complete";
   const stressView = scenario === "stress" ? createStressView(scanId, ROOT) : null;
   let pickerOpenCount = 0;
+  let searchAttemptCount = 0;
   let rejectPendingScan: ((reason: string) => void) | null = null;
   const cancelledEstimateRequests = new Set<number>();
   const cancelledSearchRequests = new Set<number>();
@@ -132,8 +134,9 @@ export function installDevMock(requestedScenario: string) {
         if (cancelledSearchRequests.delete(Number(args.requestId))) {
           throw "Folder search cancelled.";
         }
-        if (query.toLocaleLowerCase() === "fail") {
-          throw "The mocked folder search could not be completed.";
+        searchAttemptCount += 1;
+        if (scenario === "search-error" && searchAttemptCount === 1) {
+          throw "The folder changed while its contents were being searched.";
         }
         const metric = args.metric === "logical" ? "logical" : "allocated";
         const source = stressView
@@ -283,6 +286,7 @@ function isScenario(value: string): value is DevScenario {
     "inspection-error",
     "navigation-error",
     "reveal-error",
+    "search-error",
     "stale-actions",
     "stress",
   ].includes(value);

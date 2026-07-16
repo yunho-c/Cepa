@@ -773,7 +773,9 @@ body {
 .search-message > svg { width: 20px; }
 .search-message > strong { color: var(--foreground); font-size: 13px; }
 .search-message > span { max-width: 360px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.search-message > [data-slot="button"] { margin-top: 4px; }
+.search-message-actions { margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.search-error-details { width: min(100%, 360px); text-align: left; }
+.search-error-details p { overflow-wrap: anywhere; }
 
 .scan-details { margin-top: 16px; border: 1px solid var(--border); border-radius: 13px; background: var(--translucent-surface); overflow: hidden; }
 .scan-details > summary { min-height: 46px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }

@@ -915,6 +915,27 @@
     }, 180);
   }
 
+  async function retryDirectorySearch() {
+    const query = searchQuery.trim();
+    if (!query || scanId === null || !view || isResultBusy) return;
+
+    invalidateDirectorySearch();
+    isSearching = true;
+    const sequence = searchSequence;
+    const completedScanId = scanId;
+    const nodeId = view.nodeId;
+    const metric = sizeMetric;
+    await tick();
+    searchInput?.focus();
+    void runDirectorySearch(
+      sequence,
+      completedScanId,
+      nodeId,
+      metric,
+      query,
+    );
+  }
+
   async function runDirectorySearch(
     sequence: number,
     completedScanId: number,
@@ -1707,9 +1728,16 @@
           {#if searchActive && searchError}
             <div class="search-message" role="alert">
               <AlertCircle />
-              <strong>Search unavailable</strong>
-              <span>{searchError}</span>
-              <Button variant="outline" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
+              <strong>Couldn’t search this folder</strong>
+              <span>Try again, or clear the search to return to this folder.</span>
+              <div class="search-message-actions">
+                <Button variant="outline" size="sm" onclick={retryDirectorySearch}>Try again</Button>
+                <Button variant="ghost" size="sm" onclick={clearDirectorySearch}>Clear search</Button>
+              </div>
+              <details class="metadata-disclosure search-error-details">
+                <summary>Search details</summary>
+                <p>{searchError}</p>
+              </details>
             </div>
           {:else if searchActive && isSearching && !searchResult}
             <div class="search-message">

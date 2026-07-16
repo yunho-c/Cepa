@@ -446,6 +446,9 @@ Folder search uses one polite live region for its asynchronous state and result
 count; it remains visible at ordinary widths and becomes visually hidden, not
 `display: none`, in the compact layout. Keep error alerts separate, and do not
 add a second live region to the visual searching or empty-result panels.
+Search failures keep their cause in `Search details`, preserve the query, and
+offer a same-query retry. Do not move typing focus away from the search field
+when the error appears or the retry begins.
 
 ## Repository map
 
