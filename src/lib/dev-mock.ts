@@ -21,6 +21,7 @@ type DevScenario =
   | "picker-recovery"
   | "estimate-cancel-error"
   | "estimate-cancel-late-error"
+  | "estimate-error"
   | "error"
   | "finishing"
   | "finishing-cancel-error"
@@ -197,6 +198,9 @@ export function installDevMock(requestedScenario: string) {
           detail: "macOS does not report UF_COMPRESSED for this file.",
         } satisfies CompressionState;
       case "estimate_compression_savings": {
+        if (scenario === "estimate-error") {
+          throw "The file changed before its savings could be estimated.";
+        }
         if (scenario === "estimate-cancel-error") {
           return new Promise<SavingsEstimate>(() => {});
         }
@@ -272,6 +276,7 @@ function isScenario(value: string): value is DevScenario {
     "picker-recovery",
     "estimate-cancel-error",
     "estimate-cancel-late-error",
+    "estimate-error",
     "error",
     "finishing",
     "finishing-cancel-error",

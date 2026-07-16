@@ -106,6 +106,22 @@ describe("scanner presentation helpers", () => {
         estimatedSavingsUpper: 0,
       }),
     ).toBe("No likely savings");
+    expect(
+      formatSavingsEstimate({
+        ...estimate,
+        status: "unavailable",
+        estimatedSavingsLower: null,
+        estimatedSavingsUpper: null,
+      }),
+    ).toBe("Couldn’t be estimated");
+    expect(
+      formatSavingsEstimate({
+        ...estimate,
+        status: "unsupported",
+        estimatedSavingsLower: null,
+        estimatedSavingsUpper: null,
+      }),
+    ).toBe("Not supported");
   });
 
   test("formats byte and duration boundaries", () => {

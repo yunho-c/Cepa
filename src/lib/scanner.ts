@@ -305,13 +305,13 @@ export function formatSavingsEstimate(estimate: SavingsEstimate): string {
       case "notCandidate":
         return "No estimate needed";
       case "unsupported":
-        return "Estimation unsupported";
+        return "Not supported";
       case "unavailable":
-        return "Estimate unavailable";
+        return "Couldn’t be estimated";
       case "cancelled":
         return "Estimate cancelled";
       case "estimated":
-        return "Estimate unavailable";
+        return "Couldn’t be estimated";
     }
   }
   if (estimate.estimatedSavingsUpper === 0) return "No likely savings";

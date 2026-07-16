@@ -752,7 +752,7 @@
           estimatedSavingsLower: null,
           estimatedSavingsUpper: null,
           estimatorVersion: 1,
-          detail: `The estimate request failed: ${String(error)}`,
+          detail: `Savings couldn’t be estimated: ${String(error)}`,
         };
       }
     } finally {

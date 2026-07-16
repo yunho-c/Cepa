@@ -270,6 +270,9 @@ on hover/selection.
 If an estimate cancellation command fails, keep the still-live estimate visible
 and make Cancel retryable. Guard the failure by request ID so a late stop error
 cannot replace a newer or already-completed estimate.
+If estimation itself fails, label the primary result `Couldn’t be estimated`,
+retain the actual reason in `Estimate details`, and keep Estimate again visible;
+do not surface request or task vocabulary as primary copy.
 Compression-plan preparation is also scan-authorized: the frontend supplies a
 completed scan ID, opaque node ID, and operation, never a path. Rust opens the
 file without following links, retains that read-only handle as the active plan's
