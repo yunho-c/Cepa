@@ -125,7 +125,6 @@ fn begin_smoke(
 ) -> tauri::Result<()> {
     match mode {
         Mode::Seed => {
-            window.show()?;
             let monitor = window
                 .current_monitor()?
                 .or(window.primary_monitor()?)
@@ -135,6 +134,7 @@ fn begin_smoke(
             let target_y = monitor_position.y + TARGET_OFFSET_Y;
             window.set_position(PhysicalPosition::new(target_x, target_y))?;
             window.set_size(PhysicalSize::new(TARGET_WIDTH, TARGET_HEIGHT))?;
+            window.show()?;
             std::thread::sleep(Duration::from_millis(500));
             let position = window.outer_position()?;
             let size = window.inner_size()?;
@@ -147,12 +147,12 @@ fn begin_smoke(
         }
         Mode::Verify => {
             let expected = expected.expect("verify mode requires saved state");
-            window.show()?;
             window_state_placement::restore(
                 &window,
                 &state_path,
                 window_state_policy::persisted_state_flags(),
             )?;
+            window.show()?;
             std::thread::sleep(Duration::from_millis(500));
             let actual_position = window.outer_position();
             let actual_size = window.inner_size();

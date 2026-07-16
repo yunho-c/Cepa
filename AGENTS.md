@@ -139,7 +139,9 @@ The desktop shell restores stable window geometry with the official Tauri
 window-state plugin. Track and restore only size, on-screen position, and
 maximized state; do not add visibility (which can relaunch the app hidden),
 decorations, or fullscreen to `StateFlags`, and never add scan paths or result
-data to this state file. The plugin's macOS
+data to this state file. Keep the configured window hidden until restore or
+first-launch centering finishes, then show and focus it so startup never exposes
+the default geometry before moving. The plugin's macOS
 startup monitor query can be empty and skip position restoration, so
 `desktop_window/placement.rs` reapplies only an on-screen saved position (or
 centers safely when monitor metadata is unavailable). Keep the two-launch

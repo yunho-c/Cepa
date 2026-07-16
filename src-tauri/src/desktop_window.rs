@@ -21,9 +21,6 @@ pub fn initialize<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error
     let state_path = app.path().app_config_dir()?.join(app.handle().filename());
     let restore_saved_state = placement::has_saved_state(&state_path);
     std::thread::spawn(move || {
-        if let Err(error) = window.show() {
-            eprintln!("Could not show the main window: {error}");
-        }
         let placement = if restore_saved_state {
             placement::restore(&window, &state_path, policy::persisted_state_flags())
         } else {
@@ -31,6 +28,9 @@ pub fn initialize<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error
         };
         if let Err(error) = placement {
             eprintln!("Could not place the main window: {error}");
+        }
+        if let Err(error) = window.show() {
+            eprintln!("Could not show the main window: {error}");
         }
         let _ = window.set_focus();
     });
