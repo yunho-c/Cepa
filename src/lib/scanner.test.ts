@@ -11,9 +11,38 @@ import {
   formatUnavailableItems,
   isCancellationError,
   metricBytes,
+  scanProgressPresentation,
 } from "./scanner";
 
 describe("scanner presentation helpers", () => {
+  test("preserves finishing context while a stop request is pending", () => {
+    const progress = {
+      phase: "finishing" as const,
+      entriesScanned: 18_432,
+      allocatedBytes: 302_795_292_672,
+    };
+    expect(scanProgressPresentation(progress, false)).toEqual({
+      statusLabel: "Finishing",
+      totalLabel: "Space found",
+      currentLabel: "Preparing results…",
+      announcement: "Finishing the scan after 18K entries.",
+    });
+    expect(scanProgressPresentation(progress, true)).toEqual({
+      statusLabel: "Stopping",
+      totalLabel: "Space found",
+      currentLabel: "Preparing results…",
+      announcement: "Stopping while preparing results for 18K entries.",
+    });
+    expect(
+      scanProgressPresentation({ ...progress, phase: "scanning" }, true),
+    ).toEqual({
+      statusLabel: "Stopping",
+      totalLabel: "Found so far",
+      currentLabel: null,
+      announcement: "Stopping after 18K entries.",
+    });
+  });
+
   test("labels existing-data state separately from future-write policy", () => {
     expect(
       formatCompressionState({

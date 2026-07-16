@@ -23,6 +23,7 @@ type DevScenario =
   | "estimate-cancel-late-error"
   | "error"
   | "finishing"
+  | "finishing-cancel-error"
   | "navigation-error"
   | "reveal-error"
   | "stale-actions"
@@ -74,7 +75,7 @@ export function installDevMock(requestedScenario: string) {
             rejectPendingScan = reject;
           });
         }
-        if (scenario === "finishing") {
+        if (scenario === "finishing" || scenario === "finishing-cancel-error") {
           await delay(75);
           emitChannel(channelId, 2, {
             event: "progress",
@@ -96,6 +97,12 @@ export function installDevMock(requestedScenario: string) {
       }
       case "cancel_scan":
         if (scenario === "cancel-error") {
+          throw "The scanner did not acknowledge the stop request.";
+        }
+        if (scenario === "finishing" || scenario === "finishing-cancel-error") {
+          await delay(2_000);
+        }
+        if (scenario === "finishing-cancel-error") {
           throw "The scanner did not acknowledge the stop request.";
         }
         rejectPendingScan?.("Scan cancelled.");
@@ -262,6 +269,7 @@ function isScenario(value: string): value is DevScenario {
     "estimate-cancel-late-error",
     "error",
     "finishing",
+    "finishing-cancel-error",
     "navigation-error",
     "reveal-error",
     "stale-actions",

@@ -111,6 +111,32 @@ export interface ScanProgress {
   largestItems: ScanItem[];
 }
 
+export interface ScanProgressPresentation {
+  statusLabel: "Scanning" | "Finishing" | "Stopping";
+  totalLabel: "Found so far" | "Space found";
+  currentLabel: "Preparing results…" | null;
+  announcement: string;
+}
+
+export function scanProgressPresentation(
+  progress: Pick<ScanProgress, "phase" | "entriesScanned" | "allocatedBytes">,
+  cancelling: boolean,
+): ScanProgressPresentation {
+  const finishing = progress.phase === "finishing";
+  return {
+    statusLabel: cancelling ? "Stopping" : finishing ? "Finishing" : "Scanning",
+    totalLabel: finishing ? "Space found" : "Found so far",
+    currentLabel: finishing ? "Preparing results…" : null,
+    announcement: cancelling
+      ? finishing
+        ? `Stopping while preparing results for ${formatCount(progress.entriesScanned)} entries.`
+        : `Stopping after ${formatCount(progress.entriesScanned)} entries.`
+      : finishing
+        ? `Finishing the scan after ${formatCount(progress.entriesScanned)} entries.`
+        : `Scanned ${formatCount(progress.entriesScanned)} entries and ${formatBytes(progress.allocatedBytes)}.`,
+  };
+}
+
 export interface ScanItem {
   id: number;
   name: string;

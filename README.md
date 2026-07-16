@@ -194,6 +194,7 @@ exercise the complete workflow without a native process:
 http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=finishing
+http://localhost:1420/?mock=finishing-cancel-error
 http://localhost:1420/?mock=cancel-error
 http://localhost:1420/?mock=discard-error
 http://localhost:1420/?mock=picker-error
@@ -218,7 +219,9 @@ chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
 scan active after a failed stop request so its recovery state can be exercised.
 `?mock=finishing` holds the scan after traversal so the cancellable result-
-preparation state can be reviewed without a large native fixture.
+preparation state and its delayed Stop acknowledgement can be reviewed without
+a large native fixture. `?mock=finishing-cancel-error` keeps that phase active
+after Stop fails so its recovery treatment can be checked separately.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

@@ -44,6 +44,7 @@
     describeEntry,
     isCancellationError,
     metricBytes,
+    scanProgressPresentation,
     type ChartItem,
     type CompressionCapability,
     type CompressionState,
@@ -191,7 +192,7 @@
   );
   const dropOverlayVisible = $derived(dropActive || isPreparingDroppedFolder);
   const displayProgress = $derived(
-    progress ?? {
+    progress ?? ({
       phase: "scanning",
       entriesScanned: 0,
       filesScanned: 0,
@@ -202,10 +203,10 @@
       currentPath: path,
       elapsedMs: 0,
       largestItems: [],
-    },
+    } satisfies ScanProgress),
   );
-  const isFinishingScan = $derived(
-    status !== "cancelling" && displayProgress.phase === "finishing",
+  const progressPresentation = $derived(
+    scanProgressPresentation(displayProgress, status === "cancelling"),
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
   $effect(() => {
@@ -230,13 +231,6 @@
   );
   const scanTargetName = $derived(
     path.split(/[\\/]/).filter(Boolean).at(-1) ?? path,
-  );
-  const scanAnnouncement = $derived(
-    status === "cancelling"
-      ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
-      : isFinishingScan
-        ? `Finishing the scan after ${formatCount(displayProgress.entriesScanned)} entries.`
-        : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
   );
   const searchActive = $derived(searchQuery.trim().length > 0);
   const visibleItems = $derived(
@@ -1294,17 +1288,13 @@
       inert={dropOverlayVisible}
       aria-hidden={dropOverlayVisible ? "true" : undefined}
     >
-      <p class="sr-only" aria-live="polite">{scanAnnouncement}</p>
+      <p class="sr-only" aria-live="polite">{progressPresentation.announcement}</p>
       <section class="scan-progress" aria-labelledby="scan-progress-title">
         <div class="scan-titlebar">
           <div>
             <span class="scan-kicker">
               <span class="status-dot" aria-hidden="true"></span>
-              {status === "cancelling"
-                ? "Stopping"
-                : isFinishingScan
-                  ? "Finishing"
-                  : "Scanning"}
+              {progressPresentation.statusLabel}
             </span>
             <h1 id="scan-progress-title">{scanTargetName}</h1>
           </div>
@@ -1334,16 +1324,14 @@
         {/if}
 
         <div class="scan-total">
-          <span>{isFinishingScan ? "Space found" : "Found so far"}</span>
+          <span>{progressPresentation.totalLabel}</span>
           <strong>{formatBytes(displayProgress.allocatedBytes)}</strong>
         </div>
         <p
           class="scan-path"
-          title={isFinishingScan ? undefined : displayProgress.currentPath}
+          title={progressPresentation.currentLabel ? undefined : displayProgress.currentPath}
         >
-          {isFinishingScan
-            ? "Preparing results…"
-            : displayProgress.currentPath || path}
+          {progressPresentation.currentLabel ?? (displayProgress.currentPath || path)}
         </p>
 
         <div class="scan-line" aria-hidden="true"><span></span></div>
