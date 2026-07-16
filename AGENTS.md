@@ -183,9 +183,11 @@ and searches. Preserve its one chart Tab stop, at most two list Tab stops,
 bounded initial and logical chart nodes, clean page-error capture, no horizontal
 overflow, backend disclosure, and state-file cleanup. It also exercises chart
 arrow/Home movement, list arrow movement for both the primary and Reveal action
-kinds, and Enter activation of a chart folder. This is programmatic WebView/IPC
-and keyboard-event evidence, not native picker, physical input, assistive-
-technology, drag-and-drop, or installed-package proof.
+kinds, and Enter activation of a chart folder. It then returns Home, verifies
+landing focus and rejection of the discarded scan ID, and completes a second
+scan in the same process with result-heading focus restored. This is
+programmatic WebView/IPC and keyboard-event evidence, not native picker,
+physical input, assistive-technology, drag-and-drop, or installed-package proof.
 macOS CI runs the harness directly. Linux CI runs the same production protocol
 under isolated Xvfb and DBus sessions through `native-scan-smoke-linux`; keep
 that gate after the ordinary native build and before packaging. Windows remains

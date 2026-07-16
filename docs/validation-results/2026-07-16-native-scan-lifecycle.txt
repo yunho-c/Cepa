@@ -1,0 +1,39 @@
+Cepa native production-WebView scan lifecycle validation
+Date: 2026-07-16
+Candidate baseline: 960d56b
+
+macOS WebKit at 620x480: passed
+- first scanner: macOS native
+- Home returned to landing: passed
+- landing heading focus restored: passed
+- discarded scan directory request rejected: passed
+- second scan completed in the same process: passed
+- second result heading focus restored: passed
+- second scanner remained macOS native: passed
+- second result rows/chart nodes: 2 / 1
+- uncaught page errors: 0
+- process start through complete two-scan report: 1,006 ms
+
+Linux WebKitGTK at 620x480: passed
+- first scanner: Linux native
+- Home returned to landing: passed
+- landing heading focus restored: passed
+- discarded scan directory request rejected: passed
+- second scan completed in the same process: passed
+- second result heading focus restored: passed
+- second scanner remained Linux native: passed
+- second result rows/chart nodes: 32 / 272
+- uncaught page errors: 0
+- process start through complete two-scan report: 1,291 ms
+
+The Linux run used Rust 1.97.0, a disposable user-local WebKitGTK 4.1
+development/runtime sysroot, isolated Xvfb and DBus sessions, and an
+unprivileged mount namespace for WebKit helper discovery. The application and
+WebKit sandboxes were not disabled. The standing checkout and system
+installation were unchanged.
+
+This proves one fresh process's scan, navigation, search, scan-authorized
+discard, stale-ID rejection, landing restoration, and rescan path through the
+production bundled frontend and Tauri IPC. It is not installed-package,
+physical-input, native-picker, drag-and-drop, or large-snapshot release-latency
+evidence.

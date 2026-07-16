@@ -220,10 +220,13 @@ scan response and two painted frames, switches metrics, navigates into a
 directory, performs a debounced folder search, and validates bounded focus and
 overflow invariants in both size metrics while rejecting uncaught page errors.
 It moves chart focus with Arrow/Home, moves both list action kinds with arrows,
-and opens a chart folder with Enter. Its window state uses a dedicated filename
-that is removed after the run. This proves programmatic production-WebView, IPC,
-and keyboard-event behavior; it does not exercise physical input, assistive
-technology, the native folder picker, drag-and-drop, or an installed package.
+opens a chart folder with Enter, returns Home, confirms the discarded scan is no
+longer addressable, and completes a second scan in the same process. Landing and
+second-result heading focus must both be restored. Its window state uses a
+dedicated filename that is removed after the run. This proves programmatic
+production-WebView, IPC, keyboard-event, and completed-scan lifecycle behavior;
+it does not exercise physical input, assistive technology, the native folder
+picker, drag-and-drop, or an installed package.
 
 Linux CI and provisioned Linux workstations run the same proof inside isolated
 display and session buses:

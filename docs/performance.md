@@ -1314,6 +1314,24 @@ keyboard, screen-reader, or broader assistive-technology certification. The
 exact validation record is preserved in
 [`validation-results/2026-07-16-native-keyboard-webviews.txt`](validation-results/2026-07-16-native-keyboard-webviews.txt).
 
+### 2026-07-16 same-process scan lifecycle smoke
+
+A follow-up candidate based on `960d56b` extends the production harness through
+the lifecycle after search. It activates Home, waits for the landing heading to
+own focus, directly verifies that the first completed scan ID can no longer open
+a directory, and submits the same fixture again. The second scan must complete
+in the same process, restore focus to its result heading, render nonempty bounded
+rows and chart nodes, and select the same native backend.
+
+The flow passed once in macOS WebKit with `macOS native` and once in Linux
+WebKitGTK with `Linux native`. The macOS process completed both scans and all
+preceding interactions in 1,006 ms; the Linux process completed them in
+1,291 ms. These single warm observations are runtime correctness evidence, not
+comparative performance results. The Linux run again used the disposable
+WebKitGTK sysroot and unprivileged helper mount without disabling WebKit's
+sandbox. The exact assertions and scope are preserved in
+[`validation-results/2026-07-16-native-scan-lifecycle.txt`](validation-results/2026-07-16-native-scan-lifecycle.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

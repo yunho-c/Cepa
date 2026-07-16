@@ -220,6 +220,15 @@ fn validate_report(report: &Value) -> bool {
         && report["searchedRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["landingFocusRestored"].as_bool() == Some(true)
+        && report["staleScanRejected"].as_bool() == Some(true)
+        && report["rescanCompleted"].as_bool() == Some(true)
+        && report["rescanResultFocused"].as_bool() == Some(true)
+        && report["rescanRows"].as_u64().is_some_and(|count| count > 0)
+        && report["rescanChartSegments"]
+            .as_u64()
+            .is_some_and(|count| count > 0 && count <= 512)
+        && report["rescanBackendLabel"] == report["backendLabel"]
         && report["scanDetailsPresent"].as_bool() == Some(true)
         && report["backendLabel"]
             .as_str()
@@ -267,19 +276,24 @@ void (async () => {{
   const phase = (name) => {{
     history.replaceState(null, '', '#CEPA_NATIVE_SCAN_SMOKE_PHASE:' + name);
   }};
-  try {{
-    phase('waiting-for-manual-path');
-    const details = await waitFor(() => document.querySelector('.manual-path'), 'manual path entry');
+  const submitFixture = async (label) => {{
+    const details = await waitFor(() => document.querySelector('.manual-path'), `${{label}} manual path entry`);
     details.open = true;
     const input = details.querySelector('.path-input');
     const form = details.querySelector('.path-form');
     input.value = fixture;
     input.dispatchEvent(new Event('input', {{ bubbles: true }}));
     await frame();
-
+    form.requestSubmit();
+  }};
+  const backendLabel = () => [...document.querySelectorAll('.scan-details dl > div')]
+    .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Scanner')
+    ?.querySelector('dd')?.textContent?.trim() || '';
+  try {{
+    phase('waiting-for-manual-path');
     const scanStartedAt = performance.now();
     phase('scanning');
-    form.requestSubmit();
+    await submitFixture('initial');
     await waitFor(() => {{
       const error = document.querySelector('.error-callout');
       if (error) throw new Error(error.textContent?.trim() || 'The scan failed.');
@@ -295,9 +309,7 @@ void (async () => {{
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
     const scanDetailsPresent = document.querySelector('.scan-details') !== null;
-    const backendLabel = [...document.querySelectorAll('.scan-details dl > div')]
-      .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Scanner')
-      ?.querySelector('dd')?.textContent?.trim() || '';
+    const initialBackendLabel = backendLabel();
 
     const logicalButton = [...document.querySelectorAll('.metric-switch button')]
       .find((button) => button.textContent?.trim() === 'Logical');
@@ -312,6 +324,7 @@ void (async () => {{
     const metricSwitchMs = performance.now() - metricStartedAt;
     const logicalChartSegments = document.querySelectorAll('[data-chart-node-id]').length;
     const logicalChartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
+    const logicalMetricWasSelected = logicalMetricSelected();
 
     const chartNodes = [...document.querySelectorAll('[data-chart-node-id]')];
     if (chartNodes.length < 2) throw new Error('The logical chart needs two keyboard targets.');
@@ -363,6 +376,38 @@ void (async () => {{
     }}, 'folder search result');
     await painted();
     const searchMs = performance.now() - searchStartedAt;
+    const searchedRows = document.querySelectorAll('.storage-row').length;
+
+    phase('returning-home');
+    document.querySelector('[aria-label="Cepa home"]').click();
+    const landingHeading = await waitFor(
+      () => document.querySelector('#landing-title'),
+      'landing view after discard',
+    );
+    await painted();
+    const landingFocusRestored = document.activeElement === landingHeading;
+    let staleScanRejected = false;
+    try {{
+      // The smoke builder owns a fresh in-memory ScanState, whose first ID is 1.
+      await window.__TAURI_INTERNALS__.invoke('open_scan_directory', {{
+        scanId: 1,
+        nodeId: 0,
+        metric: 'allocated',
+      }});
+    }} catch {{
+      staleScanRejected = true;
+    }}
+
+    phase('rescanning');
+    await submitFixture('rescan');
+    await waitFor(() => document.querySelector('.results-view'), 'rescanned result');
+    await painted();
+    const rescanCompleted = document.querySelector('.results-view') !== null;
+    const rescanHeading = document.querySelector('.result-title h1');
+    const rescanResultFocused = document.activeElement === rescanHeading;
+    const rescanRows = document.querySelectorAll('.storage-row').length;
+    const rescanChartSegments = document.querySelectorAll('[data-chart-node-id]').length;
+    const rescanBackendLabel = backendLabel();
 
     report({{
       ok: true,
@@ -381,12 +426,19 @@ void (async () => {{
       listArrowMoved,
       revealArrowPreserved,
       horizontalOverflow,
-      logicalMetricSelected: logicalMetricSelected(),
+      logicalMetricSelected: logicalMetricWasSelected,
       navigationChangedFolder: navigatedHeading !== rootHeading,
       searchStatus,
-      searchedRows: document.querySelectorAll('.storage-row').length,
+      searchedRows,
+      landingFocusRestored,
+      staleScanRejected,
+      rescanCompleted,
+      rescanResultFocused,
+      rescanRows,
+      rescanChartSegments,
       scanDetailsPresent,
-      backendLabel,
+      backendLabel: initialBackendLabel,
+      rescanBackendLabel,
       pageErrors,
     }});
   }} catch (error) {{
@@ -444,14 +496,25 @@ mod tests {
             "navigationChangedFolder": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
+            "landingFocusRestored": true,
+            "staleScanRejected": true,
+            "rescanCompleted": true,
+            "rescanResultFocused": true,
+            "rescanRows": 4,
+            "rescanChartSegments": 8,
             "scanDetailsPresent": true,
             "backendLabel": "macOS native",
+            "rescanBackendLabel": "macOS native",
         });
         assert!(validate_report(&complete));
 
         let mut broken_keyboard = complete.clone();
         broken_keyboard["revealArrowPreserved"] = false.into();
         assert!(!validate_report(&broken_keyboard));
+
+        let mut stale_scan_retained = complete.clone();
+        stale_scan_retained["staleScanRejected"] = false.into();
+        assert!(!validate_report(&stale_scan_retained));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();
