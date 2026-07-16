@@ -549,6 +549,8 @@ body {
 .cancelled-callout div { min-width: 0; display: grid; gap: 3px; font-size: 12px; }
 .error-callout span,
 .cancelled-callout span { color: var(--muted-foreground); line-height: 1.45; overflow-wrap: anywhere; }
+.state-error-details { margin-top: 1px; }
+.state-error-details p { color: var(--muted-foreground); }
 .error-callout:focus,
 .cancelled-callout:focus,
 .landing h1:focus,
@@ -730,7 +732,7 @@ body {
 .selection-inspector { min-height: 0; margin: 12px 0 4px; padding: 14px; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; display: flex; flex-direction: column; background: var(--muted); }
 .inspector-heading { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .inspector-body { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.inspector-heading > div { min-width: 0; display: grid; gap: 2px; }
+.inspector-heading-copy { min-width: 0; display: grid; gap: 2px; }
 .inspector-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
 .inspector-heading span,
 .inspection-state span,
@@ -750,9 +752,12 @@ body {
 .estimate-readout strong { font-size: 14px; letter-spacing: -0.02em; }
 .estimate-action-error { grid-column: 1 / -1; padding-top: 8px; border-top: 1px solid var(--error-border); display: flex; align-items: flex-start; gap: 7px; color: var(--destructive); }
 .estimate-action-error > svg { width: 13px; flex: 0 0 auto; margin-top: 1px; }
+.estimate-action-error-copy { min-width: 0; display: grid; gap: 2px; }
 .estimate-action-error p { min-width: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 2px 5px; font-size: 10px; line-height: 1.4; }
 .estimate-action-error strong { font-size: inherit; letter-spacing: normal; }
 .estimate-action-error span { color: var(--muted-foreground); }
+.estimate-action-error .estimate-action-error-details { margin-top: 0; }
+.estimate-action-error .estimate-action-error-details p { display: block; margin-top: 4px; color: var(--muted-foreground); }
 .estimate-action-error:focus { outline: none; }
 .metadata-disclosure { grid-column: 1 / -1; margin-top: 9px; color: var(--muted-foreground); font-size: 10px; }
 .metadata-disclosure > summary { width: fit-content; padding: 2px 0; color: var(--muted-foreground); font-size: 10px; cursor: pointer; }

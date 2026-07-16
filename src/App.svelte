@@ -36,6 +36,10 @@
     type NavigationRecovery,
   } from "$lib/result-action-recovery";
   import {
+    scanEntryRecoveryMessage,
+    scanFailurePresentation,
+  } from "$lib/recovery-copy";
+  import {
     shouldShowScanRoots,
     type ScanRoot,
     type ScanRootsStatus,
@@ -93,6 +97,7 @@
   let navigationSequence = 0;
   let isDiscardingScan = $state(false);
   let errorHeading = $state("That scan didn’t start.");
+  let errorGuidance = $state("Check the folder and try again.");
   let errorMessage = $state("");
   let scanStarted = $state(false);
   let scanActionError = $state("");
@@ -339,13 +344,14 @@
 
   async function showScanEntryError(
     title: string,
-    message: string,
+    detail: string,
+    guidance: string,
     recovery: NavigationRecovery | null = null,
   ) {
     if (status === "complete" && result && view) {
       clearRevealError();
       navigationErrorTitle = title;
-      navigationError = message;
+      navigationError = detail;
       navigationRecovery = recovery;
       await tick();
       navigationNotice?.focus();
@@ -354,7 +360,8 @@
       scanStarted = false;
       scanActionError = "";
       errorHeading = title;
-      errorMessage = message;
+      errorGuidance = guidance;
+      errorMessage = detail;
       await tick();
       stateNotice?.focus();
     }
@@ -381,7 +388,11 @@
       if (request !== dropSequence) return;
       preparingScanRoot = null;
       clearDropState();
-      await showScanEntryError("That folder can’t be scanned.", String(error));
+      await showScanEntryError(
+        "That folder can’t be scanned.",
+        String(error),
+        scanEntryRecoveryMessage("folder"),
+      );
     }
   }
 
@@ -414,7 +425,8 @@
         clearDropState();
         void showScanEntryError(
           "Drop one folder at a time.",
-          "Choose a single folder and try again.",
+          "That drop did not contain exactly one folder.",
+          scanEntryRecoveryMessage("drop"),
         );
         break;
       case "ignore":
@@ -484,6 +496,7 @@
       await showScanEntryError(
         "Folder picker didn’t open.",
         String(error),
+        scanEntryRecoveryMessage("picker"),
         { kind: "chooseDirectory" },
       );
     }
@@ -503,6 +516,7 @@
     scanStarted = false;
     scanActionError = "";
     errorHeading = "That scan didn’t start.";
+    errorGuidance = "Check the folder and try again.";
     errorMessage = "";
     clearNavigationError();
     navigationErrorTitle = "That folder could not be opened.";
@@ -528,6 +542,9 @@
       resolveScan = resolve;
       rejectScan = reject;
     });
+    // A terminal channel event can beat the immediate command acknowledgement.
+    // Observe rejection now; awaiting this same promise below still propagates it.
+    void completion.catch(() => {});
     const onEvent = new Channel<ScanEvent>();
     onEvent.onmessage = (message) => {
       if (message.event === "started") {
@@ -573,9 +590,9 @@
       } else {
         status = "error";
         scanId = null;
-        errorHeading = scanStarted
-          ? "The scan couldn’t finish."
-          : "That scan didn’t start.";
+        const presentation = scanFailurePresentation(scanStarted);
+        errorHeading = presentation.heading;
+        errorGuidance = presentation.guidance;
         errorMessage = message;
       }
       await tick();
@@ -641,6 +658,7 @@
     scanStarted = false;
     scanActionError = "";
     errorHeading = "That scan didn’t start.";
+    errorGuidance = "Check the folder and try again.";
     scanId = null;
     progress = null;
     result = null;
@@ -1420,7 +1438,7 @@
             </form>
           </details>
 
-          {#if status === "error" && errorMessage}
+          {#if status === "error"}
             <div
               class="error-callout"
               role="alert"
@@ -1430,7 +1448,13 @@
               <AlertCircle />
               <div>
                 <strong>{errorHeading}</strong>
-                <span>{errorMessage}</span>
+                <span>{errorGuidance}</span>
+                {#if errorMessage}
+                  <details class="metadata-disclosure state-error-details">
+                    <summary>Error details</summary>
+                    <p>{errorMessage}</p>
+                  </details>
+                {/if}
               </div>
             </div>
           {:else if status === "cancelled"}
@@ -1490,7 +1514,11 @@
             <AlertCircle />
             <div>
               <strong>Couldn’t stop the scan.</strong>
-              <span>{scanActionError} The scan is still running; try again.</span>
+              <span>The scan is still running. Try stopping it again.</span>
+              <details class="metadata-disclosure state-error-details">
+                <summary>Error details</summary>
+                <p>{scanActionError}</p>
+              </details>
             </div>
           </div>
         {/if}
@@ -1803,7 +1831,7 @@
               aria-live="polite"
             >
               <header class="inspector-heading">
-                <div>
+                <div class="inspector-heading-copy">
                   <span>{inspectedEntry.kind === "file" ? "File details" : "Item details"}</span>
                   <strong title={inspectedEntry.name}>{inspectedEntry.name}</strong>
                 </div>
@@ -1849,14 +1877,19 @@
                         class="estimate-action-error"
                         role="alert"
                         tabindex="-1"
-                        title={estimateActionError}
                         bind:this={estimateActionNotice}
                       >
                         <AlertCircle aria-hidden="true" />
-                        <p>
-                          <strong>Couldn’t stop estimating.</strong>
-                          <span>The estimate is still running. Try again.</span>
-                        </p>
+                        <div class="estimate-action-error-copy">
+                          <p>
+                            <strong>Couldn’t stop estimating.</strong>
+                            <span>The estimate is still running. Try again.</span>
+                          </p>
+                          <details class="metadata-disclosure estimate-action-error-details">
+                            <summary>Error details</summary>
+                            <p>{estimateActionError}</p>
+                          </details>
+                        </div>
                       </div>
                     {/if}
                   </div>

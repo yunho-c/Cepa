@@ -111,6 +111,14 @@ offers Stop again; do not turn that command failure into a terminal scan error.
 Folder-picker failures are likewise contextual: preserve a completed result and
 show the error inline, while a first-launch failure remains on the landing view
 with a picker-specific heading rather than pretending a scan began.
+Landing, scan-stop, and estimate-stop failures lead with calm, actionable copy;
+the exact backend or platform error belongs under their collapsed `Error
+details` disclosure. Do not concatenate raw errors into the primary alert text
+or remove the diagnostic disclosure. A terminal channel event can arrive before
+the immediate `scan_directory` acknowledgement resolves, so observe the scan
+completion promise as soon as it is created while still awaiting it normally
+after acknowledgement; otherwise a handled terminal failure can briefly become
+an unhandled WebView rejection.
 The native folder-drop overlay is interaction-exclusive while a drag is active
 or its single dropped folder is being validated. Keep the covered header and
 current main view inert and out of the accessibility tree; keyboard and screen
@@ -158,8 +166,10 @@ The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
 overflowing the explorer at the minimum window height. Keep its identity header
 and live Estimate Cancel action outside the scrollable evidence body so a focused
-recovery message cannot hide the selected item or retry control. In the 560
-through 720 logical-pixel compact two-column layout, keep the primary Estimate
+recovery message cannot hide the selected item or retry control. Keep Cancel and
+Close in one horizontal action row; scope heading-copy layout to its named copy
+wrapper instead of a broad child selector that also matches the actions. In the
+560 through 720 logical-pixel compact two-column layout, keep the primary Estimate
 prompt inline so its action remains visible at 620 by 480; secondary metadata
 may stay below the inspector fold. Browser previews below 560 pixels use the
 stacked prompt.
@@ -201,8 +211,10 @@ disposable fixture, waits through painted frames, switches metrics, navigates,
 and searches. Its optional third fixture is a regular file and runs before the
 other flows: the acknowledged real scan must terminate through the failed
 channel event, show and focus the finishing-error callout, and preserve recovery
-entry points. Its optional second fixture then starts a bounded long scan,
-activates Stop, requires the cancelled notice to own focus, and verifies that
+entry points. The primary guidance must remain cause-neutral, `Error details`
+must stay collapsed, and the early terminal event must not register as an
+unhandled page rejection. Its optional second fixture then starts a bounded long
+scan, activates Stop, requires the cancelled notice to own focus, and verifies that
 the landing scan entry points remain available. Preserve its one chart Tab
 stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
 page-error capture, no horizontal overflow, backend disclosure, and state-file
@@ -601,6 +613,8 @@ Start with these files:
   ownership check for delayed completed-scan actions.
 - `src/lib/result-action-recovery.ts`: scan-local navigation retry descriptors
   and cause-neutral preservation copy for completed-result failures.
+- `src/lib/recovery-copy.ts`: cause-neutral scan-entry and terminal-failure
+  guidance kept separate from exact diagnostic details.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
   canonical radial-C identity.
 - `scripts/benchmark-count-format.ts`: alternating frontend compact-number

@@ -1,0 +1,129 @@
+Cepa recovery-surface polish validation
+Date: 2026-07-16
+Base commit: 949906f
+
+Scope
+-----
+
+This candidate separates primary recovery guidance from exact platform errors
+for scan entry, terminal scan failure, scan-stop failure, and estimate-stop
+failure. Exact diagnostics remain available under collapsed Error details. It
+also keeps estimator Cancel and Close actions on one row at 620 by 480 and
+observes terminal scan completion rejection before the immediate command
+acknowledgement can race it into an unhandled WebView rejection.
+
+Exact code-candidate source hashes
+----------------------------------
+
+1aa784b1100bdbdac55cfb3200e1b1f05330c97bd865e4951d818ff470b01015  src/App.svelte
+d9ae2d638256459a861dbddfa8ef70c71283b5a82a4a140c98c230be82b25e80  src/app.css
+d2410c7b2c0c1809c6cf361d571f0a7edfb8c9288bf116e74ff9a1cfb37bf6e0  src-tauri/examples/native_scan_smoke.rs
+b68000114dc016e365f6bd6f3371c46c2bdc692be6807c6e06bf31f8b9844ddb  src/lib/recovery-copy.ts
+
+Development-WebView inspection
+------------------------------
+
+The terminal scan, folder-picker, finishing-stop, and estimate-stop development
+scenarios were inspected at 620 by 480 or 880 by 620 across both light and dark
+appearance. Primary copy remained actionable and free of backend acknowledgement
+vocabulary. Exact diagnostics were collapsed by default. The expanded terminal
+diagnostic remained within the 620-pixel viewport width.
+
+At 620 by 480, the estimator Cancel and Close controls shared one horizontal
+24-pixel-high row with a 4-pixel gap, the recovery message and Error details
+affordance remained visible, and the document had no horizontal overflow.
+Temporary screenshots were removed after inspection.
+
+Local macOS validation
+----------------------
+
+`just check`
+- Svelte diagnostics: 0 errors, 0 warnings
+- frontend tests: 52 passed
+- Rust library tests: 101 passed, 1 ignored
+- Tauri configuration tests: 6 passed
+- all example test targets passed
+- formatting, all-target check, and warning-denied Clippy passed
+
+`just build`
+- Vite production bundle passed
+- release desktop application built without bundling
+
+Windows GNU cross-target
+- all-target `cargo check` passed
+- all-target warning-denied `cargo clippy` passed
+- native Windows/WebView2 execution was not available for this candidate
+
+The first production macOS smoke rendered and recovered from the terminal scan
+failure, but its page-error collector observed `Choose a directory to scan.`.
+The failed channel event had rejected the completion promise before the immediate
+command acknowledgement await attached its handler. After immediate observation
+of that same promise was added, the exact final candidate passed with:
+
+backendLabel: macOS native
+cancellationMs: 51
+discardedScanId: 3
+noMatchStatus: 0 matches
+noMatchPanelContained: true
+noMatchRecoveryContained: true
+terminalFailureShown: true
+terminalFailureFocusRestored: true
+terminalFailureRecoveryAvailable: true
+terminalFailureGuidanceCalm: true
+terminalFailureDetailsCollapsed: true
+pageErrors: []
+horizontalOverflow: false
+staleScanRejected: true
+rescanCompleted: true
+rescanBackendLabel: macOS native
+ok: true
+
+Linux Rust 1.97 and production WebKitGTK validation
+--------------------------------------------------
+
+An exact disposable code candidate was built on Ubuntu with:
+
+rustc 1.97.0 (2d8144b78 2026-07-07)
+
+Desktop dependencies came from a disposable user-local sysroot. The production
+WebKitGTK process ran under isolated Xvfb and DBus sessions, with WebKit helpers
+exposed only inside an unprivileged mount namespace. The standing checkout and
+system installation were not changed.
+
+- formatting passed
+- full desktop all-target `cargo check` passed
+- full desktop all-target warning-denied `cargo clippy` passed
+- Rust library tests: 103 passed, 2 ignored
+- Tauri configuration tests: 6 passed
+- all example test targets passed
+- Vite production bundle passed
+
+The release production WebKitGTK report included:
+
+backendLabel: Linux native
+cancellationMs: 50
+discardedScanId: 3
+noMatchStatus: 0 matches
+noMatchPanelContained: true
+noMatchRecoveryContained: true
+terminalFailureShown: true
+terminalFailureFocusRestored: true
+terminalFailureRecoveryAvailable: true
+terminalFailureGuidanceCalm: true
+terminalFailureDetailsCollapsed: true
+pageErrors: []
+horizontalOverflow: false
+staleScanRejected: true
+rescanCompleted: true
+rescanBackendLabel: Linux native
+ok: true
+
+Evidence boundary
+-----------------
+
+These checks cover deterministic recovery-copy helpers, the known CSS-cascade
+regression, mocked browser rendering, real macOS and Linux production WebViews,
+native scanner IPC, cancellation, search, discard, stale-ID rejection, and
+rescan. They do not certify physical input, screen readers, magnification,
+arbitrary localized or platform error lengths, installed packages, or native
+Windows execution.

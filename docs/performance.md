@@ -1453,6 +1453,42 @@ failure, permission-denied root, native picker failure, physical input, or
 Windows WebView2. The exact record is preserved in
 [`validation-results/2026-07-16-native-terminal-failure.txt`](validation-results/2026-07-16-native-terminal-failure.txt).
 
+### 2026-07-16 calm recovery surfaces and terminal-event observation
+
+A rendered-state audit found that landing, scan-stop, and estimate-stop failures
+still placed exact platform errors in the primary interface. The scan-stop mock,
+for example, displayed acknowledgement vocabulary next to the still-live scan.
+Recovery surfaces now lead with short, actionable guidance and retain the exact
+diagnostic under a collapsed `Error details` disclosure. Dedicated presentation
+helpers keep rejected-start and failed-in-progress copy distinct and covered by
+frontend tests.
+
+The compact estimator state also exposed a cascade collision: the broad
+`.inspector-heading > div` copy rule overrode the named action row's flex layout.
+Cancel and Close therefore stacked at 620×480. The copy wrapper now has its own
+class, the action row remains horizontal, and a source regression rejects the
+broad selector. Development scenarios for terminal scan, folder-picker,
+scan-stop, and estimate-stop failures were inspected at the supported minimum
+and default sizes across light and dark appearances. Collapsed and expanded
+landing diagnostics had no horizontal overflow; the estimator actions remained
+on one 24-pixel-high row at the minimum size.
+
+The first production macOS run then exposed a transport-ordering race. A failed
+terminal channel event could reject the completion promise before the immediate
+`scan_directory` acknowledgement await attached its handler. The UI recovered,
+but the WebView emitted a transient unhandled rejection. The promise is now
+observed immediately after construction while the later await still propagates
+the same failure normally. A second macOS run and an exact Linux Rust 1.97.0
+WebKitGTK run both reported calm terminal guidance, collapsed diagnostic details,
+no page errors, native backends, successful cancellation, and the full remaining
+scan lifecycle. The production harness validates these fields directly.
+
+This is deterministic copy, compact geometry, and programmatic production-
+WebView evidence. It does not cover physical input, assistive technology,
+installed packages, arbitrary platform error lengths, or native Windows
+WebView2. Exact source hashes and suite/runtime results are preserved in
+[`validation-results/2026-07-16-recovery-surface-polish.txt`](validation-results/2026-07-16-recovery-surface-polish.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

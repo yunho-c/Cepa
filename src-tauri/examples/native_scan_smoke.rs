@@ -268,6 +268,8 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["terminalFailureShown"].as_bool() == Some(true)
         && report["terminalFailureFocusRestored"].as_bool() == Some(true)
         && report["terminalFailureRecoveryAvailable"].as_bool() == Some(true)
+        && report["terminalFailureGuidanceCalm"].as_bool() == Some(true)
+        && report["terminalFailureDetailsCollapsed"].as_bool() == Some(true)
         && report["cancellationStopped"].as_bool() == Some(true)
         && report["cancellationFocusRestored"].as_bool() == Some(true)
         && report["cancellationRecoveryAvailable"].as_bool() == Some(true)
@@ -368,6 +370,8 @@ void (async () => {{
     let terminalFailureShown = failureFixture === null;
     let terminalFailureFocusRestored = failureFixture === null;
     let terminalFailureRecoveryAvailable = failureFixture === null;
+    let terminalFailureGuidanceCalm = failureFixture === null;
+    let terminalFailureDetailsCollapsed = failureFixture === null;
     if (failureFixture !== null) {{
       phase('failing-scan');
       await submitPath(failureFixture, 'failure');
@@ -381,6 +385,14 @@ void (async () => {{
         failureNotice.textContent?.includes('The scan couldn’t finish.') === true;
       terminalFailureFocusRestored = document.activeElement === failureNotice;
       terminalFailureRecoveryAvailable = document.querySelector('.manual-path') !== null;
+      const failureGuidance = failureNotice.querySelector('span')?.textContent?.trim() || '';
+      const failureDetails = failureNotice.querySelector('details');
+      terminalFailureGuidanceCalm =
+        failureGuidance === 'No results were saved. Choose another folder or try again.';
+      terminalFailureDetailsCollapsed =
+        failureDetails !== null
+        && !failureDetails.open
+        && failureDetails.querySelector('summary')?.textContent?.trim() === 'Error details';
     }}
 
     let cancellationStopped = cancellationFixture === null;
@@ -591,6 +603,8 @@ void (async () => {{
       terminalFailureShown,
       terminalFailureFocusRestored,
       terminalFailureRecoveryAvailable,
+      terminalFailureGuidanceCalm,
+      terminalFailureDetailsCollapsed,
       cancellationStopped,
       cancellationFocusRestored,
       cancellationRecoveryAvailable,
@@ -641,7 +655,8 @@ mod tests {
 
     #[test]
     fn requires_every_native_flow_invariant() {
-        let complete = serde_json::json!({
+        let complete = serde_json::from_str::<serde_json::Value>(
+            r#"{
             "ok": true,
             "pageReadyMs": 100.0,
             "processToReportMs": 500.0,
@@ -668,6 +683,8 @@ mod tests {
             "terminalFailureShown": true,
             "terminalFailureFocusRestored": true,
             "terminalFailureRecoveryAvailable": true,
+            "terminalFailureGuidanceCalm": true,
+            "terminalFailureDetailsCollapsed": true,
             "cancellationStopped": true,
             "cancellationFocusRestored": true,
             "cancellationRecoveryAvailable": true,
@@ -681,8 +698,10 @@ mod tests {
             "rescanChartSegments": 8,
             "scanDetailsPresent": true,
             "backendLabel": "macOS native",
-            "rescanBackendLabel": "macOS native",
-        });
+            "rescanBackendLabel": "macOS native"
+        }"#,
+        )
+        .expect("parse complete native flow fixture");
         assert!(validate_report(&complete, 2));
 
         let mut broken_keyboard = complete.clone();
@@ -702,6 +721,10 @@ mod tests {
         let mut terminal_failure_focus_lost = complete.clone();
         terminal_failure_focus_lost["terminalFailureFocusRestored"] = false.into();
         assert!(!validate_report(&terminal_failure_focus_lost, 2));
+
+        let mut terminal_failure_details_exposed = complete.clone();
+        terminal_failure_details_exposed["terminalFailureDetailsCollapsed"] = false.into();
+        assert!(!validate_report(&terminal_failure_details_exposed, 2));
 
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();

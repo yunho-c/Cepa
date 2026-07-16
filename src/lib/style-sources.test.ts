@@ -7,4 +7,15 @@ describe("production style sources", () => {
     expect(stylesheet).toContain('@import "tailwindcss" source(none);');
     expect(stylesheet.match(/^@source .+;$/gm)).toEqual(['@source ".";']);
   });
+
+  test("keeps inspector copy rules from overriding the action row", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+
+    expect(component).toContain('class="inspector-heading-copy"');
+    expect(stylesheet).toContain(".inspector-heading-copy {");
+    expect(stylesheet).not.toContain(".inspector-heading > div {");
+  });
 });

@@ -31,6 +31,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   cancelled full scan arena away from the foreground response path
 - Failed stop requests keep the live scan visible and make cancellation retryable
 - Folder-picker failures preserve an existing completed result and remain retryable
+- Scan-entry and stop failures lead with actionable recovery guidance while exact
+  platform diagnostics remain available under collapsed error details
 - Logical and allocated byte accounting, with exact allocation on macOS,
   non-Btrfs Unix filesystems, and native Windows MFT scans; Btrfs and portable
   Windows scans are explicitly labeled estimates
@@ -225,9 +227,11 @@ The harness builds the frontend and explicitly enables Tauri's production
 custom protocol. It first submits the optional third fixture, which must be a
 regular file, through the real scan command. The acknowledged scan must fail
 through its terminal channel event, focus the finishing-error callout, and leave
-scan recovery available. It next starts the optional second fixture as a larger
-scan, activates the real Stop control, and requires the cancelled landing notice
-to own focus while another scan remains available. It then submits the ordinary
+scan recovery available. Its primary guidance must stay cause-neutral, its exact
+diagnostic must remain collapsed, and the early terminal event must not surface
+as an unhandled page rejection. It next starts the optional second fixture as a
+larger scan, activates the real Stop control, and requires the cancelled landing
+notice to own focus while another scan remains available. It then submits the ordinary
 completion fixture, waits for the terminal channel event
 and two painted frames, switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates
@@ -294,12 +298,13 @@ scan active after a failed stop request so its recovery state can be exercised.
 `?mock=finishing` holds the scan after traversal so the cancellable result-
 preparation state and its delayed Stop acknowledgement can be reviewed without
 a large native fixture. `?mock=finishing-cancel-error` keeps that phase active
-after Stop fails so its recovery treatment can be checked separately.
+after Stop fails so its recovery treatment and collapsed diagnostic can be
+checked separately.
 `?mock=inspection-error` verifies that a failed per-item metadata read stays
 cause-neutral in the primary inspector while retaining its reason in disclosure.
 `?mock=estimate-cancel-error` deliberately leaves the estimate pending after
 Cancel fails, matching the production contract that the live operation and its
-retry action must remain visible.
+retry action must remain visible while Cancel and Close stay on one row.
 `?mock=estimate-error` verifies cause-neutral primary copy, disclosed failure
 evidence, and the Estimate again recovery action after estimation itself fails.
 `?mock=search-error` fails the first folder search and then succeeds, covering
@@ -315,6 +320,8 @@ request-generation guard—not an incidental ID change—must prevent an old vie
 error from entering the new workflow.
 `?mock=picker-error` covers a first-launch picker failure, while
 `?mock=picker-recovery` fails only after a completed scan is visible.
+`?mock=error` covers a terminal scan failure with actionable primary copy and a
+collapsed exact diagnostic.
 The two estimate-cancel scenarios cover an immediate failed stop request and a
 late failure delivered after the estimate has already completed.
 The drop preview is visual only; use `just dev` and drag a real folder from the
