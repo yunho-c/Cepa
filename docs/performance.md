@@ -1332,6 +1332,42 @@ WebKitGTK sysroot and unprivileged helper mount without disabling WebKit's
 sandbox. The exact assertions and scope are preserved in
 [`validation-results/2026-07-16-native-scan-lifecycle.txt`](validation-results/2026-07-16-native-scan-lifecycle.txt).
 
+### 2026-07-16 production scan-cancellation transport
+
+Extending the production WebView harness to activate Stop exposed a transport
+defect that the scanner-only cancellation benchmarks could not observe.
+`scan_directory` kept its request-response IPC open until traversal and
+aggregation finished. In macOS WebKit, a later `cancel_scan` invocation was
+serialized behind that open command: the UI changed to `Stopping…`, but Rust did
+not receive the cancellation command before the scan completed.
+
+The command now sends the new scan ID immediately and returns that same ID as
+its acknowledgement. Started, bounded progress, completed response, and failed
+terminal state are ordered on the existing Tauri channel. The completed snapshot
+is installed before its terminal event is sent; if that send fails, the matching
+snapshot is detached and its final owner is released on the blocking pool. A
+focused serialization regression also guards camel-case `scanId` fields for the
+enum channel contract.
+
+The native harness now accepts a separate cancellation fixture and requires an
+enabled Stop control, the `Scan stopped.` landing state, focus restoration to
+that notice, and an available recovery scan entry point before continuing
+through the ordinary scan, keyboard, search, discard, stale-ID, and rescan flow.
+A requested 25,000-directory fixture was too fast to expose Stop reliably on
+the measured Linux host, so CI uses 100,000 requested leaf directories with one
+empty file each. Fixture creation took 1.57 seconds there.
+
+Three production macOS WebView runs on that larger fixture acknowledged and
+rendered cancellation in 50–125 ms. One production Linux WebKitGTK run under
+Xvfb, DBus, and the same unprivileged helper namespace used by the earlier smoke
+completed it in 147 ms. All four restored cancellation focus and recovery,
+reported no page error, and subsequently completed the full lifecycle. The
+Linux candidate was compiled with Rust 1.97.0. These are end-to-end warm runtime
+correctness observations on two hosts, not filesystem throughput benchmarks or
+upper bounds for blocked syscalls. Exact assertions and environment boundaries
+are preserved in
+[`validation-results/2026-07-16-native-scan-cancellation.txt`](validation-results/2026-07-16-native-scan-cancellation.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

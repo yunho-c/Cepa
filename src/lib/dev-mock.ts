@@ -45,7 +45,11 @@ export function installDevMock(requestedScenario: string) {
   let navigationAttemptCount = 0;
   let revealAttemptCount = 0;
   let searchAttemptCount = 0;
-  let rejectPendingScan: ((reason: string) => void) | null = null;
+  let pendingScan: {
+    channelId: number;
+    index: number;
+    cancelled: boolean;
+  } | null = null;
   const cancelledEstimateRequests = new Set<number>();
   const cancelledSearchRequests = new Set<number>();
 
@@ -66,40 +70,58 @@ export function installDevMock(requestedScenario: string) {
       case "scan_directory": {
         const channelId = (args.onEvent as { id: number }).id;
         emitChannel(channelId, 0, { event: "started", scanId, root: ROOT });
-        await delay(35);
-        emitChannel(channelId, 1, {
-          event: "progress",
-          scanId,
-          progress: mockProgress(),
-        });
+        const scan = { channelId, index: 1, cancelled: false };
+        pendingScan = scan;
+        void (async () => {
+          await delay(35);
+          if (scan.cancelled) return;
+          emitChannel(channelId, 1, {
+            event: "progress",
+            scanId,
+            progress: mockProgress(),
+          });
+          if (pendingScan === scan) scan.index = 2;
 
-        if (scenario === "error") {
-          throw "Permission denied while reading the selected folder.";
-        }
-        if (scenario === "scanning" || scenario === "cancel-error") {
-          return new Promise<ScanResponse>((_, reject) => {
-            rejectPendingScan = reject;
-          });
-        }
-        if (scenario === "finishing" || scenario === "finishing-cancel-error") {
+          if (scenario === "error") {
+            emitChannel(channelId, 2, {
+              event: "failed",
+              scanId,
+              message: "Permission denied while reading the selected folder.",
+            });
+            if (pendingScan === scan) pendingScan = null;
+            return;
+          }
+          if (scenario === "scanning" || scenario === "cancel-error") {
+            return;
+          }
+          if (scenario === "finishing" || scenario === "finishing-cancel-error") {
+            await delay(75);
+            if (scan.cancelled) return;
+            emitChannel(channelId, 2, {
+              event: "progress",
+              scanId,
+              progress: mockProgress("finishing"),
+            });
+            if (pendingScan === scan) scan.index = 3;
+            await delay(120);
+            if (scan.cancelled) return;
+            emitChannel(channelId, 3, {
+              event: "progress",
+              scanId,
+              progress: mockProgress("finishing", 548),
+            });
+            if (pendingScan === scan) scan.index = 4;
+            return;
+          }
           await delay(75);
+          if (scan.cancelled) return;
           emitChannel(channelId, 2, {
-            event: "progress",
-            scanId,
-            progress: mockProgress("finishing"),
+            event: "completed",
+            response: stressView ? stressResponse(stressView) : mockResponse(),
           });
-          await delay(120);
-          emitChannel(channelId, 3, {
-            event: "progress",
-            scanId,
-            progress: mockProgress("finishing", 548),
-          });
-          return new Promise<ScanResponse>((_, reject) => {
-            rejectPendingScan = reject;
-          });
-        }
-        await delay(75);
-        return stressView ? stressResponse(stressView) : mockResponse();
+          if (pendingScan === scan) pendingScan = null;
+        })();
+        return scanId;
       }
       case "cancel_scan":
         if (scenario === "cancel-error") {
@@ -111,8 +133,15 @@ export function installDevMock(requestedScenario: string) {
         if (scenario === "finishing-cancel-error") {
           throw "The scanner did not acknowledge the stop request.";
         }
-        rejectPendingScan?.("Scan cancelled.");
-        rejectPendingScan = null;
+        if (pendingScan) {
+          emitChannel(pendingScan.channelId, pendingScan.index, {
+            event: "failed",
+            scanId,
+            message: "Scan cancelled.",
+          });
+          pendingScan.cancelled = true;
+          pendingScan = null;
+        }
         return true;
       case "discard_scan":
         if (scenario === "discard-error") {

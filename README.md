@@ -39,9 +39,11 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Permission and traversal-error accounting without aborting the whole scan,
   with a visible incomplete-coverage notice when unavailable items can lower
   the reported totals
-- Bounded progress updates over a Tauri channel, with a calm active-scan view
-  that keeps space, current location, elapsed time, cancellation, and unavailable
-  items visible without exposing backend vocabulary
+- Bounded progress and terminal scan results over one Tauri channel. The scan
+  command acknowledges its ID immediately so Stop is never serialized behind a
+  long-lived command response, while the calm active-scan view keeps space,
+  current location, elapsed time, cancellation, and unavailable items visible
+  without exposing backend vocabulary
 - An explicit, cancellable finishing phase while retained directory totals are
   prepared, with time-bounded elapsed updates instead of leaving a completed
   traversal looking stalled
@@ -211,28 +213,31 @@ IPC transport, real scanner, and painted explorer at the supported 620×480
 minimum with a disposable directory:
 
 ```sh
-just native-scan-smoke /path/to/disposable-fixture
+just native-scan-smoke /path/to/completion-fixture /path/to/cancellation-fixture
 ```
 
 The harness builds the frontend and explicitly enables Tauri's production
-custom protocol. It submits the ordinary manual-path form, waits for the real
-scan response and two painted frames, switches metrics, navigates into a
-directory, performs a debounced folder search, and validates bounded focus and
-overflow invariants in both size metrics while rejecting uncaught page errors.
-It moves chart focus with Arrow/Home, moves both list action kinds with arrows,
-opens a chart folder with Enter, returns Home, confirms the discarded scan is no
-longer addressable, and completes a second scan in the same process. Landing and
-second-result heading focus must both be restored. Its window state uses a
-dedicated filename that is removed after the run. This proves programmatic
-production-WebView, IPC, keyboard-event, and completed-scan lifecycle behavior;
-it does not exercise physical input, assistive technology, the native folder
+custom protocol. When the optional second fixture is supplied, it first starts
+that larger scan, activates the real Stop control, and requires the cancelled
+landing notice to own focus while another scan remains available. It then
+submits the ordinary completion fixture, waits for the terminal channel event
+and two painted frames, switches metrics, navigates into a directory, performs
+a debounced folder search, and validates bounded focus and overflow invariants
+in both size metrics while rejecting uncaught page errors. It moves chart focus
+with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
+with Enter, returns Home, confirms the discarded scan is no longer addressable,
+and completes a second scan in the same process. Landing and second-result
+heading focus must both be restored. Its window state uses a dedicated filename
+that is removed after the run. This proves programmatic production-WebView,
+IPC, cancellation, keyboard-event, and completed-scan lifecycle behavior; it
+does not exercise physical input, assistive technology, the native folder
 picker, drag-and-drop, or an installed package.
 
 Linux CI and provisioned Linux workstations run the same proof inside isolated
 display and session buses:
 
 ```sh
-just native-scan-smoke-linux /path/to/disposable-fixture
+just native-scan-smoke-linux /path/to/completion-fixture /path/to/cancellation-fixture
 ```
 
 This wrapper requires `xvfb-run` and `dbus-run-session`; it does not weaken the

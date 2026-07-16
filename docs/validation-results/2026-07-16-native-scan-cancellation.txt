@@ -1,0 +1,58 @@
+Cepa production scan-cancellation transport validation
+date=2026-07-16
+source=candidate based on d527830
+
+contract:
+- scan_directory acknowledges its scan ID before traversal completes
+- started, progress, completed, and failed are ordered Tauri channel events
+- channel fields serialize with the frontend's camelCase wire names
+- a failed completed-event send detaches the matching retained snapshot
+- Stop remains a separate command and is not queued behind scan completion
+
+fixtures:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+- cancellation: 100000 requested leaf directories x 1 empty file
+
+macOS production WebView:
+- backend=macOS native
+- cancellation_ms=50,116,125
+- cancellation stopped=true in every run
+- cancellation focus restored=true in every run
+- cancellation recovery available=true in every run
+- rescan completed=true in every run
+- page errors=none
+
+Linux production WebView:
+- kernel=Linux 6.8.0-124-generic x86_64
+- rustc=1.97.0 (2d8144b78 2026-07-07)
+- cargo=1.97.0 (c980f4866 2026-06-30)
+- bun=1.2.21
+- backend=Linux native
+- cancellation_ms=147
+- cancellation stopped=true
+- cancellation focus restored=true
+- cancellation recovery available=true
+- rescan completed=true
+- page errors=none
+- production WebKitGTK ran under isolated Xvfb and DBus sessions
+- a disposable user-local dependency sysroot and unprivileged helper mount were used
+- the standing checkout and system installation were unchanged
+
+browser development mocks:
+- complete reached the painted result
+- scanning Stop reached the focused Scan stopped state
+- cancel-error kept the live scan visible with Stop retryable
+- error reached the focused scan-failure state
+
+repository validation:
+- svelte-check: 0 errors, 0 warnings
+- frontend tests: 49 passed
+- Rust library tests: 93 passed, 1 intentionally ignored
+- Tauri configuration tests: 6 passed
+- example tests: 24 passed
+- warning-denied all-target Clippy: passed
+
+Scope: this proves programmatic production-WebView scan cancellation and the
+subsequent same-process lifecycle on one macOS host and one Linux host. It is not
+physical-input, native-picker, installed-package, cold-cache, blocked-syscall,
+or general filesystem-performance evidence.

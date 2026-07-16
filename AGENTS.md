@@ -26,13 +26,18 @@ support.
 ## Current state and roadmap
 
 The repository contains the first cross-platform scanner milestone. It can
-select and scan a directory, stream bounded progress over a Tauri channel,
-cancel active work, retain an in-memory result snapshot for drill-down, and
-render coordinated radial and list views in Svelte. macOS uses an initial
-`getattrlistbulk` traversal, Linux uses `getdents64` directory batches plus
-`statx` metadata, and Windows uses MFT enumeration for NTFS volume roots. Each
-falls back to `jwalk` when its native API is unavailable or unsuitable; Windows
-subfolder scans deliberately use `jwalk` because MFT enumeration has a
+select and scan a directory, stream bounded progress and terminal results over
+a Tauri channel, cancel active work, retain an in-memory result snapshot for
+drill-down, and render coordinated radial and list views in Svelte. The
+`scan_directory` command must acknowledge the scan ID immediately; completion
+and failure remain ordered channel events so a Stop command cannot be serialized
+behind a long-lived scan response in a platform WebView. If the initial channel
+send fails, do not start traversal. If a completed result cannot be delivered,
+detach and release its retained snapshot off the runtime thread. macOS uses an
+initial `getattrlistbulk` traversal, Linux uses `getdents64` directory batches
+plus `statx` metadata, and Windows uses MFT enumeration for NTFS volume roots.
+Each falls back to `jwalk` when its native API is unavailable or unsuitable;
+Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row and the largest files observed so far.
@@ -179,9 +184,12 @@ The `native_scan_smoke` example reuses the production builder, bundled frontend,
 custom protocol, commands, and startup path while isolating window state under a
 temporary filename. At 620×480 it submits the real manual-path form, scans a
 disposable fixture, waits through painted frames, switches metrics, navigates,
-and searches. Preserve its one chart Tab stop, at most two list Tab stops,
-bounded initial and logical chart nodes, clean page-error capture, no horizontal
-overflow, backend disclosure, and state-file cleanup. It also exercises chart
+and searches. With its optional second fixture, it first starts a bounded long
+scan, activates Stop, requires the cancelled notice to own focus, and verifies
+that the landing scan entry points remain available. Preserve its one chart Tab
+stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
+page-error capture, no horizontal overflow, backend disclosure, and state-file
+cleanup. It also exercises chart
 arrow/Home movement, list arrow movement for both the primary and Reveal action
 kinds, and Enter activation of a chart folder. It then returns Home, verifies
 landing focus and rejection of the discarded scan ID, and completes a second
@@ -617,8 +625,8 @@ just web       # run only the Vite frontend
 just native-check # validate Rust core without Tauri desktop libraries
 just smoke-linux-desktop # Linux-only raw executable startup survival
 just window-state-smoke # prove native geometry persistence across two launches
-just native-scan-smoke /path/to/fixture # production WebView and real scan IPC
-just native-scan-smoke-linux /path/to/fixture # same proof under Linux Xvfb/DBus
+just native-scan-smoke /path/to/fixture /path/to/cancellation-fixture # production WebView, Stop, and scan IPC
+just native-scan-smoke-linux /path/to/fixture /path/to/cancellation-fixture # same proof under Linux Xvfb/DBus
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles

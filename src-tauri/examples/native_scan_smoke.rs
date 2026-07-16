@@ -29,6 +29,23 @@ fn main() {
         .expect("canonicalize native scan smoke fixture");
     let fixture_json = serde_json::to_string(&fixture.to_string_lossy())
         .expect("serialize native scan smoke fixture path");
+    let cancellation_fixture = match std::env::args_os().nth(2).map(PathBuf::from) {
+        Some(path) if path.is_dir() => Some(
+            path.canonicalize()
+                .expect("canonicalize native cancellation smoke fixture"),
+        ),
+        Some(path) => {
+            eprintln!("{} is not a cancellation fixture directory", path.display());
+            std::process::exit(2);
+        }
+        None => None,
+    };
+    let cancellation_fixture_json = serde_json::to_string(
+        &cancellation_fixture
+            .as_ref()
+            .map(|path| path.to_string_lossy()),
+    )
+    .expect("serialize native cancellation smoke fixture path");
     let succeeded = Arc::new(AtomicBool::new(false));
     let state_path = Arc::new(Mutex::new(None));
 
@@ -62,7 +79,7 @@ fn main() {
                         app_handle.exit(1);
                         return;
                     }
-                    let script = smoke_script(&fixture_json);
+                    let script = smoke_script(&fixture_json, &cancellation_fixture_json);
                     let deadline = Instant::now() + SMOKE_TIMEOUT;
                     let mut next_injection = Instant::now();
                     let mut injection_attempts = 0_u64;
@@ -220,6 +237,12 @@ fn validate_report(report: &Value) -> bool {
         && report["searchedRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["cancellationStopped"].as_bool() == Some(true)
+        && report["cancellationFocusRestored"].as_bool() == Some(true)
+        && report["cancellationRecoveryAvailable"].as_bool() == Some(true)
+        && report["cancellationMs"]
+            .as_f64()
+            .is_some_and(|value| value >= 0.0)
         && report["landingFocusRestored"].as_bool() == Some(true)
         && report["staleScanRejected"].as_bool() == Some(true)
         && report["rescanCompleted"].as_bool() == Some(true)
@@ -239,13 +262,14 @@ fn validate_report(report: &Value) -> bool {
     passed
 }
 
-fn smoke_script(fixture_json: &str) -> String {
+fn smoke_script(fixture_json: &str, cancellation_fixture_json: &str) -> String {
     format!(
         r#"
 if (!window.__CEPA_NATIVE_SCAN_SMOKE_STARTED__) {{
 window.__CEPA_NATIVE_SCAN_SMOKE_STARTED__ = true;
 void (async () => {{
   const fixture = {fixture_json};
+  const cancellationFixture = {cancellation_fixture_json};
   const pageErrors = [];
   window.addEventListener('error', (event) => pageErrors.push(String(event.error || event.message)));
   window.addEventListener('unhandledrejection', (event) => pageErrors.push(String(event.reason)));
@@ -290,6 +314,47 @@ void (async () => {{
     .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Scanner')
     ?.querySelector('dd')?.textContent?.trim() || '';
   try {{
+    let cancellationStopped = cancellationFixture === null;
+    let cancellationFocusRestored = cancellationFixture === null;
+    let cancellationRecoveryAvailable = cancellationFixture === null;
+    let cancellationMs = 0;
+    if (cancellationFixture !== null) {{
+      phase('cancelling-scan');
+      const details = await waitFor(
+        () => document.querySelector('.manual-path'),
+        'cancellation manual path entry',
+      );
+      details.open = true;
+      const input = details.querySelector('.path-input');
+      input.value = cancellationFixture;
+      input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+      await frame();
+      const cancellationStartedAt = performance.now();
+      details.querySelector('.path-form').requestSubmit();
+      const stopButton = await waitFor(
+        () => [...document.querySelectorAll('.scan-view button')]
+          .find((button) => button.textContent?.trim() === 'Stop' && !button.disabled),
+        'enabled Stop control',
+        5000,
+      );
+      stopButton.click();
+      const cancelledNotice = await waitFor(
+        () => {{
+          if (document.querySelector('.results-view')) {{
+            throw new Error('The cancellation fixture completed before Stop took effect.');
+          }}
+          return document.querySelector('.cancelled-callout');
+        }},
+        'cancelled landing state',
+        10000,
+      );
+      await painted();
+      cancellationMs = performance.now() - cancellationStartedAt;
+      cancellationStopped = cancelledNotice.textContent?.includes('Scan stopped.') === true;
+      cancellationFocusRestored = document.activeElement === cancelledNotice;
+      cancellationRecoveryAvailable = document.querySelector('.manual-path') !== null;
+    }}
+
     phase('waiting-for-manual-path');
     const scanStartedAt = performance.now();
     phase('scanning');
@@ -430,6 +495,10 @@ void (async () => {{
       navigationChangedFolder: navigatedHeading !== rootHeading,
       searchStatus,
       searchedRows,
+      cancellationStopped,
+      cancellationFocusRestored,
+      cancellationRecoveryAvailable,
+      cancellationMs,
       landingFocusRestored,
       staleScanRejected,
       rescanCompleted,
@@ -496,6 +565,10 @@ mod tests {
             "navigationChangedFolder": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
+            "cancellationStopped": true,
+            "cancellationFocusRestored": true,
+            "cancellationRecoveryAvailable": true,
+            "cancellationMs": 50.0,
             "landingFocusRestored": true,
             "staleScanRejected": true,
             "rescanCompleted": true,
@@ -515,6 +588,10 @@ mod tests {
         let mut stale_scan_retained = complete.clone();
         stale_scan_retained["staleScanRejected"] = false.into();
         assert!(!validate_report(&stale_scan_retained));
+
+        let mut cancellation_focus_lost = complete.clone();
+        cancellation_focus_lost["cancellationFocusRestored"] = false.into();
+        assert!(!validate_report(&cancellation_focus_lost));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();

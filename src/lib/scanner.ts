@@ -218,7 +218,9 @@ export interface ScanResponse {
 
 export type ScanEvent =
   | { event: "started"; scanId: number; root: string }
-  | { event: "progress"; scanId: number; progress: ScanProgress };
+  | { event: "progress"; scanId: number; progress: ScanProgress }
+  | { event: "completed"; response: ScanResponse }
+  | { event: "failed"; scanId: number; message: string };
 
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";

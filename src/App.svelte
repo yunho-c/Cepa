@@ -522,6 +522,12 @@
     resetDirectorySearch(true);
     scanId = null;
 
+    let resolveScan: (response: ScanResponse) => void;
+    let rejectScan: (reason: string) => void;
+    const completion = new Promise<ScanResponse>((resolve, reject) => {
+      resolveScan = resolve;
+      rejectScan = reject;
+    });
     const onEvent = new Channel<ScanEvent>();
     onEvent.onmessage = (message) => {
       if (message.event === "started") {
@@ -531,14 +537,21 @@
         scanStarted = true;
         scanId = message.scanId;
         progress = message.progress;
+      } else if (message.event === "completed") {
+        resolveScan(message.response);
+      } else {
+        rejectScan(message.message);
       }
     };
 
     try {
-      const response = await invoke<ScanResponse>("scan_directory", {
+      const acknowledgedScanId = await invoke<number>("scan_directory", {
         path: requestedPath,
         onEvent,
       });
+      scanStarted = true;
+      scanId = acknowledgedScanId;
+      const response = await completion;
       const renderStartedAt = performance.now();
       scanStarted = true;
       scanId = response.scanId;
@@ -587,7 +600,7 @@
     scanActionError = "";
     status = "cancelling";
     try {
-      await invoke("cancel_scan", { scanId: cancellingScanId });
+      await invoke<boolean>("cancel_scan", { scanId: cancellingScanId });
     } catch (error) {
       if (scanId !== cancellingScanId || status !== "cancelling") return;
       status = "scanning";

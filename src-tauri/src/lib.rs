@@ -30,6 +30,8 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 #[cfg(feature = "desktop")]
+use tauri::Manager;
+#[cfg(feature = "desktop")]
 use tauri::ipc::Channel;
 #[cfg(feature = "desktop")]
 use tauri_plugin_opener::OpenerExt;
@@ -870,8 +872,12 @@ impl ScanState {
 }
 
 #[cfg(feature = "desktop")]
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag = "event", rename_all = "camelCase")]
+#[derive(Debug, Serialize)]
+#[serde(
+    tag = "event",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 enum ScanEvent {
     Started {
         scan_id: u64,
@@ -880,6 +886,13 @@ enum ScanEvent {
     Progress {
         scan_id: u64,
         progress: ScanProgress,
+    },
+    Completed {
+        response: Box<ScanResponse>,
+    },
+    Failed {
+        scan_id: u64,
+        message: String,
     },
 }
 
@@ -917,58 +930,80 @@ async fn validate_scan_root(path: String) -> Result<String, String> {
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
-async fn scan_directory(
+fn scan_directory(
     path: String,
     on_event: Channel<ScanEvent>,
-    state: tauri::State<'_, ScanState>,
-    roots: tauri::State<'_, ScanRootState>,
-    estimates: tauri::State<'_, EstimateState>,
-    searches: tauri::State<'_, SearchState>,
-    plans: tauri::State<'_, CompressionPlanState>,
-) -> Result<ScanResponse, String> {
-    estimates.cancel_active();
-    searches.cancel_active();
-    plans.clear();
+    app: tauri::AppHandle,
+) -> Result<u64, String> {
+    app.state::<EstimateState>().cancel_active();
+    app.state::<SearchState>().cancel_active();
+    app.state::<CompressionPlanState>().clear();
     let requested_path = PathBuf::from(path);
-    let root_display_name = roots.display_name(&requested_path);
-    let (scan_id, cancel, released_snapshot) = state.begin();
+    let root_display_name = app.state::<ScanRootState>().display_name(&requested_path);
+    let (scan_id, cancel, released_snapshot) = app.state::<ScanState>().begin();
     if let Some(snapshot) = released_snapshot {
         release_last_arc_on_blocking_pool(snapshot);
     }
-    let _ = on_event.send(ScanEvent::Started {
+    if let Err(error) = on_event.send(ScanEvent::Started {
         scan_id,
         root: requested_path.to_string_lossy().into_owned(),
-    });
+    }) {
+        app.state::<ScanState>().finish(scan_id);
+        return Err(format!(
+            "The scan progress channel could not start: {error}"
+        ));
+    }
 
     let progress_channel = on_event.clone();
-    let task = tauri::async_runtime::spawn_blocking(move || {
-        let mut output = scanner::scan_path(&requested_path, cancel, |progress| {
-            let _ = progress_channel.send(ScanEvent::Progress { scan_id, progress });
-        })?;
-        if let Some(display_name) = root_display_name {
-            output.set_root_display_name(display_name);
-        }
-        Ok::<_, String>(output)
-    });
+    let scan_app = app.clone();
+    // Keep the command response lane free so Stop can reach Rust while this
+    // detached task owns traversal and the terminal channel event.
+    drop(tauri::async_runtime::spawn(async move {
+        let task = tauri::async_runtime::spawn_blocking(move || {
+            let mut output = scanner::scan_path(&requested_path, cancel, |progress| {
+                let _ = progress_channel.send(ScanEvent::Progress { scan_id, progress });
+            })?;
+            if let Some(display_name) = root_display_name {
+                output.set_root_display_name(display_name);
+            }
+            Ok::<_, String>(output)
+        });
 
-    match task.await {
-        Ok(Ok(output)) => {
-            let view = state.complete(scan_id, output.snapshot)?;
-            Ok(ScanResponse {
-                scan_id,
-                result: output.result,
-                view,
-            })
+        let scans = scan_app.state::<ScanState>();
+        let event = match task.await {
+            Ok(Ok(output)) => match scans.complete(scan_id, output.snapshot) {
+                Ok(view) => ScanEvent::Completed {
+                    response: Box::new(ScanResponse {
+                        scan_id,
+                        result: output.result,
+                        view,
+                    }),
+                },
+                Err(message) => ScanEvent::Failed { scan_id, message },
+            },
+            Ok(Err(message)) => {
+                scans.finish(scan_id);
+                ScanEvent::Failed { scan_id, message }
+            }
+            Err(error) => {
+                scans.finish(scan_id);
+                ScanEvent::Failed {
+                    scan_id,
+                    message: format!("The scanner stopped unexpectedly: {error}"),
+                }
+            }
+        };
+
+        let completed = matches!(event, ScanEvent::Completed { .. });
+        if on_event.send(event).is_err()
+            && completed
+            && let Ok(Some(snapshot)) = scans.detach(scan_id)
+        {
+            release_last_arc_on_blocking_pool(snapshot);
         }
-        Ok(Err(error)) => {
-            state.finish(scan_id);
-            Err(error)
-        }
-        Err(error) => {
-            state.finish(scan_id);
-            Err(format!("The scanner stopped unexpectedly: {error}"))
-        }
-    }
+    }));
+
+    Ok(scan_id)
 }
 
 #[cfg(feature = "desktop")]
@@ -1281,7 +1316,7 @@ mod tests {
     };
     #[cfg(feature = "desktop")]
     use super::{
-        CompressionPlanState, EstimateState, ScanState, SearchState, compression,
+        CompressionPlanState, EstimateState, ScanEvent, ScanState, SearchState, compression,
         discard_scan_state, scanner,
     };
     use std::fs;
@@ -1291,6 +1326,20 @@ mod tests {
     use std::sync::atomic::AtomicBool;
     #[cfg(feature = "desktop")]
     use std::sync::atomic::Ordering;
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn failed_scan_events_keep_the_terminal_channel_contract() {
+        let event = serde_json::to_value(ScanEvent::Failed {
+            scan_id: 17,
+            message: "Scan cancelled.".to_string(),
+        })
+        .expect("serialize failed scan event");
+
+        assert_eq!(event["event"], "failed");
+        assert_eq!(event["scanId"], 17);
+        assert_eq!(event["message"], "Scan cancelled.");
+    }
 
     #[cfg(feature = "desktop")]
     #[test]
