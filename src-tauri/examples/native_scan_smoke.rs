@@ -299,6 +299,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
             .is_some_and(|count| count > 0 && count <= 512)
         && report["rescanBackendLabel"] == report["backendLabel"]
         && report["scanDetailsPresent"].as_bool() == Some(true)
+        && report["scanDetailsQuiet"].as_bool() == Some(true)
         && report["backendLabel"]
             .as_str()
             .is_some_and(|label| !label.is_empty());
@@ -503,7 +504,16 @@ void (async () => {{
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
-    const scanDetailsPresent = document.querySelector('.scan-details') !== null;
+    const scanDetails = document.querySelector('.scan-details');
+    const scanDetailsPresent = scanDetails !== null;
+    await waitFor(
+      () => document.querySelector('.compression-detail'),
+      'filesystem compression details',
+    );
+    const scanDetailsQuiet =
+      scanDetails !== null
+      && !scanDetails.open
+      && scanDetails.querySelector('[aria-live], [role="status"], [role="alert"]') === null;
     const initialBackendLabel = backendLabel();
 
     const logicalButton = [...document.querySelectorAll('.metric-switch button')]
@@ -758,6 +768,7 @@ void (async () => {{
       rescanRows,
       rescanChartSegments,
       scanDetailsPresent,
+      scanDetailsQuiet,
       backendLabel: initialBackendLabel,
       rescanBackendLabel,
       pageErrors,
@@ -850,6 +861,7 @@ mod tests {
             "rescanRows": 4,
             "rescanChartSegments": 8,
             "scanDetailsPresent": true,
+            "scanDetailsQuiet": true,
             "backendLabel": "macOS native",
             "rescanBackendLabel": "macOS native"
         }"#,
@@ -868,6 +880,10 @@ mod tests {
         let mut hidden_navigation_focus = complete.clone();
         hidden_navigation_focus["navigationHeadingFocusVisible"] = false.into();
         assert!(!validate_report(&hidden_navigation_focus, 2));
+
+        let mut noisy_scan_details = complete.clone();
+        noisy_scan_details["scanDetailsQuiet"] = false.into();
+        assert!(!validate_report(&noisy_scan_details, 2));
 
         let mut chart_preview_announced = complete.clone();
         chart_preview_announced["chartPreviewHidden"] = false.into();

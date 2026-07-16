@@ -2170,7 +2170,7 @@
           {#if compressionCapability}
             <div class="compression-detail">
               <dt>Filesystem compression</dt>
-              <dd title={compressionCapability.detail} aria-live="polite">
+              <dd title={compressionCapability.detail}>
                 {compressionCapability.status === "inspectOnly"
                   ? "Available for analysis"
                   : compressionCapability.status === "unsupported"

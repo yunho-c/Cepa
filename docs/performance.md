@@ -1804,6 +1804,37 @@ This is DOM, deterministic-browser, and programmatic production-WebView evidence
 it does not certify a particular screen reader, physical keyboard, Windows
 WebView2, or Linux WebKitGTK runtime.
 
+### 2026-07-16 quiet scan details
+
+After a scan completed, the asynchronous filesystem-compression capability was
+inserted into the collapsed `Scan details` disclosure as a polite live region.
+That content is routine technical evidence rather than an actionable status. It
+could therefore compete with the newly focused result heading, incomplete-
+coverage notice, and folder count even though sighted users had not opened the
+disclosure. A live region created already populated inside hidden content also
+has inconsistent announcement behavior across assistive technologies.
+
+The capability definition remains in the same on-demand disclosure, including
+its exact diagnostic title, but no longer owns a live region. A structural test
+keeps the entire disclosure free of live, status, and alert descendants. The
+production WebView waits for the real capability response before checking that
+the disclosure is still collapsed and quiet, so the gate cannot pass merely
+because the asynchronous row has not arrived yet.
+
+At 620 by 480 in dark appearance, a deterministic completion trace observed the
+scan progress status, coverage notice, empty inspector status, and folder count
+as the only mounted announcement owners. The populated collapsed Scan details
+contained zero live/status/alert descendants and did not cause horizontal
+overflow. Opening it exposed `Filesystem compression / Available for analysis`
+alongside the rest of the technical evidence. The production macOS WebView
+reported `scanDetailsQuiet=true` before continuing metric, chart, list, search,
+navigation, discard, and rescan checks. Exact source, commands, cross-target
+checks, and Linux Rust 1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-quiet-scan-details.txt`](validation-results/2026-07-16-quiet-scan-details.txt).
+This is DOM, deterministic-browser, and programmatic production-WebView evidence;
+it does not certify a particular screen reader, physical keyboard, Windows
+WebView2, or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

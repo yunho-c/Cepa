@@ -66,7 +66,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Compact scan-time file identity and revision retention across native and
   portable backends, used to reject changed files before compression planning
 - Scan-authorized, read-only volume compression capability reporting on macOS,
-  Windows, and Linux, with unsupported and unavailable states kept explicit
+  Windows, and Linux, with unsupported and unavailable states kept explicit and
+  quiet inside the collapsed technical disclosure until requested
 - Selection-driven, no-follow compression-state inspection for regular files:
   current decmpfs/NTFS data state and clearly separated Btrfs future-write policy
 - A repo-native real-Btrfs fixture covering volume capability, explicit enabled
@@ -241,7 +242,9 @@ without a native disabled attribute. It then submits the
 ordinary completion fixture, waits for the terminal channel event
 and two painted frames, opens and closes a real file inspector, and requires its
 single polite atomic status to remain outside the interactive inspector with no
-nested live region. It then switches metrics, navigates into a directory, performs
+nested live region. It waits for real filesystem capability evidence and requires
+the collapsed Scan details disclosure to contain no live, status, or alert owner.
+It then switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates
 that the compact message and Clear action stay inside the directory pane. It
 also validates bounded focus and overflow invariants in both size metrics while

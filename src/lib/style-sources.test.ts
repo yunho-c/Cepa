@@ -195,4 +195,19 @@ describe("production style sources", () => {
     expect(directoryHeadingStart).toBeGreaterThan(-1);
     expect(directoryHeading).toContain("{view.displayName}");
   });
+
+  test("keeps collapsed scan details out of live announcements", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const detailsStart = component.indexOf('<details class="scan-details">');
+    const details = component.slice(
+      detailsStart,
+      component.indexOf("</details>", detailsStart),
+    );
+
+    expect(detailsStart).toBeGreaterThan(-1);
+    expect(details).toContain("Filesystem compression");
+    expect(details).not.toContain("aria-live");
+    expect(details).not.toContain('role="status"');
+    expect(details).not.toContain('role="alert"');
+  });
 });

@@ -113,7 +113,9 @@ state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 intentional mount-boundary semantics remain available under the collapsed
 `Scan details` disclosure rather than appearing as status badges or a diagnostic
-footer. A completed scan with unavailable items shows one restrained,
+footer. Asynchronous technical evidence in that disclosure must remain quiet
+until the user opens it: do not put live regions, status roles, or alert roles
+inside collapsed scan details. A completed scan with unavailable items shows one restrained,
 cause-neutral coverage notice because its totals may be low; do not mislabel all
 such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
@@ -635,7 +637,9 @@ in banners, badges, headings, and footers. User-relevant exceptions stay visible
 routine technical evidence belongs in the existing progressive disclosure.
 Treat unavailable entries as an incomplete-coverage exception, but keep expected
 filesystem-boundary counts in `Scan details` rather than presenting them as an
-error.
+error. Loading routine capability or accounting evidence into that collapsed
+disclosure is not an application status change and must not compete with the
+focused result heading, coverage notice, or folder-search status.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 
