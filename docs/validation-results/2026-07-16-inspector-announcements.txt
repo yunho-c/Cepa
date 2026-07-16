@@ -1,0 +1,99 @@
+Cepa scoped inspector announcements validation
+Date: 2026-07-16
+Baseline commit: 15075d71fb4fdba8e8e93b176a4240718c5bbdd7
+
+Changed source SHA-256
+0fa118a70046c96a7e0abcddcf6d9ebea32c4818fc4507e4e9a3de0ebb1ab811  src/App.svelte
+f234436f214a9b5d3c2264b8f8bc4239cfc3c0ca9cba35a3a58fe3959a2657ef  src/lib/inspector-announcement.ts
+4cc098b476dcbc14aaeb86e31f8255826254c2e4c1207128c5b993af71a927d5  src/lib/inspector-announcement.test.ts
+1ba45e8f065e11fe56cb33c067261f89fe29968d6bc89ade02aa28e45af0c97e  src/lib/style-sources.test.ts
+a782a40eebaedaa4f1b68779b5083a7cab61bf270deb137883eebc77c4333fa6  src-tauri/examples/native_scan_smoke.rs
+19409dc1e6a19240e3a5ef2b385278bbd101144c81f7e136daaaa1d0bdb23684  AGENTS.md
+57e6b8150601f30cbcd7678e5b3cb5bcef962eafbfae90bd04c8348f428dc446  README.md
+c84c83ccf7ab9ddacaf40583eaaf70e6cc807d24738d2fc81c5be43f32121419  docs/performance.md
+
+Reproduction before the fix
+- The interactive `.selection-inspector` was a polite live region.
+- Its active estimate readout was a second nested polite live region.
+- Progress and result changes could therefore re-announce the inspector's
+  Cancel, Close, metadata, and disclosure controls through competing owners.
+
+Deterministic browser validation after the fix
+Scenario: estimate-cancel-error, dark appearance, 620x480 viewport.
+- Delayed compression inspection announced `Checking compression for
+  archive-2024.zip.` from `.inspector-status`.
+- Completion announced `Compression for archive-2024.zip: Not compressed.`.
+- Estimate start and stop announced `Estimating potential savings for
+  archive-2024.zip.` and `Stopping the savings estimate for
+  archive-2024.zip.` from the same node.
+- `.inspector-status` retained aria-live=polite and aria-atomic=true.
+- `.selection-inspector` and every descendant had no aria-live attribute.
+- After the stop command failed, the polite status was empty and the contextual
+  role=alert callout owned focus. Cancel remained available for retry.
+- documentElement innerWidth and scrollWidth were both 620 pixels.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Fixture:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+
+Selected report fields:
+  backendLabel=macOS native
+  inspectorLiveRegionScoped=true
+  chartPreviewHidden=true
+  chartTabStops=1
+  logicalChartTabStops=1
+  listTabStops=2
+  navigationChangedFolder=true
+  searchedRows=1
+  noMatchStatus=0 matches
+  staleScanRejected=true
+  discardedScanId=1
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+  pageReadyMs=207.873125
+  processToReportMs=1190.8953330000002
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 65 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30)
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- Bun did not resolve through the ordinary or login-shell path during this run,
+  so frontend diagnostics, tests, and production build evidence are local only.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This proves the DOM contract, deterministic browser behavior, programmatic
+production-macOS-WebView lifecycle, local Windows cross-target graph, and Linux
+Rust 1.97 native core. It does not certify a particular screen reader, physical
+keyboard input, Windows WebView2, Linux WebKitGTK runtime, or installed packages.

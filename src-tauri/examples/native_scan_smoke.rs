@@ -235,6 +235,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["initialRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["inspectorLiveRegionScoped"].as_bool() == Some(true)
         && report["chartSegments"]
             .as_u64()
             .is_some_and(|count| count > 0 && count <= 512)
@@ -472,6 +473,25 @@ void (async () => {{
     const scanToPaintMs = performance.now() - scanStartedAt;
     const rootHeading = document.querySelector('.section-heading h2')?.textContent?.trim() || '';
     const initialRows = document.querySelectorAll('.storage-row').length;
+    const inspectorStatus = document.querySelector('.inspector-status');
+    const fileDetailsButton = [...document.querySelectorAll('.storage-item')]
+      .find((button) => button.getAttribute('aria-label')?.endsWith(', show details'));
+    if (!fileDetailsButton) throw new Error('The completion fixture has no file details action.');
+    fileDetailsButton.click();
+    const selectionInspector = await waitFor(
+      () => document.querySelector('.selection-inspector'),
+      'file details inspector',
+    );
+    const inspectorLiveRegionScoped =
+      inspectorStatus?.getAttribute('aria-live') === 'polite'
+      && inspectorStatus.getAttribute('aria-atomic') === 'true'
+      && !selectionInspector.hasAttribute('aria-live')
+      && selectionInspector.querySelector('[aria-live]') === null;
+    selectionInspector.querySelector('[aria-label="Close item details"]').click();
+    await waitFor(
+      () => document.querySelector('.selection-inspector') === null,
+      'closed file details inspector',
+    );
     const chartSegments = document.querySelectorAll('[data-chart-node-id]').length;
     const chartCenter = document.querySelector('.chart-center');
     const chartPreviewHidden =
@@ -678,6 +698,7 @@ void (async () => {{
       navigationMs,
       searchMs,
       initialRows,
+      inspectorLiveRegionScoped,
       chartSegments,
       chartPreviewHidden,
       chartTabStops,
@@ -766,6 +787,7 @@ mod tests {
             "processToReportMs": 500.0,
             "injectionAttempts": 1,
             "initialRows": 4,
+            "inspectorLiveRegionScoped": true,
             "chartSegments": 8,
             "chartPreviewHidden": true,
             "chartTabStops": 1,
@@ -819,6 +841,10 @@ mod tests {
         let mut broken_keyboard = complete.clone();
         broken_keyboard["revealArrowPreserved"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
+
+        let mut broad_inspector_live_region = complete.clone();
+        broad_inspector_live_region["inspectorLiveRegionScoped"] = false.into();
+        assert!(!validate_report(&broad_inspector_live_region, 2));
 
         let mut chart_preview_announced = complete.clone();
         chart_preview_announced["chartPreviewHidden"] = false.into();

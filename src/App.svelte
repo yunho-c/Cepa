@@ -31,6 +31,7 @@
     listNavigationTarget,
     type ListNavigationAction,
   } from "$lib/list-navigation";
+  import { inspectorAnnouncement } from "$lib/inspector-announcement";
   import {
     navigationRecoveryMessage,
     type NavigationRecovery,
@@ -266,6 +267,21 @@
       ["notCompressed", "enabled", "disabled", "inherited"].includes(
         compressionState.state,
       ),
+  );
+  const inspectorStatus = $derived(
+    inspectorAnnouncement({
+      itemName: inspectedEntry?.name ?? null,
+      isInspectingCompression,
+      compressionLabel: compressionState
+        ? formatCompressionState(compressionState)
+        : null,
+      isEstimatingSavings,
+      isCancellingEstimate,
+      estimateLabel: savingsEstimate
+        ? formatSavingsEstimate(savingsEstimate)
+        : null,
+      hasEstimateStopError: estimateActionError.length > 0,
+    }),
   );
   const scanTargetName = $derived(
     path.split(/[\\/]/).filter(Boolean).at(-1) ?? path,
@@ -1849,6 +1865,11 @@
         </div>
 
         <div class="directory-pane">
+          <p
+            class="sr-only inspector-status"
+            aria-live="polite"
+            aria-atomic="true"
+          >{inspectorStatus}</p>
           <div class="section-heading">
             <h2>{view.displayName}</h2>
             <div class="section-actions">
@@ -1903,7 +1924,6 @@
               class="selection-inspector"
               aria-label={`Compression details for ${inspectedEntry.name}`}
               aria-busy={isInspectingCompression}
-              aria-live="polite"
             >
               <header class="inspector-heading">
                 <div class="inspector-heading-copy">
@@ -1943,7 +1963,7 @@
                   </strong>
                 </div>
                 {#if isEstimatingSavings}
-                  <div class="estimate-readout estimate-readout-active" aria-live="polite">
+                  <div class="estimate-readout estimate-readout-active">
                     <div>
                       <span>Potential savings</span>
                       <strong>{isCancellingEstimate ? "Stopping…" : "Estimating…"}</strong>

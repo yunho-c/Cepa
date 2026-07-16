@@ -77,6 +77,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Request-owned estimate cancellation with atomic concurrent-start ordering so
   an older worker cannot become current after a newer token, while retry remains
   available when estimation is still running
+- One concise atomic inspector status for compression and estimate progress or
+  results, with focused error alerts kept separate from interactive controls
 - Single-Tab-stop radial navigation with wrapping arrow keys, Home/End movement,
   Enter/Space activation, coordinated breadcrumbs and ranked item lists, and a
   visual-only center preview that does not duplicate segment announcements
@@ -236,7 +238,9 @@ notice to own focus while another scan remains available. Before cancellation
 settles, the focused Stop control must expose guarded `aria-disabled` state
 without a native disabled attribute. It then submits the
 ordinary completion fixture, waits for the terminal channel event
-and two painted frames, switches metrics, navigates into a directory, performs
+and two painted frames, opens and closes a real file inspector, and requires its
+single polite atomic status to remain outside the interactive inspector with no
+nested live region. It then switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates
 that the compact message and Clear action stay inside the directory pane. It
 also validates bounded focus and overflow invariants in both size metrics while

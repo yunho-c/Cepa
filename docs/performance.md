@@ -1745,6 +1745,35 @@ This is DOM, deterministic browser, and programmatic production-WebView
 evidence. It does not certify a particular screen reader, physical keyboard,
 Windows WebView2, or Linux WebKitGTK runtime.
 
+### 2026-07-16 scoped inspector announcements
+
+The file inspector previously marked its entire interactive surface as a polite
+live region and marked the active estimate readout as a second nested live
+region. Compression results, progress changes, and estimate cancellation could
+therefore re-announce Cancel, Close, metadata, and disclosure controls through
+two competing status owners.
+
+The inspector now has one always-mounted, visually hidden, polite atomic status
+sentence. A pure priority function reduces compression inspection, compression
+state, estimation, cancellation, and final bounded savings into concise copy.
+The interactive inspector and estimate readout are no longer live regions.
+Estimate stop failures intentionally clear the polite sentence because their
+contextual `role="alert"` callout receives focus and owns the interruption.
+
+At 620 by 480 in dark appearance, a delayed deterministic browser flow observed
+`Checking compression`, the settled compression state, `Estimating potential
+savings`, and `Stopping the savings estimate` in that one atomic status. The
+failed stop then left the status empty and focused the error alert. The inspector
+contained no live-region descendant and the document had no horizontal overflow.
+The production macOS WebView opens a real scanned file and enforces the same DOM
+contract before continuing its metric, chart, list, search, navigation, discard,
+and rescan checks. Exact source, commands, cross-target checks, and Linux Rust
+1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-inspector-announcements.txt`](validation-results/2026-07-16-inspector-announcements.txt).
+This is DOM, deterministic browser, and programmatic production-WebView evidence;
+it does not certify a particular screen reader, physical keyboard, Windows
+WebView2, or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

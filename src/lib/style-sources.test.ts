@@ -155,4 +155,22 @@ describe("production style sources", () => {
       'aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}',
     );
   });
+
+  test("scopes inspector announcements to one atomic status sentence", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const statusStart = component.indexOf('class="sr-only inspector-status"');
+    const status = component.slice(statusStart, component.indexOf("</p>", statusStart));
+    const inspectorStart = component.indexOf('class="selection-inspector"');
+    const inspector = component.slice(
+      inspectorStart,
+      component.indexOf("</section>", inspectorStart),
+    );
+
+    expect(statusStart).toBeGreaterThan(-1);
+    expect(status).toContain('aria-live="polite"');
+    expect(status).toContain('aria-atomic="true"');
+    expect(inspectorStart).toBeGreaterThan(-1);
+    expect(inspector).not.toContain("aria-live");
+    expect(inspector).toContain('role="alert"');
+  });
 });

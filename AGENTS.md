@@ -211,7 +211,13 @@ wrapper instead of a broad child selector that also matches the actions. A live
 estimate's Cancel action must remain focusable with guarded `aria-disabled`
 state while its stop request is pending and reject repeat activation; a failed
 request moves focus to its contextual error and makes Cancel retryable. In the
-560 through 720 logical-pixel compact two-column layout, keep the primary Estimate
+inspector, one always-mounted, visually hidden, polite atomic status sentence
+owns compression inspection, estimation, cancellation, and result announcements.
+Do not make the interactive inspector or its readout a live region: that would
+re-announce controls and nest competing status owners. Focused `role="alert"`
+callouts own estimate-action failures, so clear the polite status while one is
+present instead of duplicating it. In the 560 through 720 logical-pixel compact
+two-column layout, keep the primary Estimate
 prompt inline so its action remains visible at 620 by 480; secondary metadata
 may stay below the inspector fold. Browser previews below 560 pixels use the
 stacked prompt.
@@ -661,6 +667,8 @@ Start with these files:
   shared native-menu availability and shortcut conflict rules.
 - `src/lib/completed-scan-request.ts`: shared scan-ID and request-generation
   ownership check for delayed completed-scan actions.
+- `src/lib/inspector-announcement.ts`: deterministic priority and concise copy
+  for the inspector's single atomic status sentence.
 - `src/lib/result-action-recovery.ts`: scan-local navigation retry descriptors
   and cause-neutral preservation copy for completed-result failures.
 - `src/lib/recovery-copy.ts`: cause-neutral scan-entry and terminal-failure
