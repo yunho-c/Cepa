@@ -356,10 +356,13 @@ The intended scanning architecture is:
   `jwalk` parity while improving warm median wall time by 84.3% and 26.4%.
   Native cancellation and process-memory observations were also favorable on
   the larger tree. These remain one-machine warm-cache results; broader
-  filesystem coverage and cold-cache measurements remain. An eight-initial-
-  worker retune was inconclusive under unrelated compiler/storage load, so keep
-  the measured four-worker start and conditional expansion unless a controlled
-  interleaved rerun improves both median and tail latency.
+  filesystem coverage and cold-cache measurements remain. A clean 31-pair rerun
+  rejected eight initial workers: it regressed paired median and p95 wall time,
+  cancellation median and maximum, and process-memory observations on the
+  canonical directory-rich APFS fixture. Keep the measured four-worker start
+  and conditional expansion. Do not repeat that constant-only retune without a
+  materially different scheduler design and representative multi-shape
+  evidence.
 - Master File Table (MFT) traversal as the implemented Windows volume-root
   backend. It recovers all hard-link names, queries exact allocation size by
   file ID, and falls back for subfolders and non-NTFS volumes. The checked-in

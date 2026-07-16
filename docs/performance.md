@@ -1269,16 +1269,34 @@ bytes, or 195.19 bytes per entry. Process memory includes the harness, allocator
 threads, and transient traversal state, so this is not a retained-arena-only
 claim.
 
-An isolated eight-initial-worker candidate was also alternated with the current
-four-worker policy on a new 110,101-entry APFS fixture. Unrelated compiler and
-simulation workloads began saturating CPU and storage during the extended
-sequence, causing both variants to move from roughly 100 ms into multi-second
-outliers. That experiment is marked inconclusive and supports no scheduler
-change. The bounded four-worker start and conditional expansion to eight remain
-unchanged until a controlled interleaved rerun can evaluate both median and tail
-latency.
+The earlier eight-initial-worker experiment on a 110,101-entry synthetic APFS
+fixture was invalidated when unrelated compiler and simulation workloads began
+saturating the host. A clean rerun based on `215d8d9` built separate release
+binaries for the unchanged four-worker policy and the isolated eight-worker
+candidate. Each process warmed the filesystem before one measured scan, the
+first variant alternated for 31 pairs, every workload/accounting field matched,
+and a per-pair guard aborted if the interfering workloads reappeared.
 
-Raw stable samples and the inconclusive scheduler record are preserved in
+Four initial workers had a 114.67 ms median and 118.90 ms p95 wall time. Eight
+workers had a 115.54 ms median and 130.43 ms p95. The eight-worker candidate was
+1.26% slower at the paired median and lost 22 of 31 pairs; paired changes ranged
+from -3.22% to +17.16%. Traversal, not aggregation or snapshot release, accounted
+for the difference. In 21 alternating cancellation pairs at exactly 2,048
+entries, four workers returned in 87 us median and 143 us maximum versus 119 us
+and 232 us for eight. Seven alternating `/usr/bin/time -l` pairs reported a
+35.94 MiB median maximum RSS and 27.08 MiB peak footprint for four workers
+versus 37.09 MiB and 28.34 MiB for eight.
+
+The eight-initial-worker candidate is therefore rejected. Keep the bounded
+four-worker start and conditional expansion to eight unless a materially
+different scheduler design is evaluated across representative shapes. The
+clean throughput, cancellation, and process-memory trials are preserved in
+[`performance-results/2026-07-16-macos-worker-rerun.csv`](performance-results/2026-07-16-macos-worker-rerun.csv),
+[`performance-results/2026-07-16-macos-worker-cancellation.csv`](performance-results/2026-07-16-macos-worker-cancellation.csv),
+and
+[`performance-results/2026-07-16-macos-worker-memory.csv`](performance-results/2026-07-16-macos-worker-memory.csv).
+
+Raw stable samples and the original invalid scheduler record are preserved in
 [`performance-results/2026-07-16-macos-real-tree-refresh.csv`](performance-results/2026-07-16-macos-real-tree-refresh.csv).
 
 ## Interpretation and next measurements
