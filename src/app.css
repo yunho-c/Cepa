@@ -968,6 +968,32 @@ body {
 }
 
 @media (max-height: 720px) {
+  .landing-recovery {
+    padding-top: 22px;
+    padding-bottom: 24px;
+  }
+  .landing-recovery .app-symbol {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
+    border-radius: 15px;
+  }
+  .landing-recovery .app-symbol svg { width: 32px; height: 32px; }
+  .landing.landing-recovery h1 {
+    max-width: 650px;
+    font-size: 36px;
+    line-height: 1.08;
+    letter-spacing: -0.045em;
+  }
+  .landing-recovery .lede {
+    margin: 10px 0 16px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .landing-recovery :is(.error-callout, .cancelled-callout) {
+    margin-top: 12px;
+  }
+
   .landing-with-storage:has(.error-callout, .cancelled-callout) {
     padding-top: 22px;
     padding-bottom: 24px;
@@ -1007,6 +1033,22 @@ body {
   .landing-with-storage .scan-root-list { max-height: 128px; }
   .landing-with-storage .scan-entry-divider { margin: 9px 0 7px; }
   .landing-with-storage .manual-path { margin-top: 7px; }
+
+  .landing-recovery {
+    padding-top: 10px;
+    padding-bottom: 16px;
+  }
+  .landing-recovery .app-symbol { display: none; }
+  .landing.landing-recovery h1 { font-size: 30px; }
+  .landing-recovery .lede {
+    margin: 5px 0 10px;
+    line-height: 1.35;
+  }
+  .landing-recovery .manual-path { margin-top: 7px; }
+  .landing-recovery :is(.error-callout, .cancelled-callout) {
+    margin-top: 10px;
+    padding-block: 10px;
+  }
 
   .landing-with-storage:has(.error-callout, .cancelled-callout) {
     padding-top: 10px;

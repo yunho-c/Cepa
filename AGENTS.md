@@ -73,7 +73,9 @@ both 880 by 620 and 620 by 480. At 560 logical pixels tall or less, only the
 decorative app tile is removed and volume rows tighten to 64 pixels. Preserve the
 free-capacity value in the 560 through 720 logical-pixel compact desktop range;
 only browser previews below 560 pixels omit it. Preserve the spacious centered
-hero when no storage panel is rendered; use
+hero for an ordinary first launch when no storage panel is rendered. At short
+window heights, first-launch error and cancellation states compact that hero so
+their recovery controls remain visible. Use
 `shouldShowScanRoots` for both the component and layout state so they cannot
 drift. If a first-launch error or cancellation callout shares that compact
 storage landing view, tighten the hero and callout rhythm enough that focusing

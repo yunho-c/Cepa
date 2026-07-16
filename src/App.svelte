@@ -1312,6 +1312,7 @@
     <main
       class="landing"
       class:landing-with-storage={showsScanRoots}
+      class:landing-recovery={status === "error" || status === "cancelled"}
       inert={dropOverlayVisible}
       aria-hidden={dropOverlayVisible ? "true" : undefined}
     >
