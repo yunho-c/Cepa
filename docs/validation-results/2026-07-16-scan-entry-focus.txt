@@ -1,0 +1,116 @@
+Cepa scan-entry transition focus validation
+Date: 2026-07-16
+Baseline commit: e10227a69cf47b8c1b2dc480386b2b76a294c39f
+
+Changed source SHA-256
+d40a8a07ada47c3b285d6ce0bd3594126eb01d8e221a06952689b712ab7610d2  src/App.svelte
+8f19a71d7da0a384b1f0ffc38d48ada9d9606bf22a69c0687d1c099b9d67c1d1  src/app.css
+128ddc990e3e2588990749cf9351604a70a9d0a4790574ac5b4b6ed368cbf85b  src/lib/components/scan-root-picker.svelte
+bc7b2a8f03f57e0d7b788bffae383f2e69c43fb69cf3e909d0334a606c17b95b  src/lib/scan-roots.ts
+da54ea852eb68c724207635d39bd68c6489eade28e0c2e77896af3f0e80a1d6b  src/lib/scan-roots.test.ts
+ecccd62bb1bb0a0287ec8416dde0877d77b8e5166c4c76984b829049fc5d6b8a  src/lib/dev-mock.ts
+72b00fb058a81c9fa699d4b95c82681d4f2e4fd34d7f89b93f1ea02787c0b622  src-tauri/examples/native_scan_smoke.rs
+
+Reproduction before the fix
+- Wrapped the development Tauri validate_scan_root command with a 2.5-second
+  delay, selected the first discovered volume, and inspected activeElement.
+- The selected native button became disabled and activeElement became BODY.
+- Starting mock=scanning from Choose folder likewise left BODY focused after
+  the scan view appeared.
+
+Rendered browser validation after the fix
+- Added the deterministic mock=root-preparing&roots=preview state.
+- Inspected the held state at 620x480 and 880x620 in light and dark appearance.
+- The selected volume retained focus with accessible name Opening Macintosh HD,
+  aria-busy=true, aria-disabled=true, and no native disabled attribute.
+- Its polite live region contained `Opening Macintosh HD…`.
+- The other volume, Choose folder, and manual path entry were unavailable; the
+  selected volume was the only focusable landing control.
+- No horizontal overflow or console errors were observed.
+- Starting mock=scanning focused H1#scan-progress-title; the next Tab focused
+  Stop.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Fixture:
+- 32 directories, each with 32 one-MiB sparse files, plus the generated
+  manifest: 1,025 files and 33 directories.
+- The disposable fixture and isolated window-state file were removed.
+
+Selected report fields:
+  backendLabel=macOS native
+  initialScanHeadingFocused=true
+  rescanHeadingFocused=true
+  rescanResultFocused=true
+  landingFocusRestored=true
+  horizontalOverflow=false
+  pageErrors=[]
+  scanToPaintMs=114
+  processToReportMs=1075.105875
+
+The first attempted fixture used empty files. Its manifest then ranked ahead of
+the empty directories under the logical metric, so the pre-existing chart-folder
+navigation step selected a file and timed out. That run is not counted as passing
+evidence. The canonical sparse fixture above made directories navigable and the
+complete production flow passed.
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+  rg -a 'Macintosh HD|/Volumes/Archive|root-preparing|roots=loading|roots=error' dist
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 55 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict clippy passed.
+- None of the development preview strings appeared in the production bundle.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method:
+- Transferred a disposable exact source archive with macOS extended attributes,
+  build outputs, dependencies, and VCS metadata excluded.
+- Verified the changed source hashes above before validation.
+- Reused the standing checkout's installed frontend dependencies through a
+  temporary symlink; removed the complete disposable source on exit.
+
+Commands:
+  bun --bun run check
+  bun test src/lib/*.test.ts
+  cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+  cargo check --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+  cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets \
+    --no-default-features -- -D warnings
+  cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+  bun --bun run build
+
+Results:
+- Frontend diagnostics and all 55 tests passed.
+- Dependency-light format, all-target check, and strict clippy passed.
+- Linux Rust library tests: 76 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- Every dependency-light example test and the production web build passed.
+- None of the development preview strings appeared in the production bundle.
+
+Evidence boundaries
+- Browser checks used Chromium and deterministic development mocks.
+- The macOS production run used real WebKit, Tauri IPC, and the native scanner,
+  but programmatic form and keyboard events rather than physical input.
+- The held discovered-volume validation state was mocked; the real production
+  smoke starts through manual path entry.
+- No screen reader, native picker, installed package, or Windows WebView2 runtime
+  was exercised. The native Windows host was unreachable during this slice.

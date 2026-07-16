@@ -270,6 +270,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["terminalFailureRecoveryAvailable"].as_bool() == Some(true)
         && report["terminalFailureGuidanceCalm"].as_bool() == Some(true)
         && report["terminalFailureDetailsCollapsed"].as_bool() == Some(true)
+        && report["initialScanHeadingFocused"].as_bool() == Some(true)
         && report["cancellationStopped"].as_bool() == Some(true)
         && report["cancellationFocusRestored"].as_bool() == Some(true)
         && report["cancellationRecoveryAvailable"].as_bool() == Some(true)
@@ -280,6 +281,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["discardedScanId"].as_u64() == Some(expected_discarded_scan_id)
         && report["staleScanRejected"].as_bool() == Some(true)
         && report["rescanCompleted"].as_bool() == Some(true)
+        && report["rescanHeadingFocused"].as_bool() == Some(true)
         && report["rescanResultFocused"].as_bool() == Some(true)
         && report["rescanRows"].as_u64().is_some_and(|count| count > 0)
         && report["rescanChartSegments"]
@@ -361,6 +363,11 @@ void (async () => {{
     input.dispatchEvent(new Event('input', {{ bubbles: true }}));
     await frame();
     form.requestSubmit();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const scanHeading = document.querySelector('#scan-progress-title');
+    return scanHeading !== null && document.activeElement === scanHeading;
   }};
   const submitFixture = (label) => submitPath(fixture, label);
   const backendLabel = () => [...document.querySelectorAll('.scan-details dl > div')]
@@ -439,7 +446,7 @@ void (async () => {{
     phase('waiting-for-manual-path');
     const scanStartedAt = performance.now();
     phase('scanning');
-    await submitFixture('initial');
+    const initialScanHeadingFocused = await submitFixture('initial');
     await waitFor(() => {{
       const error = document.querySelector('.error-callout');
       if (error) throw new Error(error.textContent?.trim() || 'The scan failed.');
@@ -566,7 +573,7 @@ void (async () => {{
     }}
 
     phase('rescanning');
-    await submitFixture('rescan');
+    const rescanHeadingFocused = await submitFixture('rescan');
     await waitFor(() => document.querySelector('.results-view'), 'rescanned result');
     await painted();
     const rescanCompleted = document.querySelector('.results-view') !== null;
@@ -605,6 +612,7 @@ void (async () => {{
       terminalFailureRecoveryAvailable,
       terminalFailureGuidanceCalm,
       terminalFailureDetailsCollapsed,
+      initialScanHeadingFocused,
       cancellationStopped,
       cancellationFocusRestored,
       cancellationRecoveryAvailable,
@@ -613,6 +621,7 @@ void (async () => {{
       discardedScanId: completedScanId,
       staleScanRejected,
       rescanCompleted,
+      rescanHeadingFocused,
       rescanResultFocused,
       rescanRows,
       rescanChartSegments,
@@ -685,6 +694,7 @@ mod tests {
             "terminalFailureRecoveryAvailable": true,
             "terminalFailureGuidanceCalm": true,
             "terminalFailureDetailsCollapsed": true,
+            "initialScanHeadingFocused": true,
             "cancellationStopped": true,
             "cancellationFocusRestored": true,
             "cancellationRecoveryAvailable": true,
@@ -693,6 +703,7 @@ mod tests {
             "discardedScanId": 2,
             "staleScanRejected": true,
             "rescanCompleted": true,
+            "rescanHeadingFocused": true,
             "rescanResultFocused": true,
             "rescanRows": 4,
             "rescanChartSegments": 8,
@@ -729,6 +740,10 @@ mod tests {
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();
         assert!(!validate_report(&cancellation_focus_lost, 2));
+
+        let mut scan_heading_focus_lost = complete.clone();
+        scan_heading_focus_lost["initialScanHeadingFocused"] = false.into();
+        assert!(!validate_report(&scan_heading_focus_lost, 2));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();

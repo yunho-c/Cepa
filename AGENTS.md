@@ -100,6 +100,13 @@ its single status announcement. Development-only `?roots=loading` and
 `?roots=error` previews hold those states; the error preview's Try again moves
 through loading to the existing ready fixture. `?roots=preview` and
 `?roots=ready` both render that ready fixture. Keep these modes out of production.
+Selecting a discovered volume must likewise retain focus while its root is
+validated. Keep that one row focusable but `aria-disabled`, announce its Opening
+state, disable the other volume and landing actions, and reject repeated
+activation. When any entry path replaces the landing or result view with an
+active scan, move focus to the scan heading so the next Tab reaches Stop.
+Development-only `?mock=root-preparing&roots=preview` holds the volume-validation
+state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 intentional mount-boundary semantics remain available under the collapsed
 `Scan details` disclosure rather than appearing as status badges or a diagnostic
@@ -232,7 +239,8 @@ compact directory pane. It also exercises chart
 arrow/Home movement, list arrow movement for both the primary and Reveal action
 kinds, and Enter activation of a chart folder. It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
-second scan in the same process with result-heading focus restored. Derive that
+second scan in the same process with scan-heading and result-heading focus
+restored for both successful scans. Derive that
 completed ID from the optional failure and cancellation preflights; with both it
 is ID 3. Checking either earlier ID is a false positive and does not prove Home
 released the snapshot. Keep the Rust report validator paired with that expected

@@ -424,7 +424,7 @@ body {
 .scan-root[data-slot="button"]:last-child { border-bottom: 0; }
 .scan-root[data-slot="button"]:hover,
 .scan-root[data-slot="button"]:focus-visible { background: var(--muted); }
-.scan-root[data-preparing="true"] { background: var(--muted); }
+.scan-root[data-preparing="true"] { cursor: wait; background: var(--muted); }
 .scan-root-icon {
   width: 34px;
   height: 34px;
@@ -525,6 +525,8 @@ body {
 .manual-path > summary::-webkit-details-marker { display: none; }
 .manual-path > summary:hover { color: var(--foreground); background: var(--muted); }
 .manual-path > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.manual-path[inert] { opacity: 0.48; }
+.manual-path[inert] > summary { cursor: default; }
 .manual-path[open] > summary { color: var(--foreground); }
 .path-form { margin-top: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .path-input { background: var(--card); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 12px; }
@@ -555,6 +557,7 @@ body {
 .error-callout:focus,
 .cancelled-callout:focus,
 .landing h1:focus,
+.scan-progress h1:focus,
 .results-heading h1:focus,
 .chart-pane h2:focus { outline: none; }
 

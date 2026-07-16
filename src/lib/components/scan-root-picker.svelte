@@ -3,6 +3,7 @@
   import { ChevronRight, HardDrive, LoaderCircle } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
   import {
+    scanRootActionState,
     scanRootUsedPercent,
     scanRootsRetryFocusTarget,
     shouldShowScanRoots,
@@ -31,6 +32,11 @@
     onRetryFocusFallback,
   }: Props = $props();
   let section: HTMLElement | undefined = $state();
+  const preparingRootName = $derived(
+    preparingPath === null
+      ? null
+      : (roots.find((root) => root.path === preparingPath)?.name ?? null),
+  );
 
   function focusRetryState() {
     const target = scanRootsRetryFocusTarget(status, roots.length);
@@ -57,7 +63,11 @@
 </script>
 
 {#if shouldShowScanRoots(status, roots.length)}
-  <section class="scan-roots" aria-labelledby="scan-roots-title" bind:this={section}>
+  <section
+    class="scan-roots"
+    aria-labelledby="scan-roots-title"
+    bind:this={section}
+  >
     <div class="scan-roots-heading">
       <h2 id="scan-roots-title">Storage</h2>
       {#if roots.length > 0}
@@ -81,14 +91,21 @@
     {:else if roots.length > 0}
       <div class="scan-root-list">
         {#each roots as root (root.path)}
+          {@const actionState = scanRootActionState(root.path, preparingPath, busy)}
           <Button
             class="scan-root"
             variant="ghost"
-            disabled={busy}
-            data-preparing={preparingPath === root.path}
+            disabled={actionState === "disabled"}
+            data-preparing={actionState === "preparing"}
             data-scan-roots-focus="root"
-            aria-label={`Scan ${root.name}, ${formatBytes(root.availableBytes)} available`}
-            onclick={() => onSelect(root.path)}
+            aria-busy={actionState === "preparing"}
+            aria-disabled={actionState !== "available"}
+            aria-label={actionState === "preparing"
+              ? `Opening ${root.name}`
+              : `Scan ${root.name}, ${formatBytes(root.availableBytes)} available`}
+            onclick={() => {
+              if (actionState === "available") onSelect(root.path);
+            }}
           >
             <span class="scan-root-icon" aria-hidden="true">
               {#if preparingPath === root.path}
@@ -117,6 +134,9 @@
           </Button>
         {/each}
       </div>
+      <span class="sr-only" aria-live="polite">
+        {preparingRootName === null ? "" : `Opening ${preparingRootName}…`}
+      </span>
     {:else}
       <div class="scan-root-state scan-root-unavailable" role="status">
         <span class="scan-root-icon"><HardDrive /></span>

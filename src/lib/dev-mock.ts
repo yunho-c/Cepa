@@ -28,6 +28,7 @@ type DevScenario =
   | "inspection-error"
   | "navigation-error"
   | "reveal-error"
+  | "root-preparing"
   | "search-error"
   | "stale-actions"
   | "stress";
@@ -57,6 +58,9 @@ export function installDevMock(requestedScenario: string) {
     const args = payload as unknown as Record<string, unknown>;
     switch (command) {
       case "validate_scan_root":
+        if (scenario === "root-preparing") {
+          return new Promise<string>(() => {});
+        }
         return String(args.path);
       case "plugin:dialog|open":
         pickerOpenCount += 1;
@@ -321,6 +325,7 @@ function isScenario(value: string): value is DevScenario {
     "inspection-error",
     "navigation-error",
     "reveal-error",
+    "root-preparing",
     "search-error",
     "stale-actions",
     "stress",

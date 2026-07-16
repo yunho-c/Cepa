@@ -1522,6 +1522,44 @@ not prove assistive-technology behavior, an installed package, the physical
 picker, or Windows WebView2. Exact hashes, commands, and results are preserved
 in [`validation-results/2026-07-16-scan-root-retry-focus.txt`](validation-results/2026-07-16-scan-root-retry-focus.txt).
 
+### 2026-07-16 scan-entry transition focus
+
+A follow-up keyboard audit found two view transitions that still dropped focus
+to the document body. A delayed development IPC response showed that selecting
+a discovered volume disabled its focused row during root validation. Starting a
+mocked scan likewise removed the landing action before assigning focus in the
+scan view. Both left keyboard and screen-reader users without a reliable current
+location while work was active.
+
+The selected volume now remains focusable but `aria-disabled` and rejects repeat
+activation. Its accessible name changes to Opening, a polite live region
+announces the same state, and its spinner and wait cursor preserve the restrained
+visual treatment. Other volumes and the remaining landing entry controls become
+unavailable until validation completes. Every scan entry path now focuses the
+scan heading after the view is rendered; the next Tab reaches Stop. The
+development-only `?mock=root-preparing&roots=preview` scenario holds the first
+transition for repeatable inspection.
+
+The held volume state was rendered at 620 by 480 and 880 by 620 in light and dark
+appearance with no horizontal overflow or console errors. DOM traces confirmed
+that the selected row retained focus, exposed `aria-busy` and `aria-disabled`,
+announced `Opening Macintosh HD…`, and remained the only focusable landing control.
+A separate scan trace confirmed the focused `#scan-progress-title` and Stop as
+the next Tab target.
+
+The production `native_scan_smoke` report now requires both the initial scan and
+same-process rescan headings to own focus before completion. A real macOS WebKit
+run on a 32-directory by 32-file sparse APFS fixture passed both assertions with
+the native backend, no page errors, and no horizontal overflow. The full local
+suite, release desktop build, Windows GNU cross-check and strict clippy, and an
+exact-source Linux Rust 1.97.0 dependency-light validation also passed.
+
+This is deterministic browser and programmatic production-WebView evidence. It
+does not certify a screen reader, physical keyboard, native folder picker,
+installed package, or Windows WebView2. Exact source hashes, commands, fixture
+shape, and results are preserved in
+[`validation-results/2026-07-16-scan-entry-focus.txt`](validation-results/2026-07-16-scan-entry-focus.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

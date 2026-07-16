@@ -129,6 +129,7 @@
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let landingHeading: HTMLHeadingElement | undefined = $state();
   let chooseDirectoryButton: HTMLButtonElement | null = $state(null);
+  let scanProgressHeading: HTMLHeadingElement | undefined = $state();
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartFocusId: number | null = $state(null);
@@ -550,6 +551,9 @@
     clearInspection();
     resetDirectorySearch(true);
     scanId = null;
+
+    await tick();
+    scanProgressHeading?.focus();
 
     let resolveScan: (response: ScanResponse) => void;
     let rejectScan: (reason: string) => void;
@@ -1432,7 +1436,7 @@
             Choose folder…
           </Button>
 
-          <details class="manual-path">
+          <details class="manual-path" inert={isBusy}>
             <summary>Enter a path instead</summary>
             <form class="path-form" onsubmit={startScan}>
               <label class="sr-only" for="scan-path">Folder path</label>
@@ -1509,7 +1513,11 @@
               <span class="status-dot" aria-hidden="true"></span>
               {progressPresentation.statusLabel}
             </span>
-            <h1 id="scan-progress-title">{scanTargetName}</h1>
+            <h1
+              id="scan-progress-title"
+              tabindex="-1"
+              bind:this={scanProgressHeading}
+            >{scanTargetName}</h1>
           </div>
           <Button
             variant="outline"

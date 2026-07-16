@@ -242,7 +242,8 @@ with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
 with Enter, returns Home, confirms the discarded scan is no longer addressable,
 and completes a second scan in the same process. With both preflights, the
 discard check targets completed scan 3 rather than the earlier failed or
-cancelled scans. Landing and second-result heading focus must both be restored.
+cancelled scans. Both active-scan headings, the landing heading, and the second-
+result heading must receive focus at their respective view transitions.
 Its window state uses a dedicated filename that is removed after the run. This
 proves programmatic production-WebView, IPC, terminal failure, cancellation,
 keyboard-event, and completed-scan lifecycle behavior; it does not exercise
@@ -280,6 +281,7 @@ http://localhost:1420/?mock=estimate-error
 http://localhost:1420/?mock=error
 http://localhost:1420/?mock=navigation-error
 http://localhost:1420/?mock=reveal-error
+http://localhost:1420/?mock=root-preparing&roots=preview
 http://localhost:1420/?mock=search-error
 http://localhost:1420/?mock=stale-actions
 http://localhost:1420/?mock=stress
@@ -318,6 +320,8 @@ the disclosed cause, same-query retry, and preserved search-field focus.
 `?mock=navigation-error` and `?mock=reveal-error` likewise fail their first
 completed-scan action and then succeed, covering scan-local retry intent,
 disclosed causes, and stable focus after recovery.
+`?mock=root-preparing&roots=preview` holds a selected volume in its validation
+state so its focus, announcement, and progress treatment can be inspected.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

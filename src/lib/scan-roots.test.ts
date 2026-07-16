@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  scanRootActionState,
   scanRootUsedBytes,
   scanRootUsedPercent,
   scanRootsPreviewStatus,
@@ -41,6 +42,12 @@ describe("scan root presentation", () => {
     expect(scanRootsRetryFocusTarget("ready", 2)).toBe("root");
     expect(scanRootsRetryFocusTarget("error", 0)).toBe("retry");
     expect(scanRootsRetryFocusTarget("ready", 0)).toBe("fallback");
+  });
+
+  test("keeps only the selected volume focusable while its root is prepared", () => {
+    expect(scanRootActionState("/", null, false)).toBe("available");
+    expect(scanRootActionState("/", "/", true)).toBe("preparing");
+    expect(scanRootActionState("/Volumes/Archive", "/", true)).toBe("disabled");
   });
 
   test("derives used capacity from available bytes", () => {

@@ -12,6 +12,7 @@ export type ScanRootsStatus = "idle" | "loading" | "ready" | "error";
 
 export type ScanRootsPreview = Exclude<ScanRootsStatus, "idle">;
 export type ScanRootsRetryFocus = "loading" | "root" | "retry" | "fallback";
+export type ScanRootActionState = "available" | "preparing" | "disabled";
 
 export function scanRootsPreviewStatus(value: string | null): ScanRootsPreview | null {
   switch (value) {
@@ -34,6 +35,16 @@ export function scanRootsRetryFocusTarget(
   if (rootCount > 0) return "root";
   if (status === "error") return "retry";
   return "fallback";
+}
+
+export function scanRootActionState(
+  rootPath: string,
+  preparingPath: string | null,
+  busy: boolean,
+): ScanRootActionState {
+  if (preparingPath === rootPath) return "preparing";
+  if (busy) return "disabled";
+  return "available";
 }
 
 export function shouldShowScanRoots(
