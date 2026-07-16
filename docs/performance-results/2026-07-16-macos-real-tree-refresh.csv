@@ -1,0 +1,10 @@
+record,workload,backend,variant,entries,files,directories,duplicate_hard_links,iterations,wall_ms_samples,median_wall_ms,entries_per_second_median,cancellation_us_samples,median_cancellation_us,max_cancellation_us,max_rss_bytes_samples,median_max_rss_bytes,peak_footprint_bytes_samples,median_peak_footprint_bytes,snapshot_retained_bytes,decision
+scan,build-checkout,jwalk,production,221920,213379,8541,127217,7,"1147.980875;815.477291;872.153750;867.695791;809.075000;826.747667;1011.003333",867.695791,255757.8385,,,,,,,,43316312,reference
+scan,build-checkout,getattrlistbulk,production,221920,213379,8541,127217,7,"136.745709;135.154458;136.411042;135.738083;145.843167;210.964333;134.391542",136.411042,1626847.7738,,,,,,,,43316312,selected
+scan,source-registry,jwalk,production,63904,53509,10395,0,7,"90.823291;94.585125;92.896750;99.715042;98.742916;98.503792;101.748500",98.503792,648746.5985,,,,,,,,9211216,reference
+scan,source-registry,getattrlistbulk,production,63904,53509,10395,0,7,"72.497875;81.843292;72.828125;68.619875;66.785875;65.896417;75.081583",72.497875,881460.3187,,,,,,,,9211216,selected
+cancellation,build-checkout,jwalk,production,221927,,,,9,,,,"3782;6114;8123;10054;11506;10609;11690;7909;9773",9773,11690,,,,,,reference
+cancellation,build-checkout,getattrlistbulk,production,221927,,,,9,,,,"1776;1461;1693;342;2339;830;1795;2190;419",1693,2339,,,,,,selected
+memory,build-checkout,jwalk,production,221927,,,,3,,,,,,,"165675008;168525824;171687936",168525824,"91144960;100418280;100287232",100287232,,reference
+memory,build-checkout,getattrlistbulk,production,221927,,,,3,,,,,,,"96911360;80183296;85426176",85426176,"66486968;66896520;68698784",66896520,,selected
+scheduler,synthetic-directory-rich,getattrlistbulk,eight-initial-workers,110101,100001,10100,0,21,,,,,,,,,,,,inconclusive-external-load

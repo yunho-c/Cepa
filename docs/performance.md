@@ -1160,10 +1160,60 @@ interactive progress requirements, peak RSS beyond the known 1 MiB userspace
 buffer, or native Windows behavior. Raw trials are preserved in
 [`performance-results/2026-07-16-content-integrity.csv`](performance-results/2026-07-16-content-integrity.csv).
 
+### 2026-07-16 macOS real-tree refresh
+
+The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
+M4 Pro class of machine under macOS 15.6 with 48 GiB RAM, 14 logical CPUs, Rust
+1.94.0-nightly, and an APFS data volume at 94% capacity. Each throughput result
+uses one warmup followed by seven measured release scans. These are warm-cache
+observations, not cold-storage claims.
+
+Two distinct, quiescent real-tree shapes were compared. The build checkout had
+221,920 retained entries, 8,541 directories, 28 GiB of source and build output,
+and 127,217 duplicate hard links. The source registry had 63,904 entries, 10,395
+directories, 1.6 GiB of dependency sources, and no duplicate hard links. The
+parity harness matched file and directory counts, logical and allocated bytes,
+unavailable and filesystem-boundary counts, duplicate hard links, and every
+accounting-semantics flag on both trees.
+
+| Workload | Backend | Median wall | Range | Median entries/s | Change |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Build checkout | `jwalk` | 867.70 ms | 809.08–1,147.98 ms | 255,758 | reference |
+| Build checkout | `getattrlistbulk` | 136.41 ms | 134.39–210.96 ms | 1,626,848 | 84.3% lower |
+| Source registry | `jwalk` | 98.50 ms | 90.82–101.75 ms | 648,747 | reference |
+| Source registry | `getattrlistbulk` | 72.50 ms | 65.90–81.84 ms | 881,460 | 26.4% lower |
+
+Nine asynchronous cancellations on the larger tree requested cancellation at
+the first progress boundary at or beyond 2,048 entries. Native median latency
+was 1,693 us with a 2,339 us maximum, versus 9,773 us and 11,690 us for `jwalk`.
+The native median was 82.7% lower. This bounds userspace response after the
+observed progress event; it does not bound a blocked filesystem syscall.
+
+Three one-warmup/one-measured process observations under `/usr/bin/time -l`
+reported a median 81.5 MiB native maximum RSS versus 160.7 MiB for `jwalk`, and
+a median 63.8 MiB native peak memory footprint versus 95.6 MiB. The benchmark's
+capacity-aware retained snapshot was identical between backends at 43,316,312
+bytes, or 195.19 bytes per entry. Process memory includes the harness, allocator,
+threads, and transient traversal state, so this is not a retained-arena-only
+claim.
+
+An isolated eight-initial-worker candidate was also alternated with the current
+four-worker policy on a new 110,101-entry APFS fixture. Unrelated compiler and
+simulation workloads began saturating CPU and storage during the extended
+sequence, causing both variants to move from roughly 100 ms into multi-second
+outliers. That experiment is marked inconclusive and supports no scheduler
+change. The bounded four-worker start and conditional expansion to eight remain
+unchanged until a controlled interleaved rerun can evaluate both median and tail
+latency.
+
+Raw stable samples and the inconclusive scheduler record are preserved in
+[`performance-results/2026-07-16-macos-real-tree-refresh.csv`](performance-results/2026-07-16-macos-real-tree-refresh.csv).
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;
-the one real-tree observation is still a single local APFS checkout. They do
+the real-tree observations still cover only two shapes on one local APFS
+machine. They do
 not measure cold storage, network volumes, antivirus interference, native IPC
 transport, production platform WebViews, or other operating systems. The RSS
 measurements include the benchmark process and allocator, not just

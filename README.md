@@ -119,6 +119,12 @@ error, and concurrent-mutation semantics.
 
 Broader native-filesystem and cold-cache validation, additional Windows and
 Linux hardware measurements, and compression mutation remain roadmap work. The
+current macOS refresh matched portable accounting on two real APFS tree shapes.
+On the 221,920-entry build checkout, `getattrlistbulk` reduced warm median wall
+time by 84.3%, median cancellation latency by 82.7%, and observed median maximum
+RSS by 49.3% versus `jwalk`; on a 63,904-entry source registry it reduced warm
+median wall time by 26.4%. These remain one-machine warm-cache observations, not
+universal or cold-storage claims. The
 Windows MFT backend now streams file-ID measurements into its retained node
 arena through bounded batches; on one 5.57-million-entry system-volume
 observation this reduced peak working set by 24.1%, while a stable 8,202-entry
