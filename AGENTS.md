@@ -173,7 +173,10 @@ Distribution metadata is explicit and project-owned: `LICENSE`, `package.json`,
 license, repository, version, and `Cepa contributors` attribution. Keep the npm
 package private and the Rust crate non-publishable; Cepa ships as native desktop
 bundles. `src-tauri/tests/tauri_config.rs` guards this contract.
-CI produces and retains exact native package archives on every platform.
+CI produces and retains exact native package archives on every platform. The
+Linux job smoke-tests the raw executable under isolated Xvfb and DBus sessions
+after `just build` and before packaging, so startup and bundle failures remain
+distinct.
 Platform validators check the macOS app seal and mounted DMG, the Windows MSI
 metadata and administratively extracted executable plus NSIS metadata, and the
 Linux package structures. These are unsigned or ad-hoc native packaging gates,

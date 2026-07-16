@@ -177,3 +177,32 @@ fn canonical_javascript_workflows_force_the_bun_runtime() {
         );
     }
 }
+
+#[test]
+fn linux_ci_smokes_the_built_desktop_before_packaging() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+
+    for dependency in ["dbus-daemon", "xvfb"] {
+        assert!(
+            workflow
+                .lines()
+                .any(|line| line.trim() == format!("{dependency} \\")),
+            "Linux CI must install {dependency} explicitly"
+        );
+    }
+
+    let build = workflow
+        .find("- name: Build native application")
+        .expect("CI must build the native application");
+    let smoke = workflow
+        .find("- name: Smoke Linux desktop startup")
+        .expect("CI must smoke-test the Linux desktop executable");
+    let bundle = workflow
+        .find("- name: Build distribution bundles")
+        .expect("CI must build distribution bundles");
+    assert!(build < smoke && smoke < bundle);
+
+    let smoke_step = &workflow[smoke..bundle];
+    assert!(smoke_step.contains("if: runner.os == 'Linux'"));
+    assert!(smoke_step.contains("run: just smoke-linux-desktop"));
+}

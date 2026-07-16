@@ -44,12 +44,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            dbus-daemon \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
             libfuse2 \
             patchelf \
             rpm \
+            xvfb \
             xdg-utils
 
       - name: Install Rust
@@ -89,6 +91,10 @@ jobs:
 
       - name: Build native application
         run: just build
+
+      - name: Smoke Linux desktop startup
+        if: runner.os == 'Linux'
+        run: just smoke-linux-desktop
 
       - name: Build distribution bundles
         env:
