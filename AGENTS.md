@@ -67,7 +67,10 @@ free-capacity value in the 560 through 720 logical-pixel compact desktop range;
 only browser previews below 560 pixels omit it. Preserve the spacious centered
 hero when no storage panel is rendered; use
 `shouldShowScanRoots` for both the component and layout state so they cannot
-drift.
+drift. If a first-launch error or cancellation callout shares that compact
+storage landing view, tighten the hero and callout rhythm enough that focusing
+the recovery message does not scroll the heading beneath the sticky header at
+620 by 480.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 intentional mount-boundary semantics remain available under the collapsed
 `Scan details` disclosure rather than appearing as status badges or a diagnostic
