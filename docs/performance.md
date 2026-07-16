@@ -1013,7 +1013,10 @@ before aggregation begins. That phase keeps cancellation visibly available
 during long retained-arena passes. It replaces the former post-aggregation final
 progress update, so successful completion does not send two adjacent terminal
 payloads before the bounded result response. This is a transport and interaction
-contract, not a claim that aggregation itself became faster.
+contract, not a claim that aggregation itself became faster. Long aggregation
+passes refresh the same bounded payload from the existing 2,048-node checkpoints
+at no more than the shared 100 ms progress cadence. The event rate is therefore
+time-bounded rather than proportional to retained arena size.
 
 The first macOS pass exposed that cancellation detection was already bounded,
 but returning still synchronously destroyed the abandoned arena. Moving only

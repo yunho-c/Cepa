@@ -43,7 +43,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   that keeps space, current location, elapsed time, cancellation, and unavailable
   items visible without exposing backend vocabulary
 - An explicit, cancellable finishing phase while retained directory totals are
-  prepared, instead of leaving a completed traversal looking stalled
+  prepared, with time-bounded elapsed updates instead of leaving a completed
+  traversal looking stalled
 - On-demand directory views backed by the completed in-memory scan snapshot
 - A scan-authorized Home transition that releases the retained snapshot and
   cancels related background work instead of hiding a still-resident result;

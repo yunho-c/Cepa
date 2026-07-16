@@ -81,6 +81,12 @@ export function installDevMock(requestedScenario: string) {
             scanId,
             progress: mockProgress("finishing"),
           });
+          await delay(120);
+          emitChannel(channelId, 3, {
+            event: "progress",
+            scanId,
+            progress: mockProgress("finishing", 548),
+          });
           return new Promise<ScanResponse>((_, reject) => {
             rejectPendingScan = reject;
           });
@@ -272,7 +278,10 @@ function emitChannel(channelId: number, index: number, message: unknown) {
   internals.runCallback(channelId, { index, message });
 }
 
-function mockProgress(phase: ScanProgress["phase"] = "scanning"): ScanProgress {
+function mockProgress(
+  phase: ScanProgress["phase"] = "scanning",
+  elapsedMs = 428,
+): ScanProgress {
   return {
     phase,
     entriesScanned: 18_432,
@@ -285,7 +294,7 @@ function mockProgress(phase: ScanProgress["phase"] = "scanning"): ScanProgress {
       phase === "finishing"
         ? ROOT
         : `${ROOT}/Library/Application Support/Design Archive`,
-    elapsedMs: 428,
+    elapsedMs,
     largestItems: rootView().items
       .filter((item) => item.kind === "file")
       .map((item) => ({

@@ -46,7 +46,9 @@ and may make the remaining progress content scroll. The shared completion path
 emits one backend-neutral `finishing` progress phase before bottom-up aggregation
 and no redundant post-aggregation update. Present it as `Finishing` with
 `Preparing results…`, keep Stop available because aggregation is cancellable,
-and do not expose aggregation terminology in the primary UI.
+and do not expose aggregation terminology in the primary UI. Refresh its elapsed
+time only from the existing 2,048-node checkpoints and at most once per 100 ms;
+never turn arena size into unbounded bridge traffic.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or

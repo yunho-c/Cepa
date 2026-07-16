@@ -928,7 +928,7 @@ where
 {
     let traversal_us = duration_us(traversal_completed_at.duration_since(started_at));
 
-    on_progress(ScanProgress {
+    let mut finishing_progress = ScanProgress {
         phase: ScanPhase::Finishing,
         entries_scanned: counters.files_scanned + counters.directories_scanned,
         files_scanned: counters.files_scanned,
@@ -939,9 +939,19 @@ where
         current_path: root.to_string_lossy().into_owned(),
         elapsed_ms: duration_ms(traversal_completed_at.duration_since(started_at)),
         largest_items: partial_ranking.items(&nodes),
-    });
+    };
+    on_progress(finishing_progress.clone());
+    let mut last_progress_at = Instant::now();
 
-    if let Err(error) = aggregate_nodes(&mut nodes, cancel, |_| {}) {
+    if let Err(error) = aggregate_nodes(&mut nodes, cancel, |_| {
+        report_finishing_progress_if_due(
+            &mut finishing_progress,
+            started_at,
+            &mut last_progress_at,
+            Instant::now(),
+            on_progress,
+        );
+    }) {
         if error == "Scan cancelled." {
             let _ = release_nodes_off_thread(nodes, || {});
         }
@@ -997,6 +1007,23 @@ where
         },
         snapshot,
     })
+}
+
+fn report_finishing_progress_if_due<F>(
+    progress: &mut ScanProgress,
+    started_at: Instant,
+    last_progress_at: &mut Instant,
+    now: Instant,
+    on_progress: &mut F,
+) where
+    F: FnMut(ScanProgress),
+{
+    if now.saturating_duration_since(*last_progress_at) < PROGRESS_INTERVAL {
+        return;
+    }
+    progress.elapsed_ms = duration_ms(now.duration_since(started_at));
+    on_progress(progress.clone());
+    *last_progress_at = Instant::now();
 }
 
 fn aggregate_nodes<F>(
@@ -1970,6 +1997,56 @@ mod tests {
             .expect_err("finishing progress should arrive before aggregation completes");
 
         assert_eq!(error, "Scan cancelled.");
+    }
+
+    #[test]
+    fn finishing_progress_heartbeats_are_time_bounded_and_refresh_elapsed_time() {
+        let mut progress = ScanProgress {
+            phase: ScanPhase::Finishing,
+            entries_scanned: 17,
+            files_scanned: 11,
+            directories_scanned: 6,
+            logical_bytes: 23,
+            allocated_bytes: 29,
+            skipped_entries: 0,
+            current_path: "/fixture".to_string(),
+            elapsed_ms: 0,
+            largest_items: Vec::new(),
+        };
+        let now = Instant::now();
+        let started_at = now - Duration::from_millis(250);
+        let mut last_progress_at = now;
+        let mut updates = Vec::new();
+
+        report_finishing_progress_if_due(
+            &mut progress,
+            started_at,
+            &mut last_progress_at,
+            now,
+            &mut |update| updates.push(update),
+        );
+        assert!(updates.is_empty(), "an early checkpoint must not emit");
+
+        last_progress_at = now - PROGRESS_INTERVAL;
+        report_finishing_progress_if_due(
+            &mut progress,
+            started_at,
+            &mut last_progress_at,
+            now,
+            &mut |update| updates.push(update),
+        );
+        assert_eq!(updates.len(), 1);
+        assert!(updates[0].elapsed_ms >= 250);
+        assert_eq!(updates[0].phase, ScanPhase::Finishing);
+
+        report_finishing_progress_if_due(
+            &mut progress,
+            started_at,
+            &mut last_progress_at,
+            now,
+            &mut |update| updates.push(update),
+        );
+        assert_eq!(updates.len(), 1, "back-to-back checkpoints must coalesce");
     }
 
     #[cfg(unix)]
