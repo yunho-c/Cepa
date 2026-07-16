@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { listNavigationTarget } from "./list-navigation";
+import {
+  listNavigationActionTarget,
+  listNavigationTarget,
+} from "./list-navigation";
 
 describe("directory list keyboard navigation", () => {
   const ids = [11, 22, 33];
@@ -22,5 +25,11 @@ describe("directory list keyboard navigation", () => {
   test("ignores unrelated keys and empty collections", () => {
     expect(listNavigationTarget(ids, 22, "Enter")).toBeNull();
     expect(listNavigationTarget([], null, "Home")).toBeNull();
+  });
+
+  test("temporarily falls back from Reveal without changing the preferred action", () => {
+    expect(listNavigationActionTarget("reveal", true)).toBe("reveal");
+    expect(listNavigationActionTarget("reveal", false)).toBe("open");
+    expect(listNavigationActionTarget("open", true)).toBe("open");
   });
 });

@@ -123,9 +123,10 @@ Pointer previews begin on actual pointer movement, not merely because a scan or
 directory transition rendered a segment or row beneath a stationary cursor.
 This keeps a newly completed view anchored on its current directory until the
 user deliberately explores it. Keyboard focus must continue to preview its item
-immediately. Drive chart emphasis, row emphasis, and the row Reveal affordance
-from that same selected-entry state; raw CSS `:hover` must not reintroduce a
-visual preview that disagrees with the coordinated map/list state.
+immediately, and a pointer-leave event must not erase an item that still owns
+keyboard focus. Drive chart emphasis, row emphasis, and the row Reveal
+affordance from that same selected-entry state; raw CSS `:hover` must not
+reintroduce a visual preview that disagrees with the coordinated map/list state.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin
@@ -134,9 +135,10 @@ inspection must not scroll the page.
 The list's primary and Reveal controls use roving row focus so a completed view
 contributes at most two sequential Tab stops rather than one for every retained
 control. Up/Down and Home/End preserve the action kind while moving; a row
-without Reveal falls back to its primary control. Preserve the associated
-screen-reader instructions and recover focus ownership when search results or
-the current directory change. Do not make all 500 rows and actions tabbable.
+without Reveal falls back to its primary control without forgetting the Reveal
+intent, so moving again can return to Reveal. Preserve the associated screen-
+reader instructions and recover focus ownership when search results or the
+current directory change. Do not make all 500 rows and actions tabbable.
 The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
 overflowing the explorer at the minimum window height. Keep its identity header

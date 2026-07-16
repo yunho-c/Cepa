@@ -26,7 +26,11 @@
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
-  import { listNavigationTarget } from "$lib/list-navigation";
+  import {
+    listNavigationActionTarget,
+    listNavigationTarget,
+    type ListNavigationAction,
+  } from "$lib/list-navigation";
   import {
     navigationRecoveryMessage,
     type NavigationRecovery,
@@ -82,7 +86,8 @@
   let progress = $state<ScanProgress | null>(null);
   let result = $state<ScanResult | null>(null);
   let view = $state<DirectoryView | null>(null);
-  let selectedEntry = $state<ChartItem | ScanItem | null>(null);
+  let pointerEntry = $state<ChartItem | ScanItem | null>(null);
+  let focusedEntry = $state<ChartItem | ScanItem | null>(null);
   let inspectedEntry = $state<ChartItem | ScanItem | null>(null);
   let isNavigating = $state(false);
   let navigationSequence = 0;
@@ -122,6 +127,8 @@
   let chartFocusId: number | null = $state(null);
   let itemListElement: HTMLDivElement | undefined = $state();
   let listFocusId: number | null = $state(null);
+  let listFocusAction: ListNavigationAction = "open";
+  let preservingListFocusAction = false;
   let stateNotice: HTMLDivElement | undefined = $state();
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
@@ -226,9 +233,9 @@
       chartFocusId = interactiveIds[0] ?? null;
     }
   });
-  // Hover and keyboard focus should always coordinate the chart and list. A
-  // clicked inspection remains the fallback when there is no transient target.
-  const activeEntry = $derived(selectedEntry ?? inspectedEntry);
+  // Deliberate pointer movement may temporarily supersede keyboard focus. When
+  // the pointer leaves, focus resumes ownership before the clicked inspection.
+  const activeEntry = $derived(pointerEntry ?? focusedEntry ?? inspectedEntry);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const canEstimateSavings = $derived(
@@ -278,7 +285,6 @@
   async function handleListNavigation(
     event: KeyboardEvent,
     itemId: number,
-    action: "open" | "reveal",
   ) {
     const targetId = listNavigationTarget(visibleItemIds, itemId, event.key);
     if (targetId === null) return;
@@ -286,13 +292,34 @@
     event.preventDefault();
     listFocusId = targetId;
     await tick();
-    const actionTarget = itemListElement?.querySelector<HTMLElement>(
-      `[data-list-${action}-id="${targetId}"]`,
+    const targetItem = visibleItems.find((item) => item.id === targetId);
+    const targetAction = listNavigationActionTarget(
+      listFocusAction,
+      targetItem !== undefined && targetItem.kind !== "symlink",
     );
-    const rowTarget = itemListElement?.querySelector<HTMLElement>(
-      `[data-list-open-id="${targetId}"]`,
+    const target = itemListElement?.querySelector<HTMLElement>(
+      `[data-list-${targetAction}-id="${targetId}"]`,
     );
-    (actionTarget ?? rowTarget)?.focus();
+    preservingListFocusAction = true;
+    target?.focus();
+    preservingListFocusAction = false;
+  }
+
+  function handleListFocus(item: ScanItem, action: ListNavigationAction) {
+    listFocusId = item.id;
+    focusedEntry = item;
+    pointerEntry = null;
+    if (!preservingListFocusAction) listFocusAction = action;
+  }
+
+  function clearFocusedEntry(itemId: number | null) {
+    if (itemId === null) return;
+    if (focusedEntry?.id === itemId) focusedEntry = null;
+  }
+
+  function clearPointerEntry(itemId: number | null) {
+    if (itemId === null) return;
+    if (pointerEntry?.id === itemId) pointerEntry = null;
   }
 
   function clearDropState() {
@@ -489,7 +516,8 @@
     progress = null;
     result = null;
     view = null;
-    selectedEntry = null;
+    pointerEntry = null;
+    focusedEntry = null;
     clearInspection();
     resetDirectorySearch(true);
     scanId = null;
@@ -604,7 +632,8 @@
     progress = null;
     result = null;
     view = null;
-    selectedEntry = null;
+    pointerEntry = null;
+    focusedEntry = null;
     clearInspection();
     resetDirectorySearch(true);
     errorMessage = "";
@@ -1042,7 +1071,8 @@
       clearNavigationError();
       view = nextView;
       sizeMetric = metric;
-      selectedEntry = null;
+      pointerEntry = null;
+      focusedEntry = null;
       clearInspection();
       if (preservedSearch.trim()) {
         searchQuery = preservedSearch;
@@ -1193,14 +1223,13 @@
     if (entry.kind === "directory") {
       void openDirectory(entry.id);
     } else {
-      selectedEntry = entry;
       inspectionReturnTarget = trigger ?? null;
       void inspectEntry(entry);
     }
   }
 
   function previewEntry(entry: ChartItem | ScanItem) {
-    if (selectedEntry?.id !== entry.id) selectedEntry = entry;
+    if (pointerEntry?.id !== entry.id) pointerEntry = entry;
   }
 
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
@@ -1660,10 +1689,11 @@
                       onpointermove={() => previewEntry(segment.item)}
                       onfocus={() => {
                         chartFocusId = segment.item.id;
-                        selectedEntry = segment.item;
+                        focusedEntry = segment.item;
+                        pointerEntry = null;
                       }}
-                      onmouseleave={() => (selectedEntry = null)}
-                      onblur={() => (selectedEntry = null)}
+                      onmouseleave={() => clearPointerEntry(segment.item.id)}
+                      onblur={() => clearFocusedEntry(segment.item.id)}
                       onclick={(event) => activateEntry(segment.item, event.currentTarget)}
                       onkeydown={(event) => handleSegmentKeydown(event, segment.item)}
                     >
@@ -1916,13 +1946,10 @@
                     disabled={isResultBusy}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
                     onpointermove={() => previewEntry(item)}
-                    onfocus={() => {
-                      listFocusId = item.id;
-                      selectedEntry = item;
-                    }}
-                    onmouseleave={() => (selectedEntry = null)}
-                    onblur={() => (selectedEntry = null)}
-                    onkeydown={(event) => handleListNavigation(event, item.id, "open")}
+                    onfocus={() => handleListFocus(item, "open")}
+                    onmouseleave={() => clearPointerEntry(item.id)}
+                    onblur={() => clearFocusedEntry(item.id)}
+                    onkeydown={(event) => handleListNavigation(event, item.id)}
                     aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
                   >
                     <span class="item-icon" data-kind={item.kind}>
@@ -1963,12 +1990,10 @@
                       title="Reveal in file manager"
                       onclick={() => revealItem(item.id)}
                       onpointermove={() => previewEntry(item)}
-                      onfocus={() => {
-                        listFocusId = item.id;
-                        selectedEntry = item;
-                      }}
-                      onblur={() => (selectedEntry = null)}
-                      onkeydown={(event) => handleListNavigation(event, item.id, "reveal")}
+                      onfocus={() => handleListFocus(item, "reveal")}
+                      onmouseleave={() => clearPointerEntry(item.id)}
+                      onblur={() => clearFocusedEntry(item.id)}
+                      onkeydown={(event) => handleListNavigation(event, item.id)}
                     >
                       <FolderSearch />
                     </button>
