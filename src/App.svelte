@@ -1782,7 +1782,7 @@
         aria-busy={isResultBusy}
       >
         <div class="chart-pane">
-          <h2 class="sr-only" tabindex="-1" bind:this={viewHeading}>
+          <h2 class="sr-only">
             Storage map for {view.displayName}
           </h2>
           {#if view.path !== view.root}
@@ -1871,7 +1871,7 @@
             aria-atomic="true"
           >{inspectorStatus}</p>
           <div class="section-heading">
-            <h2>{view.displayName}</h2>
+            <h2 tabindex="-1" bind:this={viewHeading}>{view.displayName}</h2>
             <div class="section-actions">
               <span
                 id="directory-search-status"

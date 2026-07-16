@@ -173,4 +173,26 @@ describe("production style sources", () => {
     expect(inspector).not.toContain("aria-live");
     expect(inspector).toContain('role="alert"');
   });
+
+  test("hands successful directory navigation to the visible folder heading", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const chartHeadingStart = component.indexOf('<h2 class="sr-only">');
+    const chartHeading = component.slice(
+      chartHeadingStart,
+      component.indexOf("</h2>", chartHeadingStart),
+    );
+    const directoryHeadingStart = component.indexOf(
+      '<h2 tabindex="-1" bind:this={viewHeading}>',
+    );
+    const directoryHeading = component.slice(
+      directoryHeadingStart,
+      component.indexOf("</h2>", directoryHeadingStart),
+    );
+
+    expect(chartHeadingStart).toBeGreaterThan(-1);
+    expect(chartHeading).not.toContain("viewHeading");
+    expect(chartHeading).not.toContain("tabindex");
+    expect(directoryHeadingStart).toBeGreaterThan(-1);
+    expect(directoryHeading).toContain("{view.displayName}");
+  });
 });

@@ -198,9 +198,12 @@ repeat activation and freeze that action kind's roving-arrow movement until it
 settles. Desktop-shortcut and native-menu Up can begin while focus is elsewhere;
 move focus to the visible Up control before starting that request so it owns the
 pending interval, then move to the destination heading on success.
-Successful navigation moves focus to the new view heading, while Reveal success
-leaves focus on its original action. Preserve the restrained pending opacity and
-wait cursor without dropping focus to the document body.
+Successful navigation moves focus to the visible directory-pane heading, while
+Reveal success leaves focus on its original action. The hidden `Storage map for`
+heading labels the chart but must never own transition focus; sighted keyboard
+users need a visible destination when the directory changes. Preserve the
+restrained pending opacity and wait cursor without dropping focus to the document
+body.
 The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
 overflowing the explorer at the minimum window height. Keep its identity header
@@ -689,7 +692,8 @@ Start with these files:
 - `src-tauri/examples/window_state_smoke.rs`: two-process native initial-page,
   geometry persistence, and restoration proof with isolated temporary state.
 - `src-tauri/examples/native_scan_smoke.rs`: production-protocol WebView/IPC
-  scan, metric, navigation, search, focus-bound, and minimum-size smoke proof.
+  scan, metric, navigation, visible focus-handoff, search, focus-bound, and
+  minimum-size smoke proof.
 - `src-tauri/examples/content_integrity_benchmark.rs`: release throughput and
   controller-rendezvoused cancellation measurement for the production
   plan-content hashing loop. The rendezvous excludes controller scheduling from

@@ -84,7 +84,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   visual-only center preview that does not duplicate segment announcements
 - Roving directory-list focus that keeps at most the current row's primary and
   Reveal controls in the Tab order, with Up/Down and Home/End movement across
-  all retained rows
+  all retained rows, followed by a visible folder-heading focus destination
+  after successful navigation
 - Deliberate pointer previews that keep newly rendered scan and directory views
   anchored on the current folder until the pointer actually moves over a chart
   segment or list row
@@ -254,7 +255,9 @@ guarded `aria-disabled` state while IPC is pending. It then requires a real
 list-origin navigation to
 retain focus with guarded `aria-disabled` state while IPC is pending. Chart and
 list activation choose actual directory items rather than assuming the first
-ranked item is a folder. It then returns Home, requires that focused action to
+ranked item is a folder. Successful chart, desktop-shortcut Up, and list
+navigation must each hand focus to the visible directory heading rather than the
+hidden chart label. It then returns Home, requires that focused action to
 remain undimmed with guarded busy and disabled semantics while discard is
 pending, confirms the discarded scan is no
 longer addressable, and completes a second scan in the same process. With both

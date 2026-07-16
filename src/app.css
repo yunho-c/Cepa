@@ -558,8 +558,7 @@ body {
 .cancelled-callout:focus,
 .landing h1:focus,
 .scan-progress h1:focus,
-.results-heading h1:focus,
-.chart-pane h2:focus { outline: none; }
+.results-heading h1:focus { outline: none; }
 
 .scan-view {
   min-height: calc(100vh - 58px);

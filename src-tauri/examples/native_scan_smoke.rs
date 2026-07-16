@@ -256,6 +256,9 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
         && report["navigationChangedFolder"].as_bool() == Some(true)
+        && report["navigationHeadingFocusVisible"].as_bool() == Some(true)
+        && report["shortcutNavigationHeadingFocusVisible"].as_bool() == Some(true)
+        && report["listNavigationHeadingFocusVisible"].as_bool() == Some(true)
         && report["pendingChartNavigationFocusRetained"].as_bool() == Some(true)
         && report["pendingNavigationFocusRetained"].as_bool() == Some(true)
         && report["pendingShortcutNavigationFocusRetained"].as_bool() == Some(true)
@@ -569,7 +572,12 @@ void (async () => {{
     );
     await painted();
     const navigationMs = performance.now() - navigationStartedAt;
-    const navigatedHeading = document.querySelector('.section-heading h2')?.textContent?.trim() || '';
+    const navigatedHeadingElement = document.querySelector('.section-heading h2');
+    const navigatedHeading = navigatedHeadingElement?.textContent?.trim() || '';
+    const navigationHeadingFocusVisible =
+      document.activeElement === navigatedHeadingElement
+      && navigatedHeadingElement?.getClientRects().length > 0
+      && !navigatedHeadingElement.classList.contains('sr-only');
     const searchQuery = document.querySelector('.storage-item .item-copy > strong')?.textContent?.trim() || '';
     if (!searchQuery) throw new Error('The opened folder has no searchable rows.');
 
@@ -632,6 +640,9 @@ void (async () => {{
       () => document.querySelector('.section-heading h2')?.textContent?.trim() === rootHeading,
       'return to root for pending navigation',
     );
+    await painted();
+    const shortcutNavigationHeadingFocusVisible =
+      document.activeElement === document.querySelector('.section-heading h2');
     const pendingOpenButton = [...document.querySelectorAll('.storage-item')]
       .find((button) => button.getAttribute('aria-label')?.endsWith(', open folder'));
     if (!pendingOpenButton) throw new Error('The root list has no navigation action.');
@@ -649,6 +660,8 @@ void (async () => {{
       'list directory navigation',
     );
     await painted();
+    const listNavigationHeadingFocusVisible =
+      document.activeElement === document.querySelector('.section-heading h2');
 
     phase('returning-home');
     const homeButton = document.querySelector('[aria-label="Cepa home"]');
@@ -712,6 +725,9 @@ void (async () => {{
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       navigationChangedFolder: navigatedHeading !== rootHeading,
+      navigationHeadingFocusVisible,
+      shortcutNavigationHeadingFocusVisible,
+      listNavigationHeadingFocusVisible,
       pendingChartNavigationFocusRetained:
         pendingChartNavigationFocusRetained && pendingChartNavigationFocusFrozen,
       pendingNavigationFocusRetained,
@@ -802,6 +818,9 @@ mod tests {
             "pageErrors": [],
             "logicalMetricSelected": true,
             "navigationChangedFolder": true,
+            "navigationHeadingFocusVisible": true,
+            "shortcutNavigationHeadingFocusVisible": true,
+            "listNavigationHeadingFocusVisible": true,
             "pendingChartNavigationFocusRetained": true,
             "pendingNavigationFocusRetained": true,
             "pendingShortcutNavigationFocusRetained": true,
@@ -845,6 +864,10 @@ mod tests {
         let mut broad_inspector_live_region = complete.clone();
         broad_inspector_live_region["inspectorLiveRegionScoped"] = false.into();
         assert!(!validate_report(&broad_inspector_live_region, 2));
+
+        let mut hidden_navigation_focus = complete.clone();
+        hidden_navigation_focus["navigationHeadingFocusVisible"] = false.into();
+        assert!(!validate_report(&hidden_navigation_focus, 2));
 
         let mut chart_preview_announced = complete.clone();
         chart_preview_announced["chartPreviewHidden"] = false.into();

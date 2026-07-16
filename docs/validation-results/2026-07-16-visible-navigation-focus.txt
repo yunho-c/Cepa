@@ -1,0 +1,98 @@
+Cepa visible directory-navigation focus validation
+Date: 2026-07-16
+Baseline commit: af3285c0d7634761e8c886640f283e1491589b30
+
+Changed source SHA-256
+76ce48ce523d105a05e0c35d82d337fea46ad7afe6d287b5d9f8076078444a41  src/App.svelte
+bed23d576b9b5b7b90176157b1dc6a9e80c7c04b4cfeb205ebea46fe101eb0ff  src/app.css
+7b8a18d948549ecd5ce7ecf34d3ed76fa775bfa5fcb443900ab3fc1567df6bda  src/lib/style-sources.test.ts
+70a1bbf9cce5e03b98847f77f638005d91e1b5c28f728f87831be2a045263c29  src-tauri/examples/native_scan_smoke.rs
+ef286c68827386193c99add37fb4eed2af01743ac310093ff3d9f55fc4adc8cb  AGENTS.md
+2fd9321ed63d1fbf9405041a760014d150f0902f552a6ad977936ce3697b8d83  README.md
+f584d72f1ff50017c495d0a0f3bbed9f21572a50733664106e21e8785cd97c21  docs/performance.md
+
+Reproduction before the fix
+- Started the complete mock at 880x620 in light appearance.
+- Navigated through the ranked Pictures row into the deterministic empty folder.
+- The active element was `Storage map for Pictures`, an h2 with the `sr-only`
+  class and no visible box.
+- The visible Pictures h2 in the directory pane was not focusable.
+- The transition was therefore announced but had no visible focus destination
+  for sighted keyboard users.
+
+Deterministic browser validation after the fix
+Scenario: complete, dark appearance, 620x480 viewport.
+- Ranked-list navigation into empty Pictures focused the visible Pictures h2.
+- Alt+Left returned to the root and focused the visible demo h2.
+- Keyboard activation of the Library chart segment focused the visible Library
+  h2. It matched :focus-visible and retained the theme's focus outline.
+- The hidden `Storage map for ...` heading remained semantic but had neither a
+  tabindex nor the shared view-heading reference.
+- documentElement innerWidth and scrollWidth were both 620 pixels.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Fixture:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+
+Selected report fields:
+  backendLabel=macOS native
+  navigationHeadingFocusVisible=true
+  shortcutNavigationHeadingFocusVisible=true
+  listNavigationHeadingFocusVisible=true
+  pendingChartNavigationFocusRetained=true
+  pendingShortcutNavigationFocusRetained=true
+  pendingNavigationFocusRetained=true
+  navigationChangedFolder=true
+  navigationMs=51
+  inspectorLiveRegionScoped=true
+  chartPreviewHidden=true
+  chartTabStops=1
+  logicalChartTabStops=1
+  listTabStops=2
+  staleScanRejected=true
+  discardedScanId=1
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 66 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30)
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This proves the DOM contract, deterministic browser behavior, programmatic
+production-macOS-WebView lifecycle, local Windows cross-target graph, and Linux
+Rust 1.97 native core. It does not certify a particular screen reader, physical
+keyboard input, Windows WebView2, Linux WebKitGTK runtime, or installed packages.

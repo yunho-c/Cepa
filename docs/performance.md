@@ -1774,6 +1774,36 @@ This is DOM, deterministic browser, and programmatic production-WebView evidence
 it does not certify a particular screen reader, physical keyboard, Windows
 WebView2, or Linux WebKitGTK runtime.
 
+### 2026-07-16 visible directory-navigation focus
+
+Successful directory navigation previously focused the chart pane's visually
+hidden `Storage map for …` heading. That provided an announcement destination
+for screen-reader users, but sighted keyboard users lost the visible focus
+location after chart, list, breadcrumb, or Up navigation. Empty folders made the
+gap especially clear because the active element had the `sr-only` class while the
+visible folder heading was not focusable.
+
+The visible directory-pane heading now owns the shared `viewHeading` reference
+and programmatic focus target. The hidden chart heading remains semantic but is
+no longer focusable. This preserves one destination for every successful
+directory transition without adding a sequential Tab stop. Reveal recovery also
+uses the visible heading as its fallback when its original row is no longer in
+the rendered view.
+
+At 620 by 480 in dark appearance, deterministic browser flows confirmed the
+visible `Pictures` heading after list navigation into an empty folder, the
+visible root heading after Alt+Left, and the visible `Library` heading after
+keyboard chart activation. Each heading was the active element, the explorer
+remained 620 pixels wide without overflow, and the chart's hidden label stayed
+outside the focus order. The production macOS WebView now requires the same
+handoff after chart navigation, desktop-shortcut Up, and list navigation before
+continuing its search, discard, and rescan lifecycle. Exact source, commands,
+cross-target checks, and Linux Rust 1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-visible-navigation-focus.txt`](validation-results/2026-07-16-visible-navigation-focus.txt).
+This is DOM, deterministic-browser, and programmatic production-WebView evidence;
+it does not certify a particular screen reader, physical keyboard, Windows
+WebView2, or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
