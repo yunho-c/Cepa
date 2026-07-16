@@ -47,7 +47,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   command acknowledges its ID immediately so Stop is never serialized behind a
   long-lived command response, while the calm active-scan view keeps space,
   current location, elapsed time, cancellation, and unavailable items visible
-  without exposing backend vocabulary
+  without exposing backend vocabulary; traversal updates are capped at 10 Hz
+  independently of per-entry cancellation polling
 - An explicit, cancellable finishing phase while retained directory totals are
   prepared, with time-bounded elapsed updates instead of leaving a completed
   traversal looking stalled

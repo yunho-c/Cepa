@@ -47,6 +47,7 @@ pub const CONTENT_INTEGRITY_CHUNK_BYTES: usize = compression::CONTENT_HASH_CHUNK
 pub struct BenchmarkScan {
     pub result: ScanResult,
     pub initial_view_ms: f64,
+    pub progress_events: usize,
     snapshot: ScanSnapshot,
     initial_view: DirectoryView,
 }
@@ -261,13 +262,17 @@ pub fn benchmark_scan_with_backend(
     path: &Path,
     backend: ScanBackend,
 ) -> Result<BenchmarkScan, String> {
+    let mut progress_events = 0_usize;
     let output =
-        scanner::scan_path_with_backend(path, Arc::new(AtomicBool::new(false)), backend, |_| {})?;
+        scanner::scan_path_with_backend(path, Arc::new(AtomicBool::new(false)), backend, |_| {
+            progress_events += 1
+        })?;
     let view_started_at = Instant::now();
     let initial_view = output.snapshot.directory_view(0, 0)?;
     Ok(BenchmarkScan {
         result: output.result,
         initial_view_ms: view_started_at.elapsed().as_secs_f64() * 1_000.0,
+        progress_events,
         snapshot: output.snapshot,
         initial_view,
     })

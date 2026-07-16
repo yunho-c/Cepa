@@ -1,0 +1,96 @@
+Cepa time-bounded traversal-progress validation
+Date: 2026-07-16
+Candidate baseline: 8e15683 plus the progress-cadence working-tree change
+
+Invariant under test
+- jwalk, macOS getattrlistbulk, and Linux statx traversal emit at most one
+  progress update per 100 ms; the terminal finishing update remains explicit
+- progress pacing does not use the former 2,048-entry OR condition
+- traversal cancellation remains checked for every ingested entry
+- progress-event counts are observable in benchmark schema 8 and single-run
+  observation schema 2
+
+Exact candidate hashes
+- scanner.rs:
+  20151afd008327cf713d0609de35cd268af29db24d1c917750a87ed3999575f5
+- scanner/macos.rs:
+  0e949489dd78b09fb6dbf7ffe2ff458e292403c81e0128014cf1a9c3b4efbd55
+- scanner/linux.rs:
+  5beb94b18fb346d68564eadf63d096c027968b7345b7422f6187e64e259bcd0a
+- scanner/windows.rs:
+  f2b9dd0580ae5413522e247904c5921bc32c2c8b2a26817b8b354b8eda0b6545
+- lib.rs:
+  db957a24742a53c4012545fa3ae6a5a9d9eae9c98d2f4b7c41cafd84a51383fa
+- scan_benchmark.rs:
+  b1fc9a762e12702eb972a2df2556b807dca02a4618932a6e724d032888732a3d
+- scan_observation.rs:
+  d205bbdba51b8d2dbb7d72aed5d6757bde6c12e21247965c356c409f90053664
+- raw paired CSV:
+  6b651917efaae9f5202114565e2d6684628f61d9e6a8d3548b3624c8d9dc538b
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- Bun: 1.3.14
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 69 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 102 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: production frontend and optimized desktop executable passed
+- default-feature Windows GNU all-target check and strict Clippy: passed
+- APFS parity on the 101,011-entry fixture: jwalk and getattrlistbulk matched
+  every accounting field
+
+Alternating APFS measurement: passed
+- fixture: 100,001 files, 1,010 directories, 101,011 total entries
+- separate release binaries: baseline 8e15683 with measurement-only event
+  instrumentation and the candidate
+- 21 alternating pairs after fixture and binary warmup
+- baseline progress events: exactly 50 in every run
+- candidate progress events: exactly 1 in every run
+- event reduction: 98%
+- median wall time: 28.509541 ms baseline, 28.577875 ms candidate
+- paired median candidate change: -1.561847%; candidate won 14 of 21 pairs
+- paired range: -46.397850% to +20.520863%
+- median traversal: 27,561 us baseline, 27,578 us candidate
+- raw evidence: performance-results/2026-07-16-progress-cadence.csv
+
+Candidate benchmark schema: passed
+- three APFS getattrlistbulk runs: 26.65-26.91 ms, one progress event each
+- schema 8 reported medianProgressEvents = 1
+
+Production macOS WebView/IPC smoke: passed
+- command: `just native-scan-smoke /tmp/cepa-progress-completion
+  /tmp/cepa-progress-cancellation`
+- cancellation fixture: 100,001 files and 101,000 directories
+- real Stop completed in 49 ms with cancellation focused and recoverable
+- subsequent completion, keyboard navigation, search, discard, stale-ID
+  rejection, and rescan lifecycle passed
+- no page errors or horizontal overflow at 620 by 480
+
+Native Linux validation: passed
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- Cargo: 1.97.0 (c980f4866 2026-06-30)
+- disposable exact-source copy; standing checkout unchanged
+- dependency-light formatting, all-target check, and strict Clippy: passed
+- Linux native-core tests: 77 passed, 1 real-Btrfs fixture ignored
+- configuration and all auxiliary target suites: passed
+- fresh 101,011-entry ext4 jwalk/statx accounting parity: exact
+- three release statx runs: 19.82-21.74 ms, one progress event each
+- schema 8 reported medianProgressEvents = 1
+- disposable source, target directory, and fixture removed after validation
+
+Native Windows validation: unavailable
+- the Windows host timed out on an eight-second SSH probe
+- local default-feature Windows GNU all-target check and strict Clippy passed
+- this is compilation evidence, not native MFT, WebView2, or runtime proof
+
+Evidence boundary
+The benchmark proves a 98% reduction in core progress callbacks for the measured
+sub-100 ms APFS fixture and one finishing event on the matched Linux fixture.
+Traversal throughput was flat within noisy paired observations; this is not a
+scanner speedup claim. The production macOS smoke proves Stop remained usable
+through a real Tauri channel and WebView lifecycle, but it does not isolate
+bridge serialization or rendering cost, bound an in-flight filesystem syscall,
+or provide fresh native Windows runtime evidence.

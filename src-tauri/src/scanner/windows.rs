@@ -1,8 +1,8 @@
 use super::mft::{self, Record};
 use super::{
-    EntryKind, FileIdentity, HardLinkOwner, InternalNode, MeasuredMetadata,
-    PROGRESS_ENTRY_INTERVAL, PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput,
-    ScanPhase, ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
+    CANCELLATION_CHECK_INTERVAL_ENTRIES, EntryKind, FileIdentity, HardLinkOwner, InternalNode,
+    MeasuredMetadata, PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanPhase,
+    ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use std::collections::HashSet;
@@ -130,7 +130,9 @@ where
     node_by_reference.insert(root_reference, 0_usize);
 
     for &record_index in &ordered {
-        if nodes.len().is_multiple_of(PROGRESS_ENTRY_INTERVAL as usize)
+        if nodes
+            .len()
+            .is_multiple_of(CANCELLATION_CHECK_INTERVAL_ENTRIES as usize)
             && cancel.load(Ordering::Relaxed)
         {
             return Err(fatal("Scan cancelled."));

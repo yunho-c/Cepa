@@ -56,6 +56,7 @@ struct RunMeasurement {
     aggregation_us: u64,
     indexing_us: u64,
     initial_view_ms: f64,
+    progress_events: usize,
     initial_response_bytes: usize,
     initial_response_serialization_us: u64,
     initial_list_items: usize,
@@ -79,6 +80,7 @@ struct Summary {
     median_aggregation_us: f64,
     median_indexing_us: f64,
     median_initial_view_ms: f64,
+    median_progress_events: f64,
     median_initial_response_bytes: f64,
     median_initial_response_serialization_us: f64,
     median_initial_chart_items: f64,
@@ -125,6 +127,7 @@ fn run() -> Result<(), String> {
         let entries = result.file_count.saturating_add(result.directory_count);
         let snapshot_retained_bytes = scan.snapshot_retained_bytes();
         let initial_view_ms = scan.initial_view_ms;
+        let progress_events = scan.progress_events;
         let snapshot_bytes_per_entry = if entries == 0 {
             0.0
         } else {
@@ -151,6 +154,7 @@ fn run() -> Result<(), String> {
             aggregation_us: result.aggregation_us,
             indexing_us: result.indexing_us,
             initial_view_ms,
+            progress_events,
             initial_response_bytes: initial_response.response_bytes,
             initial_response_serialization_us: initial_response.serialization_us,
             initial_list_items: initial_response.list_items,
@@ -163,7 +167,7 @@ fn run() -> Result<(), String> {
     }
 
     let report = BenchmarkReport {
-        schema_version: 7,
+        schema_version: 8,
         cepa_version: env!("CARGO_PKG_VERSION"),
         backend: warmup.backend,
         path: warmup.root.clone(),
@@ -286,6 +290,7 @@ fn summarize(runs: &[RunMeasurement]) -> Summary {
         median_aggregation_us: median(runs.iter().map(|run| run.aggregation_us as f64)),
         median_indexing_us: median(runs.iter().map(|run| run.indexing_us as f64)),
         median_initial_view_ms: median(runs.iter().map(|run| run.initial_view_ms)),
+        median_progress_events: median(runs.iter().map(|run| run.progress_events as f64)),
         median_initial_response_bytes: median(
             runs.iter().map(|run| run.initial_response_bytes as f64),
         ),

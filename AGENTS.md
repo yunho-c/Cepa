@@ -71,6 +71,13 @@ context instead of visually regressing to traversal copy. Stop must remain
 focusable with guarded `aria-disabled` state while its request is live, reject
 repeat activation, and move focus to either the cancelled state or its contextual
 retry error when the request settles.
+Traversal progress transport is time-bounded to one update per 100 ms on
+`jwalk`, macOS, and Linux, matching Windows and finishing heartbeats. Do not
+restore the former 2,048-entry OR condition: fast local scans could emit hundreds
+of bridge payloads per second, each rebuilding partial ranking and paths. Stop
+responsiveness is independent because traversal checks cancellation per ingested
+entry; the retained 2,048-entry constant is for bounded polling in loops that do
+not already check every entry, not for UI cadence.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or
@@ -466,8 +473,9 @@ preparation uses `open_content_snapshot_no_follow` to add `GENERIC_READ`; do not
 merge those access paths.
 Unix snapshots hoist their enforced single filesystem ID once and store a
 24-byte compact revision per eligible node; Windows retains the full 32-byte
-revision. `scan_benchmark` schema 7 reports capacity-aware retained snapshot
-payload, bytes per entry, and isolated synchronous snapshot-release time,
+revision. `scan_benchmark` schema 8 reports progress-event counts,
+capacity-aware retained snapshot payload, bytes per entry, and isolated
+synchronous snapshot-release time,
 excluding allocator bookkeeping and the separate initial response view. Keep
 those evidence boundaries distinct from peak RSS and UI latency.
 During the existing reverse aggregation pass, completed directory nodes release

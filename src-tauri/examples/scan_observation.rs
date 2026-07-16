@@ -15,6 +15,7 @@ struct ObservationReport {
     path: String,
     result: ScanResult,
     initial_view_ms: f64,
+    progress_events: usize,
     initial_response: InitialResponseMeasurement,
     wall_ms: f64,
 }
@@ -48,7 +49,7 @@ fn run() -> Result<(), String> {
     let result = scan.result;
 
     let report = ObservationReport {
-        schema_version: 1,
+        schema_version: 2,
         cepa_version: env!("CARGO_PKG_VERSION"),
         environment: Environment {
             os: env::consts::OS,
@@ -66,6 +67,7 @@ fn run() -> Result<(), String> {
         path: result.root.clone(),
         result,
         initial_view_ms: scan.initial_view_ms,
+        progress_events: scan.progress_events,
         initial_response,
         wall_ms: wall.as_secs_f64() * 1_000.0,
     };

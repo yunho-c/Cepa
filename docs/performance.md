@@ -34,6 +34,10 @@ The harness performs one unmeasured warmup followed by the requested measured
 runs. Progress is written to stderr and schema-versioned JSON to stdout. It
 verifies that counts, byte totals, skipped work, hard-link deduplication, and
 reported accounting semantics stay identical across runs.
+Schema 8 records each run's traversal/finishing progress-event count and its
+median alongside the existing timing, wire-size, and retained-snapshot evidence.
+Single-run `observe-scan` schema 2 exposes the same count for alternating or live
+tree observations.
 
 For a direct optimization comparison, prefer the paired harness over two
 separate benchmark commands:
@@ -1861,6 +1865,47 @@ full lifecycle. Exact source, commands, cross-target checks, and Linux Rust
 This is DOM, deterministic-browser, and programmatic production-WebView evidence;
 it does not certify a particular screen reader, physical keyboard, Windows
 WebView2, or Linux WebKitGTK runtime.
+
+### 2026-07-16 time-bounded traversal progress
+
+Portable, macOS, and Linux traversal previously emitted progress whenever either
+2,048 entries were ingested or 100 ms elapsed. On fast local filesystems the
+entry boundary dominated: every update rebuilt the bounded partial ranking,
+constructed a current path, serialized a Tauri channel payload in production,
+and could rerender and announce the active view. Cancellation was already checked
+per ingested entry, so this bridge cadence did not provide the Stop bound.
+
+Traversal progress is now emitted only when 100 ms has elapsed, matching the
+existing Windows and finishing-phase policy. Per-entry cancellation checks are
+unchanged. The old entry constant was renamed for its remaining purpose: bounded
+cancellation polling in loops that do not already check every entry. Benchmark
+schema 8 and observation schema 2 now record progress-event counts so this
+contract remains measurable rather than inferred from source.
+
+A fresh 101,011-entry APFS fixture (100,001 files and 1,010 directories) was
+scanned with `getattrlistbulk` by separate release binaries: baseline `8e15683`
+plus measurement-only instrumentation, and the candidate. Twenty-one alternating
+pairs followed fixture population and binary warmup. The baseline emitted
+exactly 50 progress events in every run; the candidate emitted exactly one
+finishing event, a 98% reduction. Median wall time was 28.51 ms baseline and
+28.58 ms candidate. The paired median change was -1.56%, the candidate won 14 of
+21 pairs, and noisy paired changes ranged from -46.40% to +20.52%. Median
+traversal time was 27,561 us versus 27,578 us. Treat throughput as flat; the
+measured win is bounded transport work, while production bridge serialization
+and WebView rendering were not isolated by this core harness.
+
+The schema-8 benchmark independently returned one progress event in each of
+three measured candidate runs (26.65-26.91 ms). A real production WebView then
+stopped a 201,001-entry directory-heavy scan in 49 ms before completing the full
+completion lifecycle without page errors or horizontal overflow. This proves the
+transport cap does not serialize or visually block Stop; it does not bound a
+filesystem syscall already in progress.
+
+Raw alternating measurements are preserved in
+[`performance-results/2026-07-16-progress-cadence.csv`](performance-results/2026-07-16-progress-cadence.csv).
+Exact source, commands, cross-target checks, and Linux Rust 1.97.0 evidence are
+recorded in
+[`validation-results/2026-07-16-progress-cadence.txt`](validation-results/2026-07-16-progress-cadence.txt).
 
 ### 2026-07-16 macOS real-tree refresh
 

@@ -37,9 +37,9 @@ mod mft;
 mod windows;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
-const PROGRESS_ENTRY_INTERVAL: u64 = 2_048;
+const CANCELLATION_CHECK_INTERVAL_ENTRIES: u64 = 2_048;
 pub(crate) const AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES: usize =
-    PROGRESS_ENTRY_INTERVAL as usize;
+    CANCELLATION_CHECK_INTERVAL_ENTRIES as usize;
 const MAX_PARTIAL_ITEMS: usize = 8;
 const MAX_LIST_ITEMS: usize = 500;
 const MAX_CHART_ITEMS_PER_DIRECTORY: usize = 16;
@@ -49,6 +49,10 @@ const MAX_SEARCH_QUERY_CHARS: usize = 128;
 const RANKING_BUFFER_MULTIPLIER: usize = 16;
 const MAX_RANKING_CLONE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_RANKING_CLONE_IDS: usize = MAX_RANKING_CLONE_BYTES / std::mem::size_of::<NodeId>();
+
+fn progress_update_due(last_progress_at: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(last_progress_at) >= PROGRESS_INTERVAL
+}
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -728,7 +732,6 @@ where
 
     let mut counters = ScanCounters::default();
     let mut partial_ranking = PartialRanking::default();
-    let mut entries_since_progress = 0_u64;
     let mut last_progress_at = Instant::now();
 
     let worker_cancel = cancel.clone();
@@ -853,9 +856,8 @@ where
                     entry.path().display()
                 )
             })?;
-        entries_since_progress += 1;
-        let should_report_progress = entries_since_progress >= PROGRESS_ENTRY_INTERVAL
-            || last_progress_at.elapsed() >= PROGRESS_INTERVAL;
+        let progress_now = Instant::now();
+        let should_report_progress = progress_update_due(last_progress_at, progress_now);
         let current_path =
             should_report_progress.then(|| entry.path().to_string_lossy().into_owned());
 
@@ -880,8 +882,7 @@ where
                 elapsed_ms: elapsed_ms(started_at),
                 largest_items: partial_ranking.items(&nodes),
             });
-            entries_since_progress = 0;
-            last_progress_at = Instant::now();
+            last_progress_at = progress_now;
         }
     }
 
@@ -1269,7 +1270,9 @@ impl ScanSnapshot {
         let mut matches = BinaryHeap::with_capacity(MAX_LIST_ITEMS + 1);
         let mut total_matches = 0_usize;
         for (index, child_id) in node.children.iter().enumerate() {
-            if index % PROGRESS_ENTRY_INTERVAL as usize == 0 && cancel.load(Ordering::Relaxed) {
+            if index % CANCELLATION_CHECK_INTERVAL_ENTRIES as usize == 0
+                && cancel.load(Ordering::Relaxed)
+            {
                 return Err("Folder search cancelled.".to_string());
             }
             if !matcher.is_match(&self.nodes[*child_id].name().to_string_lossy()) {
@@ -1804,6 +1807,19 @@ mod tests {
         for node_id in [0, 1, usize::MAX - 1] {
             assert_eq!(ParentId::new(node_id).node_id(), node_id);
         }
+    }
+
+    #[test]
+    fn traversal_progress_is_time_bounded() {
+        let last_progress_at = Instant::now();
+        assert!(!progress_update_due(
+            last_progress_at,
+            last_progress_at + PROGRESS_INTERVAL - Duration::from_millis(1),
+        ));
+        assert!(progress_update_due(
+            last_progress_at,
+            last_progress_at + PROGRESS_INTERVAL,
+        ));
     }
 
     #[test]
@@ -2680,7 +2696,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("create fixture directory");
         let nested = temp.path().join("nested");
         fs::create_dir(&nested).expect("create nested directory");
-        for index in 0..=PROGRESS_ENTRY_INTERVAL {
+        for index in 0..=CANCELLATION_CHECK_INTERVAL_ENTRIES {
             fs::write(nested.join(format!("file-{index}")), []).expect("write fixture file");
         }
 
@@ -2703,7 +2719,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("create fixture directory");
         let nested = temp.path().join("nested");
         fs::create_dir(&nested).expect("create nested directory");
-        for index in 0..=PROGRESS_ENTRY_INTERVAL {
+        for index in 0..=CANCELLATION_CHECK_INTERVAL_ENTRIES {
             fs::write(nested.join(format!("file-{index}")), []).expect("write fixture file");
         }
 
