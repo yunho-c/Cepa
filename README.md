@@ -246,7 +246,9 @@ with Enter, and requires that segment to retain focus with guarded
 returns to the root, and requires a real list-origin navigation to
 retain focus with guarded `aria-disabled` state while IPC is pending. Chart and
 list activation choose actual directory items rather than assuming the first
-ranked item is a folder. It then returns Home, confirms the discarded scan is no
+ranked item is a folder. It then returns Home, requires that focused action to
+remain undimmed with guarded busy and disabled semantics while discard is
+pending, confirms the discarded scan is no
 longer addressable, and completes a second scan in the same process. With both
 preflights, the
 discard check targets completed scan 3 rather than the earlier failed or
@@ -330,7 +332,8 @@ completed-scan action and then succeed, covering scan-local retry intent,
 disclosed causes, and stable focus after recovery.
 `?mock=root-preparing&roots=preview` holds a selected volume in its validation
 state so its focus, announcement, and progress treatment can be inspected.
-`?mock=discard-error` keeps a completed result visible when its retained snapshot
+`?mock=discard-error` briefly holds the focused Home action in its guarded
+pending state, then keeps the completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough
 to rescan or return Home first. It deliberately reuses the mock scan ID so the

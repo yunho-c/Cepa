@@ -149,6 +149,7 @@ export function installDevMock(requestedScenario: string) {
         return true;
       case "discard_scan":
         if (scenario === "discard-error") {
+          await delay(600);
           throw "The mocked scan snapshot could not be released.";
         }
         return null;

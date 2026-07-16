@@ -280,6 +280,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["cancellationMs"]
             .as_f64()
             .is_some_and(|value| value >= 0.0)
+        && report["pendingHomeFocusRetained"].as_bool() == Some(true)
         && report["landingFocusRestored"].as_bool() == Some(true)
         && report["discardedScanId"].as_u64() == Some(expected_discarded_scan_id)
         && report["staleScanRejected"].as_bool() == Some(true)
@@ -611,7 +612,16 @@ void (async () => {{
     await painted();
 
     phase('returning-home');
-    document.querySelector('[aria-label="Cepa home"]').click();
+    const homeButton = document.querySelector('[aria-label="Cepa home"]');
+    homeButton.focus();
+    homeButton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingHomeFocusRetained =
+      document.activeElement === homeButton
+      && homeButton.getAttribute('aria-disabled') === 'true'
+      && homeButton.getAttribute('aria-busy') === 'true'
+      && !homeButton.hasAttribute('disabled');
     const landingHeading = await waitFor(
       () => document.querySelector('#landing-title'),
       'landing view after discard',
@@ -680,6 +690,7 @@ void (async () => {{
       cancellationFocusRestored,
       cancellationRecoveryAvailable,
       cancellationMs,
+      pendingHomeFocusRetained,
       landingFocusRestored,
       discardedScanId: completedScanId,
       staleScanRejected,
@@ -765,6 +776,7 @@ mod tests {
             "cancellationFocusRestored": true,
             "cancellationRecoveryAvailable": true,
             "cancellationMs": 50.0,
+            "pendingHomeFocusRetained": true,
             "landingFocusRestored": true,
             "discardedScanId": 2,
             "staleScanRejected": true,
@@ -810,6 +822,10 @@ mod tests {
         let mut pending_cancellation_focus_lost = complete.clone();
         pending_cancellation_focus_lost["cancellationPendingFocusRetained"] = false.into();
         assert!(!validate_report(&pending_cancellation_focus_lost, 2));
+
+        let mut pending_home_focus_lost = complete.clone();
+        pending_home_focus_lost["pendingHomeFocusRetained"] = false.into();
+        assert!(!validate_report(&pending_home_focus_lost, 2));
 
         let mut pending_navigation_focus_lost = complete.clone();
         pending_navigation_focus_lost["pendingNavigationFocusRetained"] = false.into();

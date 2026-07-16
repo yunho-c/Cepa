@@ -1363,7 +1363,8 @@
       <button
         class="wordmark"
         type="button"
-        disabled={isBusy}
+        aria-busy={isDiscardingScan}
+        aria-disabled={isBusy}
         onclick={reset}
         aria-label="Cepa home"
       >

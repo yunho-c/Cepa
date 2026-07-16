@@ -100,4 +100,23 @@ describe("production style sources", () => {
     expect(stylesheet).toContain('.sunburst[aria-busy="true"] { opacity: 0.45; }');
     expect(stylesheet).toContain('.sunburst g[aria-disabled="true"] { cursor: wait; }');
   });
+
+  test("keeps Home focused without dimming the brand while its snapshot is released", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+    const homeStart = component.indexOf('class="wordmark"');
+    const homeButton = component.slice(homeStart, component.indexOf("</button>", homeStart));
+    const resetStart = component.indexOf("async function reset(");
+    const reset = component.slice(resetStart, component.indexOf("async function", resetStart + 1));
+
+    expect(homeStart).toBeGreaterThan(-1);
+    expect(homeButton).toContain("aria-busy={isDiscardingScan}");
+    expect(homeButton).toContain("aria-disabled={isBusy}");
+    expect(homeButton).not.toMatch(/^\s*disabled=/m);
+    expect(reset).toContain("if (isBusy) return;");
+    expect(stylesheet).toContain('.wordmark[aria-disabled="true"] { cursor: wait; }');
+    expect(stylesheet).not.toContain(".wordmark:disabled");
+  });
 });

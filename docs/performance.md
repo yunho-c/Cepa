@@ -1658,6 +1658,36 @@ This is deterministic browser and programmatic production-WebView evidence; it
 does not certify a screen reader, physical keyboard, Windows WebView2, or Linux
 WebKitGTK runtime.
 
+### 2026-07-16 pending Home focus
+
+Returning Home is not a local route change: it first releases the retained scan
+through `discard_scan`. The completed-result wordmark previously became a native
+disabled button as soon as that request began. Activating it therefore moved
+focus to the document body for the entire release interval, and the shared
+disabled style faded Cepa's identity even though the header deliberately keeps
+the brand visually stable in every other state.
+
+Home now remains focusable with guarded `aria-disabled` and `aria-busy` state.
+The existing `reset` guard rejects repeated activation, and the only pending
+visual treatment is a wait cursor. Successful release still replaces the result
+and focuses the landing heading; failed release still preserves the snapshot,
+focuses its contextual error, and restores both Home and Try again. The
+`discard-error` development scenario now delays its failure by 600 milliseconds
+so both the pending and recovery states are inspectable without runtime patching.
+
+At 620 by 480 in light appearance, a two-second successful mock release retained
+Home focus, omitted the native disabled attribute, exposed both guarded states,
+kept opacity at one, rejected a programmatic second click with one invocation
+total, and produced no horizontal overflow. In dark appearance, the delayed
+failure focused `This scan could not be closed`, preserved the result, and made
+Home available again. The production macOS WebView required the same pending
+focus contract around a real snapshot release before completing stale-ID
+rejection and rescan. Exact source, commands, cross-target checks, and Linux Rust
+1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-pending-home-focus.txt`](validation-results/2026-07-16-pending-home-focus.txt).
+This does not certify a screen reader, physical keyboard, Windows WebView2, or
+Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

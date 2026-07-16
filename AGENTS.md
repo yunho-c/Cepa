@@ -122,8 +122,11 @@ both palettes without introducing a production setting.
 Keep the header brand static on landing, scanning, cancellation, and scan-error
 states. It becomes the `Cepa home` action only while a completed snapshot exists,
 because returning home must first discard that retained scan. Do not add a no-op
-brand control to the ordinary keyboard order or dim app identity as a disabled
-button during work.
+brand control to the ordinary keyboard order or dim app identity during work.
+While discard is pending, keep Home focused with guarded `aria-disabled` and
+`aria-busy` state, reject repeat activation, and use only a wait cursor rather
+than fading the brand. Success moves focus to the landing heading; failure moves
+focus to the contextual result error and makes Home available again.
 If a cancellation command fails, the UI keeps the still-live scan visible and
 offers Stop again; do not turn that command failure into a terminal scan error.
 Folder-picker failures are likewise contextual: preserve a completed result and
@@ -333,7 +336,9 @@ Returning to the landing view first invokes the scan-authorized
 cancels active estimate/search work, and invalidates any compression plan; a
 stale ID cannot affect a newer snapshot. If that command fails, keep the result
 visible, focus its contextual error, and allow retry. After success, move focus
-to the landing heading. Do not clear only the frontend and leave a potentially
+to the landing heading. The initiating Home action must retain focus while the
+discard request is live; do not native-disable it and strand focus on the
+document body. Do not clear only the frontend and leave a potentially
 multi-million-node snapshot resident. Detach the state owner under its mutex,
 then retain one owner on the Tauri blocking pool until any in-flight clones
 finish so the final large-arena destructor cannot run on a command/runtime

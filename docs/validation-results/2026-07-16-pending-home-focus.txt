@@ -1,0 +1,98 @@
+Cepa pending Home focus validation
+Date: 2026-07-16
+Baseline commit: d7ef61b2ba8793c1d4b45bd4d13ca70e4401d138
+
+Changed source SHA-256
+cb387b83358061226bc96a7cf0e585a3c59470e899d7573607894886df44925c  src/App.svelte
+9b62542d66cdf8ce3015e70eb77a0dc10dd2603ab0156202b648b7d9b2572fd4  src/app.css
+48163a6042f6744a195c76b6bca9d9db97e3baa2d45c3da56522d2a354ad6e84  src/lib/dev-mock.ts
+54bb306a8938b5a2ec871bc217f705422107bae71c6d4ad58eb45f843b312d09  src/lib/style-sources.test.ts
+49e264e2b3418e555330f32a81e0a1bbfdcc0ae4fb50cd7a61fd914cb3e1f960  src-tauri/examples/native_scan_smoke.rs
+9cb63baf3212316bf90d368e25825f60b1992222efa77a2a617233454d4d5618  AGENTS.md
+9c7896f1bc524e8d1664bcc6b2c11e7cccbb1671f9c9ada824fab87c5987e042  README.md
+b04ed452c5a231c1a2ee568e8601f5410b26ae792807db766dd32afd2cd50d94  docs/performance.md
+
+Reproduction before the fix
+- At 620x480 light, intercepted discard_scan and delayed it by two seconds.
+- Activating `Cepa home` set a native disabled attribute immediately, moved
+  activeElement to BODY, and exposed no aria-busy or aria-disabled state.
+- The shared native-disabled style also reduced the wordmark opacity.
+
+Deterministic browser validation after the fix
+- Successful delayed release at 620x480 light retained focus on `Cepa home`,
+  exposed aria-busy=true and aria-disabled=true, omitted the native disabled
+  attribute, kept opacity at one, and had no horizontal overflow.
+- A programmatic second click while pending left the intercepted discard_scan
+  invocation count at one.
+- After release completed, the static landing brand replaced the action and the
+  `Find what's taking up space.` heading owned focus.
+- At 620x480 dark, the discard-error scenario held the pending state for 600
+  milliseconds, then focused `This scan could not be closed`, preserved the
+  result, and restored Home with aria-disabled=false.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion /tmp/.../cancellation
+
+Fixtures:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+- cancellation: 100000 requested leaf directories x 1 empty file
+
+Selected report fields:
+  backendLabel=macOS native
+  pendingHomeFocusRetained=true
+  landingFocusRestored=true
+  staleScanRejected=true
+  discardedScanId=2
+  pendingChartNavigationFocusRetained=true
+  pendingNavigationFocusRetained=true
+  cancellationPendingFocusRetained=true
+  cancellationStopped=true
+  cancellationMs=50
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+  processToReportMs=1238.960375
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+  production-bundle development-string search
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 59 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- The discard-error scenario and its diagnostic string were absent from the
+  production bundle.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Frontend diagnostics, all 59 tests, and the production Vite build passed.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This is deterministic browser, programmatic production-macOS-WebView, local
+Windows cross-target, and Linux Rust 1.97 native-core evidence. It does not
+certify physical keyboard or screen-reader input, Windows WebView2, a Linux
+WebKitGTK runtime, or installed packages.
