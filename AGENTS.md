@@ -260,6 +260,13 @@ lifecycle, but use the same atomic transition contract: allocate the monotonic
 token and replace the active request under one lock, cancel the prior token, and
 let finish clear only the matching owner. Preserve the concurrent-start tests;
 an older call must not become active after a newer token has been issued.
+Starting another scan must invalidate and detach the completed snapshot before
+it sweeps search, estimate, and plan state. Each auxiliary start installs its
+owner, then revalidates both the scan ID and exact retained snapshot identity
+before dispatching blocking work. Thus a request before invalidation is caught
+by the sweep, while one after it rejects itself. Home already follows the same
+detach-before-sweep order. Preserve both cross-lifecycle race regressions; do not
+authorize these starts from a previously cloned snapshot alone.
 Completed scans can be rerun against the same root without reopening the folder
 picker. At native desktop widths, keep this action visibly labeled `Scan again`
 in the persistent header; browser previews at 400 logical pixels or narrower may

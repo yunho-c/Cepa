@@ -585,6 +585,21 @@ impl CompressionPlanState {
         (lifecycle.next_id, lifecycle.generation, cancel)
     }
 
+    fn begin_for_snapshot(
+        &self,
+        scans: &ScanState,
+        scan_id: u64,
+        snapshot: &Arc<ScanSnapshot>,
+    ) -> Result<(u64, u64, Arc<AtomicBool>), String> {
+        let request = self.begin();
+        if scans.is_current_snapshot(scan_id, snapshot) {
+            Ok(request)
+        } else {
+            self.fail(request.1);
+            Err("That scan is no longer available.".to_string())
+        }
+    }
+
     fn finish(
         &self,
         generation: u64,
@@ -701,6 +716,23 @@ impl CancellableRequestState {
         (token, cancel)
     }
 
+    fn begin_for_snapshot(
+        &self,
+        scans: &ScanState,
+        scan_id: u64,
+        snapshot: &Arc<ScanSnapshot>,
+        request_id: u64,
+    ) -> Result<(u64, Arc<AtomicBool>), String> {
+        let request = self.begin(request_id);
+        if scans.is_current_snapshot(scan_id, snapshot) {
+            Ok(request)
+        } else {
+            request.1.store(true, Ordering::Relaxed);
+            self.finish(request.0);
+            Err("That scan is no longer available.".to_string())
+        }
+    }
+
     fn cancel(&self, request_id: u64) -> bool {
         let lifecycle = self
             .lifecycle
@@ -745,8 +777,20 @@ impl CancellableRequestState {
 
 #[cfg(feature = "desktop")]
 impl EstimateState {
+    #[cfg(test)]
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
         self.requests.begin(request_id)
+    }
+
+    fn begin_for_snapshot(
+        &self,
+        scans: &ScanState,
+        scan_id: u64,
+        snapshot: &Arc<ScanSnapshot>,
+        request_id: u64,
+    ) -> Result<(u64, Arc<AtomicBool>), String> {
+        self.requests
+            .begin_for_snapshot(scans, scan_id, snapshot, request_id)
     }
 
     fn cancel(&self, request_id: u64) -> bool {
@@ -764,8 +808,20 @@ impl EstimateState {
 
 #[cfg(feature = "desktop")]
 impl SearchState {
+    #[cfg(test)]
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
         self.requests.begin(request_id)
+    }
+
+    fn begin_for_snapshot(
+        &self,
+        scans: &ScanState,
+        scan_id: u64,
+        snapshot: &Arc<ScanSnapshot>,
+        request_id: u64,
+    ) -> Result<(u64, Arc<AtomicBool>), String> {
+        self.requests
+            .begin_for_snapshot(scans, scan_id, snapshot, request_id)
     }
 
     fn cancel(&self, request_id: u64) -> bool {
@@ -892,6 +948,16 @@ impl ScanState {
             .ok_or_else(|| "That scan is no longer available.".to_string())
     }
 
+    fn is_current_snapshot(&self, id: u64, snapshot: &Arc<ScanSnapshot>) -> bool {
+        let lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        lifecycle.completed.as_ref().is_some_and(|completed| {
+            completed.id == id && Arc::ptr_eq(&completed.snapshot, snapshot)
+        })
+    }
+
     fn directory_view(
         &self,
         id: u64,
@@ -973,18 +1039,37 @@ async fn validate_scan_root(path: String) -> Result<String, String> {
 }
 
 #[cfg(feature = "desktop")]
+fn begin_scan_state(
+    scans: &ScanState,
+    estimates: &EstimateState,
+    searches: &SearchState,
+    plans: &CompressionPlanState,
+) -> (u64, Arc<AtomicBool>, Option<Arc<ScanSnapshot>>) {
+    // Invalidate the completed scan before sweeping its auxiliary work. A
+    // request that starts after the sweep must then fail exact-snapshot
+    // revalidation instead of escaping cancellation with stale authority.
+    let request = scans.begin();
+    estimates.cancel_active();
+    searches.cancel_active();
+    plans.clear();
+    request
+}
+
+#[cfg(feature = "desktop")]
 #[tauri::command]
 fn scan_directory(
     path: String,
     on_event: Channel<ScanEvent>,
     app: tauri::AppHandle,
 ) -> Result<u64, String> {
-    app.state::<EstimateState>().cancel_active();
-    app.state::<SearchState>().cancel_active();
-    app.state::<CompressionPlanState>().clear();
     let requested_path = PathBuf::from(path);
     let root_display_name = app.state::<ScanRootState>().display_name(&requested_path);
-    let (scan_id, cancel, released_snapshot) = app.state::<ScanState>().begin();
+    let (scan_id, cancel, released_snapshot) = begin_scan_state(
+        &app.state::<ScanState>(),
+        &app.state::<EstimateState>(),
+        &app.state::<SearchState>(),
+        &app.state::<CompressionPlanState>(),
+    );
     if let Some(snapshot) = released_snapshot {
         release_last_arc_on_blocking_pool(snapshot);
     }
@@ -1135,7 +1220,7 @@ async fn search_scan_directory(
     searches: tauri::State<'_, SearchState>,
 ) -> Result<scanner::DirectorySearchResult, String> {
     let snapshot = state.snapshot(scan_id)?;
-    let (token, cancel) = searches.begin(request_id);
+    let (token, cancel) = searches.begin_for_snapshot(&state, scan_id, &snapshot, request_id)?;
     let task = tauri::async_runtime::spawn_blocking(move || {
         snapshot.search_directory(scan_id, node_id, metric, &query, &cancel)
     });
@@ -1186,8 +1271,9 @@ async fn estimate_compression_savings(
     scans: tauri::State<'_, ScanState>,
     estimates: tauri::State<'_, EstimateState>,
 ) -> Result<compression::SavingsEstimate, String> {
-    let target = scans.compression_target(scan_id, node_id)?;
-    let (token, cancel) = estimates.begin(request_id);
+    let snapshot = scans.snapshot(scan_id)?;
+    let target = snapshot.compression_target(node_id)?;
+    let (token, cancel) = estimates.begin_for_snapshot(&scans, scan_id, &snapshot, request_id)?;
     let task =
         tauri::async_runtime::spawn_blocking(move || compression::estimate(&target, &cancel));
     let result = task
@@ -1215,8 +1301,9 @@ async fn prepare_compression_plan(
     scans: tauri::State<'_, ScanState>,
     plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<compression::CompressionPlanPreview, String> {
-    let target = scans.compression_target(scan_id, node_id)?;
-    let (plan_id, generation, cancel) = plans.begin();
+    let snapshot = scans.snapshot(scan_id)?;
+    let target = snapshot.compression_target(node_id)?;
+    let (plan_id, generation, cancel) = plans.begin_for_snapshot(&scans, scan_id, &snapshot)?;
     let task = tauri::async_runtime::spawn_blocking(move || {
         compression::prepare_plan(plan_id, scan_id, node_id, target, operation, &cancel)
     });
@@ -1364,8 +1451,8 @@ mod tests {
     };
     #[cfg(feature = "desktop")]
     use super::{
-        CompressionPlanState, EstimateState, ScanEvent, ScanState, SearchState, compression,
-        discard_scan_state, scanner,
+        CompressionPlanState, EstimateState, ScanEvent, ScanState, SearchState, begin_scan_state,
+        compression, discard_scan_state, scanner,
     };
     use std::fs;
     #[cfg(feature = "desktop")]
@@ -1519,6 +1606,101 @@ mod tests {
                 .expect("canonical second fixture root")
         );
         assert!(state.snapshot(first_id).is_err());
+    }
+
+    #[cfg(feature = "desktop")]
+    fn completed_scan_fixture() -> (
+        tempfile::TempDir,
+        ScanState,
+        u64,
+        Arc<scanner::ScanSnapshot>,
+    ) {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("payload.bin"), [1_u8]).expect("write fixture file");
+        let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+            .expect("scan fixture");
+        let scans = ScanState::default();
+        let (scan_id, _, _) = scans.begin();
+        scans
+            .complete(scan_id, output.snapshot)
+            .expect("retain fixture snapshot");
+        let snapshot = scans.snapshot(scan_id).expect("clone fixture snapshot");
+        (temp, scans, scan_id, snapshot)
+    }
+
+    #[cfg(feature = "desktop")]
+    fn assert_stale_auxiliary_starts_are_rejected(
+        scans: &ScanState,
+        scan_id: u64,
+        snapshot: &Arc<scanner::ScanSnapshot>,
+        estimates: &EstimateState,
+        searches: &SearchState,
+        plans: &CompressionPlanState,
+    ) {
+        assert_eq!(
+            estimates
+                .begin_for_snapshot(scans, scan_id, snapshot, 901)
+                .expect_err("stale estimate must be rejected"),
+            "That scan is no longer available."
+        );
+        assert!(!estimates.cancel(901));
+        assert_eq!(
+            searches
+                .begin_for_snapshot(scans, scan_id, snapshot, 902)
+                .expect_err("stale search must be rejected"),
+            "That scan is no longer available."
+        );
+        assert!(!searches.cancel(902));
+        assert_eq!(
+            plans
+                .begin_for_snapshot(scans, scan_id, snapshot)
+                .expect_err("stale plan must be rejected"),
+            "That scan is no longer available."
+        );
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn new_scan_invalidates_snapshot_before_sweeping_auxiliary_work() {
+        let (_temp, scans, scan_id, snapshot) = completed_scan_fixture();
+        let estimates = EstimateState::default();
+        let (_, estimate_cancel) = estimates.begin(101);
+        let searches = SearchState::default();
+        let (_, search_cancel) = searches.begin(102);
+        let plans = CompressionPlanState::default();
+        let (_, _, plan_cancel) = plans.begin();
+
+        let (_, _, released) = begin_scan_state(&scans, &estimates, &searches, &plans);
+
+        assert!(estimate_cancel.load(Ordering::Relaxed));
+        assert!(search_cancel.load(Ordering::Relaxed));
+        assert!(plan_cancel.load(Ordering::Acquire));
+        assert!(scans.snapshot(scan_id).is_err());
+        assert!(Arc::ptr_eq(
+            &released.expect("detach completed snapshot"),
+            &snapshot
+        ));
+        assert_stale_auxiliary_starts_are_rejected(
+            &scans, scan_id, &snapshot, &estimates, &searches, &plans,
+        );
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn discard_rejects_auxiliary_work_that_starts_after_its_sweep() {
+        let (_temp, scans, scan_id, snapshot) = completed_scan_fixture();
+        let estimates = EstimateState::default();
+        let searches = SearchState::default();
+        let plans = CompressionPlanState::default();
+
+        let released = discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
+            .expect("discard completed scan")
+            .expect("detach completed snapshot");
+
+        assert!(Arc::ptr_eq(&released, &snapshot));
+        assert_stale_auxiliary_starts_are_rejected(
+            &scans, scan_id, &snapshot, &estimates, &searches, &plans,
+        );
     }
 
     #[cfg(feature = "desktop")]

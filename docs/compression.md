@@ -346,6 +346,18 @@ barrier-started regression additionally requires each issued ID and generation
 to remain paired with its own cancellation token. These ownership rules make
 the read-only protocol internally coherent; they do not close any writer gate.
 
+Preparation also revalidates its authorization across the scan/plan lifecycle
+boundary. A new scan first invalidates and detaches the completed snapshot, then
+cancels auxiliary work. Plan preparation installs its new owner and immediately
+requires the same scan ID and exact `Arc` snapshot identity to remain retained
+before it dispatches content I/O. A preparation already accepted before scan
+invalidation is caught by the subsequent plan clear; one that races after that
+clear rejects and cancels itself. Home uses the same detach-before-clear order.
+The estimator applies the equivalent boundary. This closes stale background
+work, not the scan-time same-clock content-evidence or writable-handle gates.
+Exact native and cross-target evidence is preserved in
+[`validation-results/2026-07-16-snapshot-authority.txt`](validation-results/2026-07-16-snapshot-authority.txt).
+
 Every preview currently contains a `writerUnavailable` blocker, no apply command
 exists, and the UI intentionally exposes no dead-end planning action. The
 retained scan snapshot rejects planning when a usable scan-time revision is

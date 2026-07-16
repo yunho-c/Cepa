@@ -1,0 +1,61 @@
+Cepa auxiliary snapshot-authority validation
+Date: 2026-07-16
+Candidate baseline: 7fc1223 plus the snapshot-authority working-tree change
+
+Invariant under test
+- a new scan invalidates and detaches the completed snapshot before cancelling
+  search, estimate, and dormant-plan state
+- Home detaches the completed snapshot before the same auxiliary sweep
+- search, estimate, and plan preparation install their request owner, then
+  require both the scan ID and exact retained snapshot identity to remain current
+  before dispatching blocking work
+- work accepted before invalidation is cancelled by the sweep; work attempting
+  to start after the sweep rejects itself instead of retaining stale authority
+- production search and estimate code cannot call an unscoped start entry point
+
+Deterministic Rust regressions: passed
+- a completed fixture began one active estimate, search, and plan before a new
+  scan; all three cancellation tokens were set and the exact snapshot detached
+- estimate, search, and plan starts attempted after that sweep all returned
+  `That scan is no longer available.` and retained no active request
+- the same post-sweep rejection passed after scan-authorized discard/Home
+- exact snapshot ownership uses `Arc::ptr_eq`, not only an ID comparison
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 49 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 101 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: optimized desktop executable built
+- production WebView/IPC smoke at 620 by 480: passed
+  - backend: macOS native
+  - real search returned one match through Tauri
+  - Home rejected completed scan ID 1 and same-process rescan completed
+  - no page errors or horizontal overflow
+
+Native Linux validation: passed
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- exact `src-tauri/src/lib.rs` candidate hash matched the local source
+- full desktop formatting and all-target `cargo check`: passed
+- full desktop all-target Clippy with `-D warnings`: passed
+- full desktop all-target tests: passed
+  - Rust library tests: 103 passed
+  - real-Btrfs and file-manager tests: 2 ignored as designed
+  - configuration and auxiliary target suites: passed
+- desktop development files were extracted into a disposable user-local
+  sysroot; no system packages or standing checkout files were changed
+
+Windows GNU cross-target validation: passed
+- default-feature all-target `cargo check`: passed
+- default-feature all-target Clippy with `-D warnings`: passed
+- this is compile/lint evidence only; no native Windows process was run
+
+Evidence boundary
+This proves the backend ordering and exact snapshot identity boundary under
+deterministic before/after-sweep interleavings, ordinary production macOS
+scan/search/Home/rescan behavior, and native Linux desktop tests under Rust
+1.97. It does not prove every scheduler interleaving, physical simultaneous UI
+input, native Windows runtime, or any compression mutation capability.
