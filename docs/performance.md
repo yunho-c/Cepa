@@ -1835,6 +1835,33 @@ This is DOM, deterministic-browser, and programmatic production-WebView evidence
 it does not certify a particular screen reader, physical keyboard, Windows
 WebView2, or Linux WebKitGTK runtime.
 
+### 2026-07-16 owned scan-start status
+
+Entering the active-scan view previously created a populated polite live region
+from the frontend's zero-value fallback: `Scanned 0 entries and 0 B.` The target
+heading received focus, but it had no programmatic relationship to the visible
+Scanning label. This made placeholder accounting the first explicit status while
+the meaningful target and phase were only visually adjacent.
+
+The target heading is now described by the visible status label. The polite
+progress node is atomic and remains mounted but empty until the first real
+filesystem event. Actual scanning, finishing, and stopping updates keep their
+existing bounded cadence. Their shared entry-count formatter now also says
+`1 entry` rather than `1 entries` without changing compact plural counts.
+
+At 620 by 480 in dark appearance, a deterministic scan-start transition focused
+the `demo` heading, resolved its description to `Scanning`, and observed an empty
+polite atomic progress node before the mock's 35 ms event. The first real event
+then produced `Scanned 18K entries and 282 GB.` with no horizontal overflow. The
+production macOS WebView enforces the same relationship and rejects the zero-
+entry placeholder for both the initial scan and rescan before continuing its
+full lifecycle. Exact source, commands, cross-target checks, and Linux Rust
+1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-owned-scan-start.txt`](validation-results/2026-07-16-owned-scan-start.txt).
+This is DOM, deterministic-browser, and programmatic production-WebView evidence;
+it does not certify a particular screen reader, physical keyboard, Windows
+WebView2, or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

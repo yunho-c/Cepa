@@ -15,6 +15,26 @@ import {
 } from "./scanner";
 
 describe("scanner presentation helpers", () => {
+  test("keeps placeholder scan progress out of live announcements", () => {
+    expect(
+      scanProgressPresentation(
+        { phase: "scanning", entriesScanned: 0, allocatedBytes: 0 },
+        false,
+      ),
+    ).toEqual({
+      statusLabel: "Scanning",
+      totalLabel: "Found so far",
+      currentLabel: null,
+      announcement: "",
+    });
+    expect(
+      scanProgressPresentation(
+        { phase: "scanning", entriesScanned: 1, allocatedBytes: 0 },
+        false,
+      ).announcement,
+    ).toBe("Scanned 1 entry and 0 B.");
+  });
+
   test("preserves finishing context while a stop request is pending", () => {
     const progress = {
       phase: "finishing" as const,

@@ -122,6 +122,10 @@ const COMPACT_COUNT_FORMATTER = new Intl.NumberFormat(undefined, {
   notation: "compact",
 });
 
+function formatEntryCount(count: number): string {
+  return `${formatCount(count)} ${count === 1 ? "entry" : "entries"}`;
+}
+
 export function scanProgressPresentation(
   progress: Pick<ScanProgress, "phase" | "entriesScanned" | "allocatedBytes">,
   cancelling: boolean,
@@ -133,11 +137,13 @@ export function scanProgressPresentation(
     currentLabel: finishing ? "Preparing results…" : null,
     announcement: cancelling
       ? finishing
-        ? `Stopping while preparing results for ${formatCount(progress.entriesScanned)} entries.`
-        : `Stopping after ${formatCount(progress.entriesScanned)} entries.`
+        ? `Stopping while preparing results for ${formatEntryCount(progress.entriesScanned)}.`
+        : `Stopping after ${formatEntryCount(progress.entriesScanned)}.`
       : finishing
-        ? `Finishing the scan after ${formatCount(progress.entriesScanned)} entries.`
-        : `Scanned ${formatCount(progress.entriesScanned)} entries and ${formatBytes(progress.allocatedBytes)}.`,
+        ? `Finishing the scan after ${formatEntryCount(progress.entriesScanned)}.`
+        : progress.entriesScanned === 0 && progress.allocatedBytes === 0
+          ? ""
+          : `Scanned ${formatEntryCount(progress.entriesScanned)} and ${formatBytes(progress.allocatedBytes)}.`,
   };
 }
 

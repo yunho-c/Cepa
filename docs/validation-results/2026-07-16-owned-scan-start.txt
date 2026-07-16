@@ -1,0 +1,98 @@
+Cepa owned scan-start status validation
+Date: 2026-07-16
+Baseline commit: 014b59217ef37ec7987f1d615db4c62826eae5dc
+
+Changed source SHA-256
+6834ea6c82eb1e3334e87e23331c6ef029785aa5b9e76549b11e8dec559a9cb7  src/App.svelte
+944f634d44aca7cf78cff328433a176e54dc12b6c731aaa374ab807a56cf86ea  src/lib/scanner.ts
+6be936b6b4f2ec7ebe0173dd5f25bbf75068909008944a9d65f224a892ff1c6a  src/lib/scanner.test.ts
+caebe775271c9d56c6196554ca43a73c070d73f5cdc850b85be5452a55a85811  src/lib/style-sources.test.ts
+724104cbea62d3976a602b557bf7f565315a2d97bb389e003ea7acfbd55bbe5a  src-tauri/examples/native_scan_smoke.rs
+5c942accad0320fb22c842aff16d496133ae0d82de0b66235e5141c7f4fb76c2  AGENTS.md
+27049f6f9840e0e814e95bd90a2b74021396c8b7a56b6af1fdc0e1ed71fa0d54  README.md
+6e272382b56fb48b4f76d084b13d53cff63737239327ab80989b315aa4113a35  docs/performance.md
+
+Reproduction before the fix
+- Started the scanning mock at 620x480 in dark appearance and observed the
+  first active-scan DOM mutation before its 35 ms progress event.
+- The visible status said Scanning and the target h1 said demo.
+- The target heading had no aria-describedby relationship to that status.
+- The newly populated polite region said `Scanned 0 entries and 0 B.` from the
+  frontend's fallback rather than from filesystem progress.
+
+Deterministic browser validation after the fix
+Scenario: scanning, dark appearance, 620x480 viewport.
+- The demo scan heading received focus.
+- Its aria-describedby target contained the visible `Scanning` status.
+- The progress node was polite, atomic, and empty before the real mock event.
+- The first real event changed it to `Scanned 18K entries and 282 GB.`.
+- A focused helper regression also requires `Scanned 1 entry and 0 B.` rather
+  than the earlier grammatically incorrect singular form.
+- documentElement innerWidth and scrollWidth were both 620 pixels.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Fixture:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+
+Selected report fields:
+  backendLabel=macOS native
+  initialScanHeadingFocused=true
+  scanStartStatusOwned=true
+  rescanHeadingFocused=true
+  rescanStartStatusOwned=true
+  rescanResultFocused=true
+  scanDetailsQuiet=true
+  inspectorLiveRegionScoped=true
+  navigationHeadingFocusVisible=true
+  chartPreviewHidden=true
+  chartTabStops=1
+  logicalChartTabStops=1
+  listTabStops=2
+  staleScanRejected=true
+  discardedScanId=1
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+  scanToPaintMs=74
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 69 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30)
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This proves the DOM contract, deterministic browser behavior, programmatic
+production-macOS-WebView lifecycle, local Windows cross-target graph, and Linux
+Rust 1.97 native core. It does not certify a particular screen reader, physical
+keyboard input, Windows WebView2, Linux WebKitGTK runtime, or installed packages.

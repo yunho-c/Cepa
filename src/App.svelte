@@ -1567,17 +1567,22 @@
       inert={dropOverlayVisible}
       aria-hidden={dropOverlayVisible ? "true" : undefined}
     >
-      <p class="sr-only" aria-live="polite">{progressPresentation.announcement}</p>
+      <p
+        class="sr-only scan-progress-announcement"
+        aria-live="polite"
+        aria-atomic="true"
+      >{progressPresentation.announcement}</p>
       <section class="scan-progress" aria-labelledby="scan-progress-title">
         <div class="scan-titlebar">
           <div>
-            <span class="scan-kicker">
+            <span id="scan-progress-status" class="scan-kicker">
               <span class="status-dot" aria-hidden="true"></span>
               {progressPresentation.statusLabel}
             </span>
             <h1
               id="scan-progress-title"
               tabindex="-1"
+              aria-describedby="scan-progress-status"
               bind:this={scanProgressHeading}
             >{scanTargetName}</h1>
           </div>

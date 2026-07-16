@@ -210,4 +210,28 @@ describe("production style sources", () => {
     expect(details).not.toContain('role="status"');
     expect(details).not.toContain('role="alert"');
   });
+
+  test("describes scan-start focus without announcing placeholder progress", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const statusStart = component.indexOf('id="scan-progress-status"');
+    const headingStart = component.indexOf('id="scan-progress-title"');
+    const heading = component.slice(
+      headingStart,
+      component.indexOf("</h1>", headingStart),
+    );
+    const announcementStart = component.indexOf(
+      'class="sr-only scan-progress-announcement"',
+    );
+    const announcement = component.slice(
+      announcementStart,
+      component.indexOf("</p>", announcementStart),
+    );
+
+    expect(statusStart).toBeGreaterThan(-1);
+    expect(headingStart).toBeGreaterThan(-1);
+    expect(heading).toContain('aria-describedby="scan-progress-status"');
+    expect(announcementStart).toBeGreaterThan(-1);
+    expect(announcement).toContain('aria-live="polite"');
+    expect(announcement).toContain('aria-atomic="true"');
+  });
 });

@@ -51,6 +51,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - An explicit, cancellable finishing phase while retained directory totals are
   prepared, with time-bounded elapsed updates instead of leaving a completed
   traversal looking stalled
+- A focused scan target described by its visible status, with an atomic progress
+  announcement that stays quiet until real filesystem progress exists
 - On-demand directory views backed by the completed in-memory scan snapshot
 - A scan-authorized Home transition that releases the retained snapshot and
   cancels related background work instead of hiding a still-resident result;
@@ -238,7 +240,9 @@ as an unhandled page rejection. It next starts the optional second fixture as a
 larger scan, activates the real Stop control, and requires the cancelled landing
 notice to own focus while another scan remains available. Before cancellation
 settles, the focused Stop control must expose guarded `aria-disabled` state
-without a native disabled attribute. It then submits the
+without a native disabled attribute. Every submitted scan must focus a target
+heading described by its visible Scanning status without announcing placeholder
+zero-entry progress. It then submits the
 ordinary completion fixture, waits for the terminal channel event
 and two painted frames, opens and closes a real file inspector, and requires its
 single polite atomic status to remain outside the interactive inspector with no

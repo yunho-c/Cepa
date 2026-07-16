@@ -53,8 +53,14 @@ vocabulary to this state. During an ordinary scan at the 620 by 480 minimum,
 keep the first observed file row visible below the facts instead of ending the
 viewport on an orphaned `Largest so far` heading. Preserve the more spacious
 rhythm above 560 logical pixels tall; contextual failure callouts take priority
-and may make the remaining progress content scroll. The shared completion path
-emits one backend-neutral `finishing` progress phase before bottom-up aggregation
+and may make the remaining progress content scroll. At scan start, focus the
+target heading and associate it with the visible Scanning status. Keep the polite
+atomic progress region empty while the frontend still has only its zero-value
+placeholder; `Scanned 0 entries and 0 B` is not a useful transition announcement.
+Begin live progress only after a real event, and retain accurate singular/plural
+entry wording through scanning, finishing, and stopping states. The shared
+completion path emits one backend-neutral `finishing` progress phase before
+bottom-up aggregation
 and no redundant post-aggregation update. Present it as `Finishing` with
 `Preparing results…`, keep Stop available because aggregation is cancellable,
 and do not expose aggregation terminology in the primary UI. Refresh its elapsed

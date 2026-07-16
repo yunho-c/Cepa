@@ -279,6 +279,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["terminalFailureGuidanceCalm"].as_bool() == Some(true)
         && report["terminalFailureDetailsCollapsed"].as_bool() == Some(true)
         && report["initialScanHeadingFocused"].as_bool() == Some(true)
+        && report["scanStartStatusOwned"].as_bool() == Some(true)
         && report["cancellationStopped"].as_bool() == Some(true)
         && report["cancellationPendingFocusRetained"].as_bool() == Some(true)
         && report["cancellationFocusRestored"].as_bool() == Some(true)
@@ -292,6 +293,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["staleScanRejected"].as_bool() == Some(true)
         && report["rescanCompleted"].as_bool() == Some(true)
         && report["rescanHeadingFocused"].as_bool() == Some(true)
+        && report["rescanStartStatusOwned"].as_bool() == Some(true)
         && report["rescanResultFocused"].as_bool() == Some(true)
         && report["rescanRows"].as_u64().is_some_and(|count| count > 0)
         && report["rescanChartSegments"]
@@ -378,7 +380,17 @@ void (async () => {{
     await Promise.resolve();
     await Promise.resolve();
     const scanHeading = document.querySelector('#scan-progress-title');
-    return scanHeading !== null && document.activeElement === scanHeading;
+    const statusId = scanHeading?.getAttribute('aria-describedby');
+    const scanStatus = statusId ? document.getElementById(statusId) : null;
+    const announcement = document.querySelector('.scan-progress-announcement');
+    return {{
+      headingFocused: scanHeading !== null && document.activeElement === scanHeading,
+      statusOwned:
+        scanStatus?.textContent?.trim() === 'Scanning'
+        && announcement?.getAttribute('aria-live') === 'polite'
+        && announcement.getAttribute('aria-atomic') === 'true'
+        && announcement.textContent?.trim() !== 'Scanned 0 entries and 0 B.',
+    }};
   }};
   const submitFixture = (label) => submitPath(fixture, label);
   const backendLabel = () => [...document.querySelectorAll('.scan-details dl > div')]
@@ -466,7 +478,9 @@ void (async () => {{
     phase('waiting-for-manual-path');
     const scanStartedAt = performance.now();
     phase('scanning');
-    const initialScanHeadingFocused = await submitFixture('initial');
+    const initialScanStart = await submitFixture('initial');
+    const initialScanHeadingFocused = initialScanStart.headingFocused;
+    const scanStartStatusOwned = initialScanStart.statusOwned;
     await waitFor(() => {{
       const error = document.querySelector('.error-callout');
       if (error) throw new Error(error.textContent?.trim() || 'The scan failed.');
@@ -704,7 +718,9 @@ void (async () => {{
     }}
 
     phase('rescanning');
-    const rescanHeadingFocused = await submitFixture('rescan');
+    const rescanStart = await submitFixture('rescan');
+    const rescanHeadingFocused = rescanStart.headingFocused;
+    const rescanStartStatusOwned = rescanStart.statusOwned;
     await waitFor(() => document.querySelector('.results-view'), 'rescanned result');
     await painted();
     const rescanCompleted = document.querySelector('.results-view') !== null;
@@ -753,6 +769,7 @@ void (async () => {{
       terminalFailureGuidanceCalm,
       terminalFailureDetailsCollapsed,
       initialScanHeadingFocused,
+      scanStartStatusOwned,
       cancellationStopped,
       cancellationPendingFocusRetained,
       cancellationFocusRestored,
@@ -764,6 +781,7 @@ void (async () => {{
       staleScanRejected,
       rescanCompleted,
       rescanHeadingFocused,
+      rescanStartStatusOwned,
       rescanResultFocused,
       rescanRows,
       rescanChartSegments,
@@ -846,6 +864,7 @@ mod tests {
             "terminalFailureGuidanceCalm": true,
             "terminalFailureDetailsCollapsed": true,
             "initialScanHeadingFocused": true,
+            "scanStartStatusOwned": true,
             "cancellationStopped": true,
             "cancellationPendingFocusRetained": true,
             "cancellationFocusRestored": true,
@@ -857,6 +876,7 @@ mod tests {
             "staleScanRejected": true,
             "rescanCompleted": true,
             "rescanHeadingFocused": true,
+            "rescanStartStatusOwned": true,
             "rescanResultFocused": true,
             "rescanRows": 4,
             "rescanChartSegments": 8,
@@ -935,6 +955,10 @@ mod tests {
         let mut scan_heading_focus_lost = complete.clone();
         scan_heading_focus_lost["initialScanHeadingFocused"] = false.into();
         assert!(!validate_report(&scan_heading_focus_lost, 2));
+
+        let mut placeholder_scan_start = complete.clone();
+        placeholder_scan_start["scanStartStatusOwned"] = false.into();
+        assert!(!validate_report(&placeholder_scan_start, 2));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();
