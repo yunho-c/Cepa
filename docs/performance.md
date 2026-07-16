@@ -1629,6 +1629,35 @@ This is deterministic browser and programmatic production-WebView evidence. It
 does not certify a screen reader, physical keyboard, Windows WebView2, or Linux
 WebKitGTK runtime.
 
+### 2026-07-16 pending radial navigation ownership
+
+The coordinated explorer's list already dimmed, rejected activation, and froze
+its roving focus during directory IPC. The radial map did not: its named group
+reported no busy state, every segment still exposed an enabled button, pointer
+previews remained active, and its keyboard handler could move focus while the
+same request made the list inert. A rejected file activation could also replace
+the inspector return target before `inspectEntry` noticed the busy view.
+
+The radial map now exposes `aria-busy`, its real segments remain focusable but
+use guarded `aria-disabled`, and its chart surface uses the list's restrained
+pending opacity. Entry activation and pointer preview return before mutating any
+state while a result request is live. Enter, Space, arrow, Home, and End events
+are consumed without moving the roving focus until the request settles; ordinary
+chart keyboard behavior is unchanged outside that interval.
+
+At 620 by 480 in dark appearance, the 1.2-second deterministic navigation mock
+kept the initiating Library segment focused after Enter and a subsequent End
+key, exposed both map busy and segment disabled semantics, retained no native
+disabled attribute, and produced no horizontal overflow. The production macOS
+WebView repeated the assertion around a real `open_scan_directory` command and
+then passed metric switching, search, list navigation, cancellation, discard,
+and rescan with no page errors. Exact source, commands, cross-target checks, and
+Linux Rust 1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-pending-radial-navigation.txt`](validation-results/2026-07-16-pending-radial-navigation.txt).
+This is deterministic browser and programmatic production-WebView evidence; it
+does not certify a screen reader, physical keyboard, Windows WebView2, or Linux
+WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

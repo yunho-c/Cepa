@@ -155,7 +155,12 @@ Expose the interactive radial map as a named group, not an image with interactiv
 descendants. Its real segments use one roving Tab stop: arrow keys move and wrap,
 Home and End jump to the bounds, and Enter or Space activates the focused item.
 Aggregate segments remain non-interactive. Keep the concise screen-reader
-instruction associated with the group when changing chart interaction.
+instruction associated with the group when changing chart interaction. While
+directory navigation is pending, expose the map as busy and each real segment
+as guarded `aria-disabled`, preserve the initiating segment's focus, freeze
+roving keys and pointer previews, and use the same restrained opacity as the
+busy list. Do not make the two halves of the navigator disagree about whether
+the current view is interactive.
 Sunburst render keys use real node identity for interactive segments and a
 stable traversal position for aggregates. Aggregate labels repeat across
 branches, so names and depths are not unique keys; preserve the repeated-label
@@ -181,9 +186,10 @@ intent, so moving again can return to Reveal. Preserve the associated screen-
 reader instructions and recover focus ownership when search results or the
 current directory change. Do not make all 500 rows and actions tabbable.
 Pending directory navigation and Reveal must not native-disable the control that
-owns focus. Keep list, breadcrumb, Up, and recovery actions focusable with
-guarded `aria-disabled` state while their request is live; reject repeat
-activation and freeze that action kind's roving-arrow movement until it settles.
+owns focus. Keep chart segments, list, breadcrumb, Up, and recovery actions
+focusable with guarded `aria-disabled` state while their request is live; reject
+repeat activation and freeze that action kind's roving-arrow movement until it
+settles.
 Successful navigation moves focus to the new view heading, while Reveal success
 leaves focus on its original action. Preserve the restrained pending opacity and
 wait cursor without dropping focus to the document body.

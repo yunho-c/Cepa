@@ -254,6 +254,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
         && report["navigationChangedFolder"].as_bool() == Some(true)
+        && report["pendingChartNavigationFocusRetained"].as_bool() == Some(true)
         && report["pendingNavigationFocusRetained"].as_bool() == Some(true)
         && report["searchStatus"]
             .as_str()
@@ -523,6 +524,18 @@ void (async () => {{
     chartNavigationNode.dispatchEvent(
       new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}),
     );
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingChartNavigationFocusRetained =
+      document.activeElement === chartNavigationNode
+      && chartNavigationNode.getAttribute('aria-disabled') === 'true'
+      && document.querySelector('.sunburst')?.getAttribute('aria-busy') === 'true';
+    chartNavigationNode.dispatchEvent(
+      new KeyboardEvent('keydown', {{ key: 'End', bubbles: true }}),
+    );
+    await Promise.resolve();
+    const pendingChartNavigationFocusFrozen =
+      document.activeElement === chartNavigationNode;
     await waitFor(
       () => document.querySelector('.section-heading h2')?.textContent?.trim() !== rootHeading,
       'directory navigation',
@@ -648,6 +661,8 @@ void (async () => {{
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       navigationChangedFolder: navigatedHeading !== rootHeading,
+      pendingChartNavigationFocusRetained:
+        pendingChartNavigationFocusRetained && pendingChartNavigationFocusFrozen,
       pendingNavigationFocusRetained,
       searchStatus,
       searchedRows,
@@ -732,6 +747,7 @@ mod tests {
             "pageErrors": [],
             "logicalMetricSelected": true,
             "navigationChangedFolder": true,
+            "pendingChartNavigationFocusRetained": true,
             "pendingNavigationFocusRetained": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
@@ -798,6 +814,10 @@ mod tests {
         let mut pending_navigation_focus_lost = complete.clone();
         pending_navigation_focus_lost["pendingNavigationFocusRetained"] = false.into();
         assert!(!validate_report(&pending_navigation_focus_lost, 2));
+
+        let mut pending_chart_navigation_focus_lost = complete.clone();
+        pending_chart_navigation_focus_lost["pendingChartNavigationFocusRetained"] = false.into();
+        assert!(!validate_report(&pending_chart_navigation_focus_lost, 2));
 
         let mut scan_heading_focus_lost = complete.clone();
         scan_heading_focus_lost["initialScanHeadingFocused"] = false.into();

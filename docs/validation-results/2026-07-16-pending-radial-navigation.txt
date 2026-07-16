@@ -1,0 +1,97 @@
+Cepa pending radial navigation ownership validation
+Date: 2026-07-16
+Baseline commit: c408e1bbdf53abc365ddb47898e1bc6b180f0dea
+
+Changed source SHA-256
+7493a3f946e8c3562b34a0923b44522f23f45336cb4e1d9234f6156d31f32cf8  src/App.svelte
+ef495f9464152f8e990edb953e9de26d625979b5646e7b4e01615b3e72f4ee5e  src/app.css
+695058857a28090b5a36acd72bd4932905f6896a3c5964fd4adb5be197ca4cef  src/lib/style-sources.test.ts
+65685b3155960d0b22d0cb87be67cd508e5aa350746593a268cb1bdaff166953  src-tauri/examples/native_scan_smoke.rs
+cb69c898e61f7bacb417f74f9b72e2cc489249d1c030503e8dabec50c64b84f1  AGENTS.md
+37b50bda0a41f15046d7078b6e45b447504c8b2bf68b2fe47a081aac91b298c5  README.md
+25fecaa4ccfc5662053f81a105b94a16c904cf0e20628ac075909c445ff236f0  docs/performance.md
+
+Reproduction before the fix
+- At 620x480 dark, mock=stale-actions held chart-origin directory navigation
+  for 1.2 seconds.
+- During that request, the explorer reported aria-busy=true and the list had
+  pointer-events:none, but the radial group exposed no busy state, its focused
+  segment had no aria-disabled state, and the chart stayed at full opacity.
+- The chart handlers still accepted pointer previews and roving keys. A file
+  activation rejected by inspectEntry could first overwrite the inspector's
+  return target.
+
+Deterministic browser validation after the fix
+- Focused the Library segment, dispatched Enter, awaited the Svelte update, and
+  dispatched End before the delayed request settled.
+- The Library segment retained focus, exposed aria-disabled=true without a
+  native disabled attribute, and the radial group exposed aria-busy=true.
+- End did not move the roving focus, and the viewport had no horizontal
+  overflow at 620x480.
+- The pending chart style uses the same 0.45 opacity as the busy list and a wait
+  cursor without removing pointer or keyboard focus ownership.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion /tmp/.../cancellation
+
+Fixtures:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+- cancellation: 100000 requested leaf directories x 1 empty file
+
+Selected report fields:
+  backendLabel=macOS native
+  pendingChartNavigationFocusRetained=true
+  pendingNavigationFocusRetained=true
+  navigationChangedFolder=true
+  cancellationPendingFocusRetained=true
+  cancellationStopped=true
+  cancellationFocusRestored=true
+  cancellationMs=51
+  discardedScanId=2
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+  processToReportMs=1238.8775
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+  production-bundle development-string search
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 58 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- Development-only stale-action strings were absent from the production bundle.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Frontend diagnostics, all 58 tests, and the production Vite build passed.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This is deterministic browser, programmatic production-macOS-WebView, local
+Windows cross-target, and Linux Rust 1.97 native-core evidence. It does not
+certify physical keyboard or screen-reader input, Windows WebView2, a Linux
+WebKitGTK runtime, or installed packages.

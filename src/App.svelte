@@ -85,6 +85,17 @@
   } from "$lib/shortcuts";
   import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
 
+  const chartInteractionKeys = new Set([
+    "Enter",
+    " ",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+  ]);
+
   let path = $state("");
   let status = $state<AppStatus>("idle");
   let scanId = $state<number | null>(null);
@@ -1291,6 +1302,7 @@
     entry: ChartItem | ScanItem,
     trigger?: HTMLElement | SVGGElement,
   ) {
+    if (isResultBusy) return;
     if (entry.kind === "directory") {
       void openDirectory(entry.id);
     } else {
@@ -1300,10 +1312,15 @@
   }
 
   function previewEntry(entry: ChartItem | ScanItem) {
+    if (isResultBusy) return;
     if (pointerEntry?.id !== entry.id) pointerEntry = entry;
   }
 
   function handleSegmentKeydown(event: KeyboardEvent, entry: ChartItem) {
+    if (isResultBusy) {
+      if (chartInteractionKeys.has(event.key)) event.preventDefault();
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       activateEntry(entry, event.currentTarget as SVGGElement);
@@ -1763,6 +1780,7 @@
                 class="sunburst"
                 viewBox="0 0 340 340"
                 role="group"
+                aria-busy={isResultBusy}
                 aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
                 aria-describedby="sunburst-navigation-help"
                 bind:this={sunburstElement}
@@ -1773,6 +1791,7 @@
                       role="button"
                       tabindex={chartFocusId === segment.item.id ? 0 : -1}
                       data-chart-node-id={segment.item.id}
+                      aria-disabled={isResultBusy}
                       aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}
                       onpointermove={() => previewEntry(segment.item)}
                       onfocus={() => {

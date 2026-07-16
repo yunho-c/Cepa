@@ -241,7 +241,9 @@ that the compact message and Clear action stay inside the directory pane. It
 also validates bounded focus and overflow invariants in both size metrics while
 rejecting uncaught page errors. It moves chart focus
 with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
-with Enter, returns to the root, and requires a real list-origin navigation to
+with Enter, and requires that segment to retain focus with guarded
+`aria-disabled` state while the map is busy and its roving keys are frozen. It
+returns to the root, and requires a real list-origin navigation to
 retain focus with guarded `aria-disabled` state while IPC is pending. Chart and
 list activation choose actual directory items rather than assuming the first
 ranked item is a folder. It then returns Home, confirms the discarded scan is no

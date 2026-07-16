@@ -65,4 +65,39 @@ describe("production style sources", () => {
       /!isEstimatingSavings \|\|\s+isCancellingEstimate \|\|\s+isDiscardingScan/,
     );
   });
+
+  test("keeps the radial navigator owned and inert while navigation is pending", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+    const segmentStart = component.indexOf('role="button"', component.indexOf('class="sunburst"'));
+    const segment = component.slice(segmentStart, component.indexOf("</g>", segmentStart));
+    const activateStart = component.indexOf("function activateEntry(");
+    const activateEntry = component.slice(
+      activateStart,
+      component.indexOf("function previewEntry(", activateStart),
+    );
+    const previewStart = component.indexOf("function previewEntry(");
+    const previewEntry = component.slice(
+      previewStart,
+      component.indexOf("function handleSegmentKeydown(", previewStart),
+    );
+    const keyboardStart = component.indexOf("function handleSegmentKeydown(");
+    const segmentKeyboard = component.slice(
+      keyboardStart,
+      component.indexOf("</script>", keyboardStart),
+    );
+
+    expect(segmentStart).toBeGreaterThan(-1);
+    expect(segment).toContain("aria-disabled={isResultBusy}");
+    expect(component).toContain("aria-busy={isResultBusy}");
+    expect(activateEntry).toContain("if (isResultBusy) return;");
+    expect(previewEntry).toContain("if (isResultBusy) return;");
+    expect(segmentKeyboard).toContain(
+      "if (chartInteractionKeys.has(event.key)) event.preventDefault();",
+    );
+    expect(stylesheet).toContain('.sunburst[aria-busy="true"] { opacity: 0.45; }');
+    expect(stylesheet).toContain('.sunburst g[aria-disabled="true"] { cursor: wait; }');
+  });
 });
