@@ -1489,6 +1489,39 @@ installed packages, arbitrary platform error lengths, or native Windows
 WebView2. Exact source hashes and suite/runtime results are preserved in
 [`validation-results/2026-07-16-recovery-surface-polish.txt`](validation-results/2026-07-16-recovery-surface-polish.txt).
 
+### 2026-07-16 storage-discovery retry focus
+
+A deterministic browser pass over all 18 development workflows at 620 by 480
+in light appearance and 880 by 620 in dark appearance found no page errors,
+horizontal overflow, escaped interactive controls, unexpectedly expanded scan
+details, or wrapped estimator actions. That pass exposed a remaining landing-
+screen gap instead: storage discovery had no stable loading or failure preview,
+and activating Try again removed the focused control without assigning focus to
+its replacement.
+
+Development-only `?roots=loading` and `?roots=error` modes now cover those
+states. The error retry moves focus first to the programmatically focusable
+loading status and then to the first recovered volume. Production discovery
+uses the same path and falls back to a renewed Try again control or Choose
+folder when discovery returns no roots. The failure copy now says that storage
+could not be shown instead of implying that every volume is unavailable.
+
+The fixed states were rendered at 620 by 480 and 880 by 620 in both appearances.
+Pointer and keyboard traces at the supported minimum confirmed the loading-to-
+volume focus handoff, and the next Tab advanced to the second volume. The
+frontend suite has 54 tests, including pure preview and focus-target regressions.
+The local full check, release desktop build, Windows GNU cross-check and clippy,
+and an exact Linux Rust 1.97.0 dependency-light check, clippy, test, and web build
+all passed. A production bundle string scan found no preview labels, paths, or
+query-mode names.
+
+This is deterministic browser geometry and focus evidence plus cross-platform
+compile/test evidence. The local native UI bridge was unavailable for physical
+folder-picker input, and the Windows native host was unreachable, so this does
+not prove assistive-technology behavior, an installed package, the physical
+picker, or Windows WebView2. Exact hashes, commands, and results are preserved
+in [`validation-results/2026-07-16-scan-root-retry-focus.txt`](validation-results/2026-07-16-scan-root-retry-focus.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

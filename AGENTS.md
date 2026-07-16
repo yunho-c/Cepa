@@ -92,6 +92,14 @@ drift. If a first-launch error or cancellation callout shares that compact
 storage landing view, tighten the hero and callout rhythm enough that focusing
 the recovery message does not scroll the heading beneath the sticky header at
 620 by 480.
+Storage-discovery retry must not strand keyboard focus when its button is
+replaced. Move focus to the loading status immediately, then to the first
+recovered volume, the renewed Try again control, or Choose folder when no roots
+are returned. Keep the loading status focusable only programmatically and retain
+its single status announcement. Development-only `?roots=loading` and
+`?roots=error` previews hold those states; the error preview's Try again moves
+through loading to the existing ready fixture. `?roots=preview` and
+`?roots=ready` both render that ready fixture. Keep these modes out of production.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
 intentional mount-boundary semantics remain available under the collapsed
 `Scan details` disclosure rather than appearing as status badges or a diagnostic

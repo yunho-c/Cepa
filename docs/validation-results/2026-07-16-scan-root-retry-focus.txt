@@ -1,0 +1,82 @@
+Cepa storage-discovery retry focus validation
+Date: 2026-07-16
+Baseline commit: f89e3a5e2e0594786c7560e9b31cc8d9a561a43b
+
+Changed source SHA-256
+4804df0c07baa5e13732ec59294a32d6d1a49c3e65c1ad36b999b10b1a4fbe8e  src/App.svelte
+a76eebe85315cbda7fb185a8f2b572929a20017c65f0238719e3a37ac650631d  src/lib/components/scan-root-picker.svelte
+330815915e5201426e0ef34bd72576d3e9f9df342c10947ba2df37194115dd15  src/lib/scan-roots.ts
+0087dd3ead83cccd5452cc6f5fc66ba88117fae0e17181e037dff130da278f07  src/app.css
+
+Rendered browser inspection
+- Audited all 18 deterministic mock workflows at 620x480 light and 880x620
+  dark.
+- No page errors, horizontal overflow, escaped interactive controls,
+  unexpectedly open Scan details, or wrapped estimator actions were observed.
+- Rendered roots=loading and roots=error at 620x480 and 880x620 in light and
+  dark appearance; the folder picker and manual-path fallback remained visible.
+- Pointer retry trace at 620x480: Try again -> focused Finding storage status ->
+  focused first recovered volume. document.scrollWidth equaled innerWidth.
+- Keyboard retry trace at 620x480: Tab focused Try again; Enter moved focus
+  through the loading status to the first volume; the next Tab reached the
+  second volume.
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  rg -a 'Macintosh HD|/Volumes/Archive|roots=loading|roots=error' dist
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+
+Results:
+- Svelte check: 0 errors and 0 warnings.
+- Frontend tests: 54 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- Rust formatting, check, clippy, examples, and release desktop build passed.
+- Windows GNU all-target check and clippy passed.
+- Production bundle contained none of the four development preview strings.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30)
+
+Method:
+- Copied a disposable source tree to the native Linux host with extended
+  attributes excluded.
+- Verified the four source hashes above before building.
+- Reused the host's installed frontend dependencies through a temporary
+  symlink; removed the complete disposable tree on exit.
+
+Commands:
+  bun run check
+  bun test src/lib/*.test.ts
+  cargo fmt --all -- --check
+  cargo check --manifest-path src-tauri/Cargo.toml --no-default-features
+  cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features \
+    --all-targets -- -D warnings
+  cargo test --manifest-path src-tauri/Cargo.toml --no-default-features
+  bun run build
+  rg -a 'Macintosh HD|/Volumes/Archive|roots=loading|roots=error' dist
+
+Results:
+- Frontend check and all 54 frontend tests passed.
+- Native-core format, check, and clippy passed.
+- Linux Rust library tests: 76 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All dependency-light example tests and the production web build passed.
+- Production bundle contained none of the development preview strings.
+
+Evidence boundaries
+- Browser focus traces used deterministic development previews and
+  programmatic DOM inspection.
+- The local native UI-control bridge failed to initialize, so no physical
+  folder-picker interaction was claimed.
+- The native Windows host was unreachable during this slice. Windows evidence
+  is cross-compilation and linting only, not WebView2 runtime proof.
+- This is not assistive-technology, installed-package, or arbitrary translated-
+  copy validation.

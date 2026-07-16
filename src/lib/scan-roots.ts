@@ -10,6 +10,32 @@ export interface ScanRoot {
 
 export type ScanRootsStatus = "idle" | "loading" | "ready" | "error";
 
+export type ScanRootsPreview = Exclude<ScanRootsStatus, "idle">;
+export type ScanRootsRetryFocus = "loading" | "root" | "retry" | "fallback";
+
+export function scanRootsPreviewStatus(value: string | null): ScanRootsPreview | null {
+  switch (value) {
+    case "preview":
+    case "ready":
+      return "ready";
+    case "loading":
+    case "error":
+      return value;
+    default:
+      return null;
+  }
+}
+
+export function scanRootsRetryFocusTarget(
+  status: ScanRootsStatus,
+  rootCount: number,
+): ScanRootsRetryFocus {
+  if (status === "loading") return "loading";
+  if (rootCount > 0) return "root";
+  if (status === "error") return "retry";
+  return "fallback";
+}
+
 export function shouldShowScanRoots(
   status: ScanRootsStatus,
   rootCount: number,

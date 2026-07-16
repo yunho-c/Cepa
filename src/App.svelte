@@ -40,6 +40,7 @@
     scanFailurePresentation,
   } from "$lib/recovery-copy";
   import {
+    scanRootsPreviewStatus,
     shouldShowScanRoots,
     type ScanRoot,
     type ScanRootsStatus,
@@ -127,6 +128,7 @@
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let landingHeading: HTMLHeadingElement | undefined = $state();
+  let chooseDirectoryButton: HTMLButtonElement | null = $state(null);
   let viewHeading: HTMLHeadingElement | undefined = $state();
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartFocusId: number | null = $state(null);
@@ -156,40 +158,42 @@
   const hasDevMock =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("mock");
-  const rootsPreview =
-    import.meta.env.DEV &&
-    new URLSearchParams(window.location.search).get("roots") === "preview";
+  const rootsPreviewStatus = import.meta.env.DEV
+    ? scanRootsPreviewStatus(
+        new URLSearchParams(window.location.search).get("roots"),
+      )
+    : null;
+  const rootsPreview = rootsPreviewStatus !== null;
+  const previewScanRoots: ScanRoot[] = [
+    {
+      name: "Macintosh HD",
+      path: "/System/Volumes/Data",
+      displayPath: "/",
+      totalBytes: 1_000_000_000_000,
+      availableBytes: 286_000_000_000,
+      isRemovable: false,
+      isReadOnly: false,
+    },
+    {
+      name: "Archive",
+      path: "/Volumes/Archive",
+      displayPath: "/Volumes/Archive",
+      totalBytes: 2_000_000_000_000,
+      availableBytes: 1_240_000_000_000,
+      isRemovable: true,
+      isReadOnly: false,
+    },
+  ];
   let dropActive = $state(dropPreview);
   let droppedPaths = $state<string[]>(
     dropPreview ? ["/Users/demo/Design Archive"] : [],
   );
   let preparingScanRoot = $state<string | null>(null);
   let scanRoots = $state<ScanRoot[]>(
-    rootsPreview
-      ? [
-          {
-            name: "Macintosh HD",
-            path: "/System/Volumes/Data",
-            displayPath: "/",
-            totalBytes: 1_000_000_000_000,
-            availableBytes: 286_000_000_000,
-            isRemovable: false,
-            isReadOnly: false,
-          },
-          {
-            name: "Archive",
-            path: "/Volumes/Archive",
-            displayPath: "/Volumes/Archive",
-            totalBytes: 2_000_000_000_000,
-            availableBytes: 1_240_000_000_000,
-            isRemovable: true,
-            isReadOnly: false,
-          },
-        ]
-      : [],
+    rootsPreviewStatus === "ready" ? previewScanRoots : [],
   );
   let scanRootsStatus = $state<ScanRootsStatus>(
-    rootsPreview ? "ready" : "idle",
+    rootsPreviewStatus ?? "idle",
   );
   let dropSequence = 0;
 
@@ -406,6 +410,17 @@
       scanRoots = [];
       scanRootsStatus = "error";
     }
+  }
+
+  async function retryScanRoots() {
+    if (rootsPreviewStatus !== null) {
+      scanRootsStatus = "loading";
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      scanRoots = previewScanRoots;
+      scanRootsStatus = "ready";
+      return;
+    }
+    await loadScanRoots();
   }
 
   function handleNativeFolderDrop(event: { payload: DragDropEvent }) {
@@ -1399,12 +1414,14 @@
           busy={isBusy}
           preparingPath={preparingScanRoot}
           onSelect={(rootPath) => void startValidatedRoot(rootPath, false)}
-          onRetry={() => void loadScanRoots()}
+          onRetry={retryScanRoots}
+          onRetryFocusFallback={() => chooseDirectoryButton?.focus()}
         />
 
         <div class="scan-entry">
           <Button
             class="choose-button"
+            bind:ref={chooseDirectoryButton}
             variant={scanRoots.length > 0 ? "outline" : "default"}
             size="lg"
             disabled={isBusy}

@@ -285,12 +285,18 @@ http://localhost:1420/?mock=stale-actions
 http://localhost:1420/?mock=stress
 http://localhost:1420/?drop=active
 http://localhost:1420/?roots=preview
+http://localhost:1420/?roots=loading
+http://localhost:1420/?roots=error
 http://localhost:1420/?appearance=dark&roots=preview
 ```
 
 The mock workflows, drop affordance, and storage preview are removed from
 production builds. Combine `?mock=complete&roots=preview` to exercise a volume
 selection through the complete mocked scan.
+The `loading` storage preview stays pending. The `error` preview keeps Choose
+folder available and makes Try again transition through the loading status to
+the ready fixture, including the production retry focus handoff. `ready` is an
+alias for `preview`.
 `?mock=stress` exercises the production bounds of 500 list rows and 512 recursive
 chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a

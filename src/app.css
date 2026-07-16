@@ -489,6 +489,7 @@ body {
 }
 .scan-root-state > div { display: grid; gap: 2px; }
 .scan-root-state strong { font-size: 12px; font-weight: 600; }
+.scan-root-state:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .scan-entry-divider {
   width: min(100%, 420px);
   margin: 18px 0 16px;

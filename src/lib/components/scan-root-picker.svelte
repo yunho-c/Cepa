@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { ChevronRight, HardDrive, LoaderCircle } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
   import {
     scanRootUsedPercent,
+    scanRootsRetryFocusTarget,
     shouldShowScanRoots,
     type ScanRoot,
     type ScanRootsStatus,
@@ -15,14 +17,47 @@
     busy: boolean;
     preparingPath: string | null;
     onSelect: (path: string) => void;
-    onRetry: () => void;
+    onRetry: () => void | Promise<void>;
+    onRetryFocusFallback: () => void;
   }
 
-  let { roots, status, busy, preparingPath, onSelect, onRetry }: Props = $props();
+  let {
+    roots,
+    status,
+    busy,
+    preparingPath,
+    onSelect,
+    onRetry,
+    onRetryFocusFallback,
+  }: Props = $props();
+  let section: HTMLElement | undefined = $state();
+
+  function focusRetryState() {
+    const target = scanRootsRetryFocusTarget(status, roots.length);
+    if (target === "fallback") {
+      onRetryFocusFallback();
+      return;
+    }
+    section
+      ?.querySelector<HTMLElement>(`[data-scan-roots-focus="${target}"]`)
+      ?.focus();
+  }
+
+  async function retry() {
+    const completion = Promise.resolve(onRetry());
+    await tick();
+    focusRetryState();
+    try {
+      await completion;
+    } finally {
+      await tick();
+      focusRetryState();
+    }
+  }
 </script>
 
 {#if shouldShowScanRoots(status, roots.length)}
-  <section class="scan-roots" aria-labelledby="scan-roots-title">
+  <section class="scan-roots" aria-labelledby="scan-roots-title" bind:this={section}>
     <div class="scan-roots-heading">
       <h2 id="scan-roots-title">Storage</h2>
       {#if roots.length > 0}
@@ -31,7 +66,12 @@
     </div>
 
     {#if status === "loading"}
-      <div class="scan-root-state" role="status">
+      <div
+        class="scan-root-state"
+        role="status"
+        tabindex="-1"
+        data-scan-roots-focus="loading"
+      >
         <span class="scan-root-icon"><LoaderCircle class="is-spinning" /></span>
         <div>
           <strong>Finding storage…</strong>
@@ -46,6 +86,7 @@
             variant="ghost"
             disabled={busy}
             data-preparing={preparingPath === root.path}
+            data-scan-roots-focus="root"
             aria-label={`Scan ${root.name}, ${formatBytes(root.availableBytes)} available`}
             onclick={() => onSelect(root.path)}
           >
@@ -80,10 +121,15 @@
       <div class="scan-root-state scan-root-unavailable" role="status">
         <span class="scan-root-icon"><HardDrive /></span>
         <div>
-          <strong>Storage isn’t available.</strong>
+          <strong>Storage couldn’t be shown.</strong>
           <span>You can still choose any folder.</span>
         </div>
-        <Button variant="ghost" size="xs" onclick={onRetry}>Try again</Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          data-scan-roots-focus="retry"
+          onclick={retry}
+        >Try again</Button>
       </div>
     {/if}
   </section>
