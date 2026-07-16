@@ -1135,12 +1135,16 @@
       <div class="header-actions">
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="sm"
+          class="scan-again-action"
           disabled={isBusy}
           aria-label="Scan again"
           title={`Scan again (${primaryShortcutLabel}R)`}
           onclick={() => startScan()}
-        ><RefreshCw /></Button>
+        >
+          <RefreshCw data-icon="inline-start" />
+          <span class="scan-again-label">Scan again</span>
+        </Button>
         <Button
           variant="outline"
           size="sm"

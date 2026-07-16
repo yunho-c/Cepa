@@ -259,6 +259,15 @@ body {
 
 .header-actions { display: flex; align-items: center; gap: 5px; }
 
+@media (max-width: 400px) {
+  .scan-again-action[data-slot="button"] {
+    width: 32px;
+    gap: 0;
+    padding-inline: 0;
+  }
+  .scan-again-label { display: none; }
+}
+
 .wordmark {
   padding: 4px;
   border: 0;

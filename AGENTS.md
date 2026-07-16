@@ -182,7 +182,10 @@ Rust matches every direct child before retaining the metric-ranked top 500, so
 items below the ordinary list cutoff remain discoverable without expanding IPC
 or rendering bounds. Search is scan-authorized and never accepts a path.
 Completed scans can be rerun against the same root without reopening the folder
-picker. Returning to the landing view first invokes the scan-authorized
+picker. At native desktop widths, keep this action visibly labeled `Scan again`
+in the persistent header; browser previews at 400 logical pixels or narrower may
+collapse it to the icon while retaining its accessible name and shortcut title.
+Returning to the landing view first invokes the scan-authorized
 `discard_scan` command. A matching scan ID releases the retained snapshot,
 cancels active estimate/search work, and invalidates any compression plan; a
 stale ID cannot affect a newer snapshot. If that command fails, keep the result
