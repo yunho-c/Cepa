@@ -118,6 +118,10 @@ export interface ScanProgressPresentation {
   announcement: string;
 }
 
+const COMPACT_COUNT_FORMATTER = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+});
+
 export function scanProgressPresentation(
   progress: Pick<ScanProgress, "phase" | "entriesScanned" | "allocatedBytes">,
   cancelling: boolean,
@@ -231,7 +235,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatCount(count: number): string {
-  return new Intl.NumberFormat(undefined, { notation: "compact" }).format(count);
+  return COMPACT_COUNT_FORMATTER.format(count);
 }
 
 export function formatUnavailableItems(count: number): string {

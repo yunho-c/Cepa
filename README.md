@@ -356,6 +356,7 @@ just observe-scan /path/to/live-volume auto
 just benchmark-search /path/to/wide-folder file- 9 auto allocated
 just benchmark-aggregation-cancellation 1000000 9 500001
 just benchmark-content-integrity /path/to/large-file 7 268435456
+just benchmark-count-format 9 10000
 ```
 
 The backend argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`, or
@@ -386,6 +387,10 @@ loop's acknowledgement and return latency from controller scheduling; it does
 not measure UI-to-worker dispatch or a cancellation arriving during a blocked
 read. Use a stable regular file larger than 1 MiB; its results describe that
 file and cache state, not general storage throughput.
+The count-format benchmark alternates the production cached compact-number
+formatter with per-call formatter construction and rejects output drift. It
+isolates presentation formatting cost; it is not a scan or full-render
+benchmark.
 
 Validate aggregate parity on a quiescent tree and measure asynchronous
 cancellation latency with:

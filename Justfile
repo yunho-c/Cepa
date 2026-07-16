@@ -109,6 +109,10 @@ benchmark-aggregation-cancellation nodes="1000000" iterations="9" after_nodes="5
 benchmark-content-integrity path iterations="5" cancel_after_bytes="":
     cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example content_integrity_benchmark -- "{{ path }}" "{{ iterations }}" {{ if cancel_after_bytes == "" { "" } else { quote(cancel_after_bytes) } }}
 
+# Compare cached and per-call compact count formatting with alternating order.
+benchmark-count-format iterations="9" operations="10000":
+    bun --bun scripts/benchmark-count-format.ts "{{ iterations }}" "{{ operations }}"
+
 # Build the frontend and native executable without packaging it.
 build:
     bun --bun run tauri build --no-bundle

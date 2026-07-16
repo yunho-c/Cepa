@@ -441,6 +441,11 @@ string conversions, repeated metadata syscalls, synchronization contention,
 serialization volume, and overly frequent frontend updates. Prefer bounded
 parallelism and bounded queues. Faster traversal must not cause unbounded memory
 growth, nondeterministic accounting, or sluggish cancellation.
+The compact count formatter is shared across streamed progress, summaries, and
+directory rows. Keep that locale formatter scan-independent and reusable;
+`just benchmark-count-format` alternates it against per-call construction and
+rejects output drift. This is formatter evidence, not scan or full-render
+throughput.
 Deterministic hard-link ownership reuses two scan-local node-ID buffers when it
 compares relative paths. Their capacity grows only to the deepest compared path,
 they are cleared between duplicate names, and they are not retained in the
@@ -525,6 +530,8 @@ Start with these files:
   and cause-neutral preservation copy for completed-result failures.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
   canonical radial-C identity.
+- `scripts/benchmark-count-format.ts`: alternating frontend compact-number
+  formatter microbenchmark with output-parity checks.
 - `public/cepa-icon.svg` and `scripts/generate-icons.ts`: canonical app icon and
   bounded desktop-only asset generation.
 - `src/app.css`: Tailwind setup and the shared shadcn-svelte theme tokens.

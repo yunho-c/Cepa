@@ -1208,6 +1208,30 @@ rendezvoused production-loop return path under that cache state. Raw trials are
 preserved in
 [`performance-results/2026-07-16-content-integrity-rendezvous.csv`](performance-results/2026-07-16-content-integrity-rendezvous.csv).
 
+### 2026-07-16 frontend compact-count formatting
+
+An exact candidate based on `612c3da` changed the shared `formatCount` helper
+to retain one locale-aware compact `Intl.NumberFormat` instead of constructing a
+formatter for every label. The new `just benchmark-count-format` harness warms
+both implementations, alternates which runs first over nine pairs, performs
+10,000 formats per run, and rejects any checksum difference.
+
+On the Apple M4 Pro host with Bun 1.3.14, per-call construction had a 158,895 us
+median and the shared formatter a 2,495 us median, a 98.4% reduction in this
+isolated workload. On the 32-thread Linux host with Bun 1.2.21, the respective
+medians were 146,083 and 1,903 us, a 98.7% reduction. Every run produced the
+same checksum. Raw trials are preserved in
+[`performance-results/2026-07-16-frontend-count-format.csv`](performance-results/2026-07-16-frontend-count-format.csv).
+
+This evidence supports reusing the formatter used by scan progress, completed
+summaries, and directory descriptions. It does not establish an equivalent
+whole-render improvement: the browser's bounded 500-row/511-segment stress view
+remained dominated by DOM and SVG work, with same-session seven-run medians of
+119.7 ms before and 116.6 ms after. Those browser observations were sequential,
+not alternating pairs, so they are treated only as a no-regression check rather
+than a UI-speed claim. Neither measurement covers native webview bridge cost,
+filesystem scanning, or cold application startup.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
