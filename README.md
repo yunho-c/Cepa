@@ -351,16 +351,23 @@ release mode with:
 ```sh
 just benchmark-fixture /tmp/cepa-fixture 1000 100 0
 just benchmark-scan /tmp/cepa-fixture 9 jwalk
+just benchmark-compare /tmp/cepa-fixture jwalk getattrlistbulk 9
 just observe-scan /path/to/live-volume auto
 just benchmark-search /path/to/wide-folder file- 9 auto allocated
 just benchmark-aggregation-cancellation 1000000 9 500001
 just benchmark-content-integrity /path/to/large-file 7 268435456
 ```
 
-The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
-or `auto`. Platform-specific backends reject explicit use on the wrong OS. MFT
-is deliberately limited to an NTFS volume root because whole-volume enumeration
-has a fixed cost that is unsuitable for arbitrary subfolders.
+The backend argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`, or
+`auto`. Platform-specific backends reject explicit use on the wrong OS. MFT is
+deliberately limited to an NTFS volume root because whole-volume enumeration has
+a fixed cost that is unsuitable for arbitrary subfolders.
+
+Use `benchmark-compare` for an optimization decision between two backends. It
+warms each once, alternates which backend runs first in every measured pair,
+rejects any accounting drift on every run, and reports paired percentage changes
+alongside absolute medians. A changing live tree still belongs in
+`observe-scan`; paired execution cannot make mutable workload data stable.
 
 The repeat benchmark rejects any workload that changes after warmup. Use the
 single-run observation command for a live system volume that cannot be made

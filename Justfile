@@ -81,6 +81,10 @@ benchmark-fixture path directories="100" files_per_directory="100" logical_bytes
 benchmark-scan path iterations="5" backend="jwalk":
     cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_benchmark -- "{{ path }}" "{{ iterations }}" "{{ backend }}"
 
+# Alternate two backends over stable pairs and reject accounting drift.
+benchmark-compare path left="jwalk" right="auto" pairs="9":
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_comparison -- "{{ path }}" "{{ left }}" "{{ right }}" "{{ pairs }}"
+
 # Record one scan of a live tree without assuming a stable warmup workload.
 observe-scan path backend="auto":
     cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example scan_observation -- "{{ path }}" "{{ backend }}"

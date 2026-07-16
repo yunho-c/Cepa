@@ -428,6 +428,13 @@ Performance claims require measurements. Establish a representative baseline,
 record the environment and dataset shape, and compare like-for-like behavior.
 Separate cold startup, traversal throughput, aggregation cost, bridge/update
 cost, and UI rendering responsiveness when diagnosing performance.
+Use `just benchmark-compare` for a backend optimization decision instead of
+comparing separate sequential benchmark invocations. It alternates first-run
+order and rejects accounting drift on every run, but it still requires a
+quiescent immutable workload and an otherwise idle machine. Treat a broad paired
+range or unrelated system load as inconclusive rather than selecting by median
+alone. Use `observe-scan` for changing live volumes; do not weaken the paired
+harness to accept mutable workloads.
 
 In hot paths, pay particular attention to unnecessary allocations, path and
 string conversions, repeated metadata syscalls, synchronization contention,
@@ -545,6 +552,8 @@ Start with these files:
 - `src-tauri/src/scanner/macos.rs`: macOS `getattrlistbulk` traversal and record parsing.
 - `src-tauri/src/scanner/linux.rs`: Linux bounded worker pool, `getdents64`
   batches, descriptor-relative `statx`, mount boundaries, and identity checks.
+- `src-tauri/examples/scan_comparison.rs`: alternating two-backend performance
+  comparison with warmup and per-run accounting gates.
 - `docs/performance.md`: benchmark contract, baseline evidence, and limitations.
 - `docs/accounting.md`: shared filesystem accounting and traversal semantics.
 - `docs/compression.md`: proposed transparent-compression contract and rollout gates.

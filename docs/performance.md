@@ -35,6 +35,33 @@ runs. Progress is written to stderr and schema-versioned JSON to stdout. It
 verifies that counts, byte totals, skipped work, hard-link deduplication, and
 reported accounting semantics stay identical across runs.
 
+For a direct optimization comparison, prefer the paired harness over two
+separate benchmark commands:
+
+```sh
+just benchmark-compare /tmp/cepa-fixture jwalk getattrlistbulk 9 \
+  > /tmp/cepa-comparison.json
+# Linux:
+just benchmark-compare /tmp/cepa-fixture jwalk statx 9
+```
+
+It warms both requested backends once, verifies warmup parity, then alternates
+which backend runs first in each measured pair. Every measured result must still
+match the frozen warmup accounting. Schema-versioned JSON includes both absolute
+backend summaries and `(right - left) / left` percentage changes for every pair;
+a negative value means the right backend was faster. The report also keeps
+snapshot payload, initial response, aggregation, and release measurements so a
+traversal improvement cannot silently hide a retained-state regression.
+
+Alternating order reduces systematic first/second cache bias; it does not make
+an active machine quiet, cool the CPU, stabilize a changing tree, or turn
+warm-cache data into cold-storage evidence. Inspect the paired range and system
+load as well as the median. The command rejects two requests that resolve to the
+same implementation, including an `auto` backend that resolves to the explicitly
+named backend on that host. If `auto` resolves differently after warmup, the
+affected measured pair also fails instead of mixing implementations in one
+summary.
+
 Live system volumes may change during the warmup and must not bypass that
 stability check. Record an explicitly single-run observation instead:
 
