@@ -21,6 +21,7 @@
   } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { brandActsAsHome, type AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
@@ -75,9 +76,8 @@
   } from "$lib/shortcuts";
   import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
 
-  type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
   let path = $state("");
-  let status = $state<Status>("idle");
+  let status = $state<AppStatus>("idle");
   let scanId = $state<number | null>(null);
   let progress = $state<ScanProgress | null>(null);
   let result = $state<ScanResult | null>(null);
@@ -1242,16 +1242,23 @@
     inert={dropOverlayVisible}
     aria-hidden={dropOverlayVisible ? "true" : undefined}
   >
-    <button
-      class="wordmark"
-      type="button"
-      disabled={isBusy}
-      onclick={reset}
-      aria-label="Cepa home"
-    >
-      <CepaMark class="wordmark-mark" />
-      <span>Cepa</span>
-    </button>
+    {#if brandActsAsHome(status)}
+      <button
+        class="wordmark"
+        type="button"
+        disabled={isBusy}
+        onclick={reset}
+        aria-label="Cepa home"
+      >
+        <CepaMark class="wordmark-mark" />
+        <span>Cepa</span>
+      </button>
+    {:else}
+      <div class="wordmark wordmark-static">
+        <CepaMark class="wordmark-mark" />
+        <span>Cepa</span>
+      </div>
+    {/if}
 
     {#if status === "complete"}
       <div class="header-actions">

@@ -90,6 +90,11 @@ such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
+Keep the header brand static on landing, scanning, cancellation, and scan-error
+states. It becomes the `Cepa home` action only while a completed snapshot exists,
+because returning home must first discard that retained scan. Do not add a no-op
+brand control to the ordinary keyboard order or dim app identity as a disabled
+button during work.
 If a cancellation command fails, the UI keeps the still-live scan visible and
 offers Stop again; do not turn that command failure into a terminal scan error.
 Folder-picker failures are likewise contextual: preserve a completed result and
