@@ -1942,6 +1942,39 @@ This is deterministic DOM mutation and programmatic WebView evidence; it is not
 a certification of VoiceOver, Narrator, Orca, or any other particular screen
 reader's speech queue.
 
+### 2026-07-16 amortized traversal deadline checks
+
+The 100 ms transport cap initially read `Instant::now()` after every retained
+entry on `jwalk`, macOS, and Linux, even though nearly every clock sample on a
+fast tree could only answer “not yet.” Cancellation did not depend on this clock
+and continued to poll for every ingested entry.
+
+Traversal now samples the deadline after its first retained entry and then at
+most once per 32 entries. The window is adaptive rather than a blind batch: each
+sample estimates how many entries fit in the remaining 100 ms from the observed
+per-entry rate, clamped to 1–32. A slow 50 ms first entry therefore schedules the
+next check after one item and reaches the first update at 100 ms; a fast
+101,011-entry synthetic trace performs at most 3,159 clock reads, over 96.8%
+fewer than one per entry, while still emitting only after the deadline. The
+terminal finishing event and per-entry cancellation are unchanged.
+
+Separate Rust 1.97.0 release binaries at baseline `8c8472b` and the exact
+production candidate scanned a fresh 101,011-entry ext4 fixture through `statx`
+over 31 alternating pairs after binary and fixture warmup. Both emitted exactly
+one finishing event in every sub-100 ms run and retained identical accounting.
+Median wall time was 23.52 ms baseline and 23.39 ms candidate; the paired median
+change was -1.47%, with the candidate winning 17 of 31 pairs and individual
+changes ranging from -25.95% to +29.09%. Median traversal was 21,960 us baseline
+and 22,409 us candidate, while the paired traversal change was +0.08%. Treat
+end-to-end traversal performance as flat: the proven improvement is removal of
+redundant clock reads, not a filesystem speedup.
+
+Raw alternating evidence is preserved in
+[`performance-results/2026-07-16-progress-clock-linux.csv`](performance-results/2026-07-16-progress-clock-linux.csv).
+Exact source hashes, parity, cancellation, production-WebView, cross-target, and
+build evidence are recorded in
+[`validation-results/2026-07-16-progress-clock-amortization.txt`](validation-results/2026-07-16-progress-clock-amortization.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

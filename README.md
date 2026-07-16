@@ -48,7 +48,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   long-lived command response, while the calm active-scan view keeps space,
   current location, elapsed time, cancellation, and unavailable items visible
   without exposing backend vocabulary; traversal updates are capped at 10 Hz
-  independently of per-entry cancellation polling
+  independently of per-entry cancellation polling, and deadline checks adapt
+  between one and 32 ingested items instead of reading the clock for every node
 - An explicit, cancellable finishing phase while retained directory totals are
   prepared, with time-bounded elapsed updates instead of leaving a completed
   traversal looking stalled

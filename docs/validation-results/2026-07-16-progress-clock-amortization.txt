@@ -1,0 +1,100 @@
+Cepa traversal deadline-clock amortization validation
+Date: 2026-07-16
+Candidate baseline: 8c8472b plus the adaptive clock working-tree change
+
+Invariant under test
+- traversal transport still emits no more than one update per 100 ms
+- cancellation remains checked for every ingested entry
+- the first retained entry samples the clock so one slow operation is visible
+- steady fast ingestion samples at most once per 32 retained entries
+- the next sample window adapts toward one entry when observed work is slow
+- jwalk, getattrlistbulk, and statx share the same scheduling policy
+- terminal finishing progress remains explicit and accounting is unchanged
+
+Exact candidate hashes
+- src-tauri/src/scanner.rs:
+  71654e6cc7e984277041b652a2a75c0686c388c9bb990a5187819974d59c3f4a
+- src-tauri/src/scanner/linux.rs:
+  0718b713cfc5e260e922e0b4abc697fb7112d191aa85bea73b60e116a055ead5
+- src-tauri/src/scanner/macos.rs:
+  9fa65a5a6e33a747d52a4d602d5d349af6a831652379d0b05457e9398f42fdfb
+- raw Linux paired CSV:
+  b0fab975d98c1ac8c70c40b03debb25ae5a03ff499c6b3099ea85f3a07d9bb90
+
+Deterministic scheduler regressions: passed
+- a sample at 99 ms was not due and a sample at 100 ms was due
+- a fast first entry selected the 32-entry maximum check window
+- a 50 ms first entry selected a one-entry window, reached the first update at
+  100 ms, then selected two entries for the next stable 50 ms/item interval
+- a synthetic 101,011-entry, 1 us/item trace performed at most 3,159 deadline
+  reads, over 96.8% fewer than one read per entry, and emitted only after 100 ms
+
+Native Linux paired measurement: passed with a flat-throughput conclusion
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- fixture: fresh ext4 tree with 100,001 files and 1,010 directories
+- separate release binaries: baseline 8c8472b and the production candidate
+- 31 alternating pairs after binary and fixture warmup
+- every run resolved statx and emitted exactly one finishing event
+- median wall: 23.523989 ms baseline, 23.386671 ms candidate
+- paired wall median: -1.472017%; candidate won 17 of 31 pairs
+- paired wall range: -25.948773% to +29.093502%
+- median traversal: 21,960 us baseline, 22,409 us candidate
+- paired traversal median: +0.078071%
+- raw evidence: performance-results/2026-07-16-progress-clock-linux.csv
+- conclusion: end-to-end traversal is flat; do not claim a filesystem speedup
+
+Native Linux exact-source validation: passed
+- Cargo: 1.97.0 (c980f4866 2026-06-30)
+- exact final source hashes matched the local candidate
+- dependency-light formatting, all-target check, strict Clippy, and tests passed
+- native-core tests: 80 passed, 1 real-Btrfs fixture ignored
+- configuration and every auxiliary target suite passed
+- jwalk/statx parity on the 101,011-entry fixture matched all accounting fields
+- fresh cancellation fixture: 1,000,001 files, 10,100 directories
+- nine statx cancellations after the first 100 ms progress boundary:
+  - median acknowledgement: 11,436 us
+  - range: 6,525-14,887 us
+  - requests observed 476,426-619,746 retained entries
+- the first progress boundary remained near 100 ms while cancellation polling
+  stayed independent of the adaptive deadline window
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- Bun: 1.3.14
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 72 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 105 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: production frontend and optimized desktop executable passed
+- default-feature Windows GNU all-target check and strict Clippy passed
+- jwalk/getattrlistbulk parity on the 101,011-entry APFS fixture matched every
+  accounting field
+- nine getattrlistbulk cancellations on a 404,041-entry fixture acknowledged in
+  502-10,246 us, with a 5,080 us median under concurrent local compiler load
+- production macOS WebView/IPC smoke at 620 by 480 passed:
+  - real Stop completed in 50 ms
+  - terminal failure, completion, inspector, metric, keyboard navigation,
+    search, discard, stale-ID rejection, and same-process rescan all passed
+  - native backend, no page errors, and no horizontal overflow
+
+Native Windows validation: unavailable
+- the Windows host timed out on an eight-second SSH probe
+- local default-feature Windows GNU all-target check and strict Clippy passed
+- the MFT implementation already owns a separate time-capped progress loop and
+  does not use this traversal scheduler
+- this is cross-compilation, not native Windows runtime or WebView2 evidence
+
+Cleanup
+- isolated Linux baseline/candidate source trees, targets, and fixtures removed
+- local generated fixtures and copied benchmark binaries removed
+- standing remote checkouts were not modified
+
+Evidence boundary
+This proves the production traversal loops perform far fewer deadline clock
+reads on fast ingestion while adapting the next check for slow observed work.
+It also proves accounting parity, bounded native cancellation observations, and
+a production macOS WebView lifecycle. The integrated timing distributions are
+noisy and traversal is flat; this is not evidence of an end-to-end scan speedup,
+cold-cache performance, blocked-syscall latency, or native Windows runtime.

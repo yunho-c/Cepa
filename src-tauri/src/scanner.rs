@@ -37,6 +37,7 @@ mod mft;
 mod windows;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+const PROGRESS_CLOCK_CHECK_INTERVAL_ENTRIES: u8 = 32;
 const CANCELLATION_CHECK_INTERVAL_ENTRIES: u64 = 2_048;
 pub(crate) const AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES: usize =
     CANCELLATION_CHECK_INTERVAL_ENTRIES as usize;
@@ -50,8 +51,73 @@ const RANKING_BUFFER_MULTIPLIER: usize = 16;
 const MAX_RANKING_CLONE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_RANKING_CLONE_IDS: usize = MAX_RANKING_CLONE_BYTES / std::mem::size_of::<NodeId>();
 
-fn progress_update_due(last_progress_at: Instant, now: Instant) -> bool {
-    now.saturating_duration_since(last_progress_at) >= PROGRESS_INTERVAL
+struct TraversalProgressClock {
+    last_update_at: Instant,
+    last_check_at: Instant,
+    entries_in_check_window: u8,
+    entries_until_check: u8,
+}
+
+impl TraversalProgressClock {
+    fn new(now: Instant) -> Self {
+        Self {
+            last_update_at: now,
+            last_check_at: now,
+            // Check after the first entry so a single slow metadata operation
+            // can still publish promptly, then amortize clock reads in steady state.
+            entries_in_check_window: 1,
+            entries_until_check: 1,
+        }
+    }
+
+    fn should_check_clock(&mut self) -> bool {
+        debug_assert_ne!(self.entries_until_check, 0);
+        self.entries_until_check -= 1;
+        if self.entries_until_check != 0 {
+            return false;
+        }
+        true
+    }
+
+    fn update_due_at(&mut self, now: Instant) -> bool {
+        let elapsed_since_update = now.saturating_duration_since(self.last_update_at);
+        let elapsed_since_check = now.saturating_duration_since(self.last_check_at);
+        let update_due = elapsed_since_update >= PROGRESS_INTERVAL;
+        let remaining = if update_due {
+            PROGRESS_INTERVAL
+        } else {
+            PROGRESS_INTERVAL.saturating_sub(elapsed_since_update)
+        };
+        let next_window = progress_clock_check_window(
+            remaining,
+            elapsed_since_check,
+            self.entries_in_check_window,
+        );
+        self.last_check_at = now;
+        self.entries_in_check_window = next_window;
+        self.entries_until_check = next_window;
+        update_due
+    }
+
+    fn mark_updated(&mut self, now: Instant) {
+        self.last_update_at = now;
+    }
+}
+
+fn progress_clock_check_window(
+    remaining: Duration,
+    sampled_duration: Duration,
+    sampled_entries: u8,
+) -> u8 {
+    let sampled_nanos = sampled_duration.as_nanos();
+    if sampled_nanos == 0 {
+        return PROGRESS_CLOCK_CHECK_INTERVAL_ENTRIES;
+    }
+    let numerator = remaining
+        .as_nanos()
+        .saturating_mul(u128::from(sampled_entries));
+    let estimated_entries = numerator.saturating_add(sampled_nanos - 1) / sampled_nanos;
+    estimated_entries.clamp(1, u128::from(PROGRESS_CLOCK_CHECK_INTERVAL_ENTRIES)) as u8
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -732,7 +798,7 @@ where
 
     let mut counters = ScanCounters::default();
     let mut partial_ranking = PartialRanking::default();
-    let mut last_progress_at = Instant::now();
+    let mut progress_clock = TraversalProgressClock::new(Instant::now());
 
     let worker_cancel = cancel.clone();
     let threads = std::thread::available_parallelism()
@@ -856,10 +922,11 @@ where
                     entry.path().display()
                 )
             })?;
-        let progress_now = Instant::now();
-        let should_report_progress = progress_update_due(last_progress_at, progress_now);
-        let current_path =
-            should_report_progress.then(|| entry.path().to_string_lossy().into_owned());
+        let progress_now = progress_clock
+            .should_check_clock()
+            .then(Instant::now)
+            .filter(|now| progress_clock.update_due_at(*now));
+        let current_path = progress_now.map(|_| entry.path().to_string_lossy().into_owned());
 
         let (node_id, replaced_owner) =
             counters.push_node(&mut nodes, parent, entry.file_name, kind, measured);
@@ -869,7 +936,7 @@ where
             ancestor_stack.push(node_id);
         }
 
-        if let Some(current_path) = current_path {
+        if let (Some(progress_now), Some(current_path)) = (progress_now, current_path) {
             on_progress(ScanProgress {
                 phase: ScanPhase::Scanning,
                 entries_scanned: counters.files_scanned + counters.directories_scanned,
@@ -882,7 +949,7 @@ where
                 elapsed_ms: elapsed_ms(started_at),
                 largest_items: partial_ranking.items(&nodes),
             });
-            last_progress_at = progress_now;
+            progress_clock.mark_updated(progress_now);
         }
     }
 
@@ -1812,14 +1879,61 @@ mod tests {
     #[test]
     fn traversal_progress_is_time_bounded() {
         let last_progress_at = Instant::now();
-        assert!(!progress_update_due(
-            last_progress_at,
-            last_progress_at + PROGRESS_INTERVAL - Duration::from_millis(1),
-        ));
-        assert!(progress_update_due(
-            last_progress_at,
-            last_progress_at + PROGRESS_INTERVAL,
-        ));
+        let mut clock = TraversalProgressClock::new(last_progress_at);
+        assert!(
+            !clock.update_due_at(last_progress_at + PROGRESS_INTERVAL - Duration::from_millis(1),)
+        );
+        assert!(clock.update_due_at(last_progress_at + PROGRESS_INTERVAL));
+    }
+
+    #[test]
+    fn traversal_progress_amortizes_clock_checks() {
+        let mut clock = TraversalProgressClock::new(Instant::now());
+        assert!(clock.should_check_clock());
+        assert!(!clock.update_due_at(clock.last_update_at + Duration::from_millis(1)));
+        for _ in 1..PROGRESS_CLOCK_CHECK_INTERVAL_ENTRIES {
+            assert!(!clock.should_check_clock());
+        }
+        assert!(clock.should_check_clock());
+    }
+
+    #[test]
+    fn traversal_progress_adapts_to_slow_entries() {
+        let started_at = Instant::now();
+        let mut clock = TraversalProgressClock::new(started_at);
+        assert!(clock.should_check_clock());
+        assert!(!clock.update_due_at(started_at + Duration::from_millis(50)));
+        assert_eq!(clock.entries_until_check, 1);
+        assert!(clock.should_check_clock());
+        let update_at = started_at + PROGRESS_INTERVAL;
+        assert!(clock.update_due_at(update_at));
+        clock.mark_updated(update_at);
+        assert_eq!(clock.entries_until_check, 2);
+    }
+
+    #[test]
+    fn traversal_progress_keeps_fast_clock_reads_and_updates_bounded() {
+        let started_at = Instant::now();
+        let mut clock = TraversalProgressClock::new(started_at);
+        let entries = 101_011_u32;
+        let mut clock_checks = 0_u32;
+        let mut updates = Vec::new();
+        for entry in 1..=entries {
+            if !clock.should_check_clock() {
+                continue;
+            }
+            clock_checks += 1;
+            let now = started_at + Duration::from_micros(u64::from(entry));
+            if clock.update_due_at(now) {
+                clock.mark_updated(now);
+                updates.push(now);
+            }
+        }
+
+        assert!(clock_checks <= entries.div_ceil(32) + 2);
+        assert!(clock_checks * 30 < entries);
+        assert_eq!(updates.len(), 1);
+        assert!(updates[0].duration_since(started_at) >= PROGRESS_INTERVAL);
     }
 
     #[test]

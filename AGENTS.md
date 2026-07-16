@@ -85,6 +85,13 @@ of bridge payloads per second, each rebuilding partial ranking and paths. Stop
 responsiveness is independent because traversal checks cancellation per ingested
 entry; the retained 2,048-entry constant is for bounded polling in loops that do
 not already check every entry, not for UI cadence.
+The traversal deadline clock is sampled after the first retained entry and then
+adaptively at most once per 32 retained entries. Fast ingestion therefore avoids
+a monotonic-clock read for every node, while observed slow entries reduce the
+next window toward one so visual progress does not wait for a fixed 32-item
+batch. Preserve the 32-entry cap, first-entry sample, adaptive slow-entry test,
+and independent per-entry cancellation unless replacement measurements cover
+both throughput and progress latency.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or

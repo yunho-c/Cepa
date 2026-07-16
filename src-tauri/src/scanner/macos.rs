@@ -1,7 +1,7 @@
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PartialRanking, ScanCounters,
-    ScanOutput, ScanPhase, ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
-    progress_update_due,
+    ScanOutput, ScanPhase, ScanProgress, ScanSemantics, TraversalProgressClock, finish_scan,
+    observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
@@ -95,7 +95,7 @@ where
     let mut counters = ScanCounters::default();
     let mut partial_ranking = PartialRanking::default();
     let mut pending_directories = Vec::new();
-    let mut last_progress_at = Instant::now();
+    let mut progress_clock = TraversalProgressClock::new(Instant::now());
     let mut buffer = vec![0_u64; BUFFER_SIZE / size_of::<u64>()];
     let mut attribute_list = requested_attributes();
     let root_directory = open_directory(&root)
@@ -113,7 +113,7 @@ where
                     &mut counters,
                     &mut partial_ranking,
                     &mut pending_directories,
-                    &mut last_progress_at,
+                    &mut progress_clock,
                     started_at,
                     &cancel,
                     on_progress,
@@ -138,7 +138,7 @@ where
         &mut nodes,
         &mut counters,
         &mut partial_ranking,
-        &mut last_progress_at,
+        &mut progress_clock,
         started_at,
         &cancel,
         on_progress,
@@ -171,7 +171,7 @@ fn traverse_directories<F>(
     nodes: &mut Vec<InternalNode>,
     counters: &mut ScanCounters,
     partial_ranking: &mut PartialRanking,
-    last_progress_at: &mut Instant,
+    progress_clock: &mut TraversalProgressClock,
     started_at: Instant,
     cancel: &AtomicBool,
     on_progress: &mut F,
@@ -260,7 +260,7 @@ where
                         counters,
                         partial_ranking,
                         pending_directories,
-                        last_progress_at,
+                        progress_clock,
                         started_at,
                         cancel,
                         on_progress,
@@ -380,7 +380,7 @@ fn ingest_entries<F>(
     counters: &mut ScanCounters,
     partial_ranking: &mut PartialRanking,
     pending_directories: &mut Vec<DirectoryTask>,
-    last_progress_at: &mut Instant,
+    progress_clock: &mut TraversalProgressClock,
     started_at: Instant,
     cancel: &AtomicBool,
     on_progress: &mut F,
@@ -422,23 +422,25 @@ where
             }
         }
 
-        let progress_now = Instant::now();
-        if progress_update_due(*last_progress_at, progress_now) {
-            let current_path =
-                child_path.unwrap_or_else(|| directory_path.join(&nodes[node_id].name));
-            on_progress(ScanProgress {
-                phase: ScanPhase::Scanning,
-                entries_scanned: counters.files_scanned + counters.directories_scanned,
-                files_scanned: counters.files_scanned,
-                directories_scanned: counters.directories_scanned,
-                logical_bytes: counters.observed_logical_bytes,
-                allocated_bytes: counters.observed_allocated_bytes,
-                skipped_entries: counters.skipped_entries,
-                current_path: current_path.to_string_lossy().into_owned(),
-                elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
-                largest_items: partial_ranking.items(nodes),
-            });
-            *last_progress_at = progress_now;
+        if progress_clock.should_check_clock() {
+            let progress_now = Instant::now();
+            if progress_clock.update_due_at(progress_now) {
+                let current_path =
+                    child_path.unwrap_or_else(|| directory_path.join(&nodes[node_id].name));
+                on_progress(ScanProgress {
+                    phase: ScanPhase::Scanning,
+                    entries_scanned: counters.files_scanned + counters.directories_scanned,
+                    files_scanned: counters.files_scanned,
+                    directories_scanned: counters.directories_scanned,
+                    logical_bytes: counters.observed_logical_bytes,
+                    allocated_bytes: counters.observed_allocated_bytes,
+                    skipped_entries: counters.skipped_entries,
+                    current_path: current_path.to_string_lossy().into_owned(),
+                    elapsed_ms: started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+                    largest_items: partial_ranking.items(nodes),
+                });
+                progress_clock.mark_updated(progress_now);
+            }
         }
     }
     Ok(())
