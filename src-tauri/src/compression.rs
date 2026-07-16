@@ -11,7 +11,8 @@ mod plan;
 
 pub(crate) use estimator::SavingsEstimate;
 pub(crate) use plan::{
-    CompressionOperation, CompressionPlanPreview, PlanValidation, PreparedCompressionPlan,
+    CONTENT_HASH_CHUNK_BYTES, CompressionOperation, CompressionPlanPreview,
+    ContentIntegrityObservation, PlanValidation, PreparedCompressionPlan,
 };
 
 pub(crate) fn prepare_plan(
@@ -30,6 +31,14 @@ pub(crate) fn revalidate_plan(
     cancel: &AtomicBool,
 ) -> PlanValidation {
     plan::revalidate(plan, cancel)
+}
+
+pub(crate) fn observe_content_integrity(
+    path: &Path,
+    cancel: &AtomicBool,
+    on_chunk: impl FnMut(u64),
+) -> Result<ContentIntegrityObservation, String> {
+    plan::observe_content_integrity(path, cancel, on_chunk)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]

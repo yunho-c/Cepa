@@ -101,6 +101,10 @@ benchmark-cancellation path backend="jwalk" iterations="9" after_entries="2048":
 benchmark-aggregation-cancellation nodes="1000000" iterations="9" after_nodes="500001":
     cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example aggregation_cancellation -- "{{ nodes }}" "{{ iterations }}" "{{ after_nodes }}"
 
+# Measure complete-file plan hashing and cancellation at its bounded chunk boundary.
+benchmark-content-integrity path iterations="5" cancel_after_bytes="":
+    cargo run --release --manifest-path src-tauri/Cargo.toml --no-default-features --example content_integrity_benchmark -- "{{ path }}" "{{ iterations }}" {{ if cancel_after_bytes == "" { "" } else { quote(cancel_after_bytes) } }}
+
 # Build the frontend and native executable without packaging it.
 build:
     bun --bun run tauri build --no-bundle

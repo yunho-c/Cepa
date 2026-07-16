@@ -11,7 +11,7 @@ use crate::scanner::{CompressionTarget, EntryKind};
 use super::{CompressionCapabilityStatus, CompressionStateKind, inspect_open_file, probe};
 
 const NTFS_MAX_UNCOMPRESSED_BYTES: u64 = 30 * 1024 * 1024 * 1024;
-const CONTENT_HASH_CHUNK_BYTES: usize = 1024 * 1024;
+pub(crate) const CONTENT_HASH_CHUNK_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +117,14 @@ enum IntegrityError {
     Cancelled,
     Changed,
     Io(io::Error),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ContentIntegrityObservation {
+    pub logical_bytes: u64,
+    pub bytes_read: u64,
+    pub elapsed_us: u64,
+    pub cancelled: bool,
 }
 
 pub(super) fn prepare(
@@ -430,6 +438,48 @@ fn hash_open_file_observed(
         on_chunk(offset);
     }
     Ok(ContentDigest(*hasher.finalize().as_bytes()))
+}
+
+pub(crate) fn observe_content_integrity(
+    path: &Path,
+    cancel: &AtomicBool,
+    mut on_chunk: impl FnMut(u64),
+) -> Result<ContentIntegrityObservation, String> {
+    use std::time::Instant;
+
+    let opened = file_revision::open_content_snapshot_no_follow(path)
+        .map_err(|error| format!("the file could not be opened safely: {error}"))?;
+    let revision = FileRevision::from(opened.snapshot);
+    let mut bytes_read = 0_u64;
+    let started_at = Instant::now();
+    let result = hash_open_file_observed(&opened.file, revision.logical_bytes, cancel, |offset| {
+        bytes_read = offset;
+        on_chunk(offset);
+    });
+    let elapsed_us = crate::saturating_duration_us(started_at.elapsed());
+    match result {
+        Ok(digest) => {
+            std::hint::black_box(digest);
+            let after = snapshot_anchor_revision(&opened.file)
+                .map_err(|error| format!("the file metadata could not be rechecked: {error}"))?;
+            if after != revision {
+                return Err("the file changed while its content was being measured".into());
+            }
+            Ok(ContentIntegrityObservation {
+                logical_bytes: revision.logical_bytes,
+                bytes_read,
+                elapsed_us,
+                cancelled: false,
+            })
+        }
+        Err(IntegrityError::Cancelled) => Ok(ContentIntegrityObservation {
+            logical_bytes: revision.logical_bytes,
+            bytes_read,
+            elapsed_us,
+            cancelled: true,
+        }),
+        Err(error) => Err(prepare_integrity_error(error)),
+    }
 }
 
 #[cfg(unix)]

@@ -1129,6 +1129,37 @@ Linux and Windows. The exact Windows source also completed a default-feature
 release build. Raw paired observations are preserved in
 [`performance-results/2026-07-14-child-index-compaction.csv`](performance-results/2026-07-14-child-index-compaction.csv).
 
+### 2026-07-16 plan content-integrity throughput and cancellation
+
+An exact candidate based on commit `7ab6635` added
+`content_integrity_benchmark`, which runs the production BLAKE3
+positioned-read loop used by dormant compression plans. It reports complete-pass
+time separately from externally requested cancellation latency and bytes read
+after the request. The `just benchmark-content-integrity` recipe accepts a
+regular file, iteration count, and optional cancellation byte threshold.
+
+Release measurements used a 512 MiB zero-filled fixture, one complete warmup,
+and seven measured complete/cancellation pairs. Cancellation was requested after
+256 MiB. The working buffer and cancellation polling interval were both 1 MiB.
+The macOS fixture was created with `mkfile`; the Linux fixture with `truncate`,
+so the Linux file was sparse. Both were warm page-cache and CPU/hash-path
+measurements, not cold-media throughput or evidence for arbitrary storage.
+
+On an Apple M4 Pro MacBook Pro with 48 GB RAM, macOS 15.6, and Rust
+1.94.0-nightly, the complete pass had a 238,887 us median and 2,143 MiB/s median.
+Cancellation returned in 467–581 us with a 496 us median. On the 32-thread
+Core i9-13900K Linux host, kernel 6.8.0-124, and Rust 1.97.0, the complete pass
+had a 164,032 us median and 3,121 MiB/s median. Cancellation returned in
+337–353 us with a 344 us median. Every cancellation run read exactly one
+additional 1 MiB chunk after the request; none exceeded the production bound.
+
+These results support the fixed buffer and polling interval for explicit
+single-file planning on the two measured systems. They do not bound a blocked
+or slow filesystem syscall, cold disk latency, network storage, multi-gigabyte
+interactive progress requirements, peak RSS beyond the known 1 MiB userspace
+buffer, or native Windows behavior. Raw trials are preserved in
+[`performance-results/2026-07-16-content-integrity.csv`](performance-results/2026-07-16-content-integrity.csv).
+
 ## Interpretation and next measurements
 
 Most results are warm-cache, synthetic metadata measurements on one machine;

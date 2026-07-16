@@ -348,6 +348,7 @@ just benchmark-scan /tmp/cepa-fixture 9 jwalk
 just observe-scan /path/to/live-volume auto
 just benchmark-search /path/to/wide-folder file- 9 auto allocated
 just benchmark-aggregation-cancellation 1000000 9 500001
+just benchmark-content-integrity /path/to/large-file 7 268435456
 ```
 
 The optional third argument selects `jwalk`, `getattrlistbulk`, `mft`, `statx`,
@@ -365,6 +366,10 @@ repeat latency and bounded result counts without rescanning between runs.
 The aggregation-cancellation benchmark uses a synthetic retained-node arena and
 reports foreground cancellation separately from background reclamation; it does
 not access the filesystem or measure traversal.
+The content-integrity benchmark runs the production complete-file BLAKE3 loop
+and separately requests cancellation after a chosen byte boundary. Use a stable
+regular file larger than 1 MiB; its results describe that file and cache state,
+not general storage throughput.
 
 Validate aggregate parity on a quiescent tree and measure asynchronous
 cancellation latency with:

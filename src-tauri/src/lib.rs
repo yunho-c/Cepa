@@ -38,6 +38,7 @@ pub use scanner::{ScanBackend, ScanResult};
 
 pub const AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES: usize =
     scanner::AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES;
+pub const CONTENT_INTEGRITY_CHUNK_BYTES: usize = compression::CONTENT_HASH_CHUNK_BYTES;
 
 /// A completed benchmark scan. Retaining the snapshot keeps benchmark timing
 /// aligned with the application, which stores it for interactive drill-down.
@@ -163,6 +164,83 @@ pub struct AggregationCancellationMeasurement {
     pub foreground_elapsed_us: u64,
     pub cancellation_latency_us: u64,
     pub background_release_us: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentIntegrityMeasurement {
+    pub logical_bytes: u64,
+    pub bytes_read: u64,
+    pub elapsed_us: u64,
+    pub cancelled: bool,
+    pub cancel_requested_at_bytes: Option<u64>,
+    pub cancellation_latency_us: Option<u64>,
+}
+
+pub fn benchmark_content_integrity(
+    path: &Path,
+    cancel_after_bytes: Option<u64>,
+) -> Result<ContentIntegrityMeasurement, String> {
+    if let Some(cancel_after_bytes) = cancel_after_bytes {
+        let logical_bytes = path
+            .metadata()
+            .map_err(|error| format!("could not read benchmark file metadata: {error}"))?
+            .len();
+        if cancel_after_bytes == 0
+            || cancel_after_bytes
+                > logical_bytes.saturating_sub(CONTENT_INTEGRITY_CHUNK_BYTES as u64)
+        {
+            return Err(
+                "cancel-after bytes must leave at least one content-integrity chunk unread".into(),
+            );
+        }
+        let path = path.to_path_buf();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (progress_tx, progress_rx) = mpsc::channel();
+        return thread::scope(|scope| {
+            let worker_cancel = cancel.clone();
+            let worker = scope.spawn(move || {
+                compression::observe_content_integrity(&path, &worker_cancel, |offset| {
+                    let _ = progress_tx.send(offset);
+                })
+            });
+            let requested_at_bytes = loop {
+                let offset = progress_rx.recv().map_err(|_| {
+                    "content-integrity worker stopped before the cancellation boundary".to_string()
+                })?;
+                if offset >= cancel_after_bytes {
+                    break offset;
+                }
+            };
+            let requested_at = Instant::now();
+            cancel.store(true, Ordering::Release);
+            let observation = worker
+                .join()
+                .map_err(|_| "content-integrity worker panicked".to_string())??;
+            if !observation.cancelled {
+                return Err("content-integrity work completed before cancellation".into());
+            }
+            Ok(ContentIntegrityMeasurement {
+                logical_bytes: observation.logical_bytes,
+                bytes_read: observation.bytes_read,
+                elapsed_us: observation.elapsed_us,
+                cancelled: true,
+                cancel_requested_at_bytes: Some(requested_at_bytes),
+                cancellation_latency_us: Some(saturating_duration_us(requested_at.elapsed())),
+            })
+        });
+    }
+
+    let cancel = AtomicBool::new(false);
+    let observation = compression::observe_content_integrity(path, &cancel, |_| {})?;
+    Ok(ContentIntegrityMeasurement {
+        logical_bytes: observation.logical_bytes,
+        bytes_read: observation.bytes_read,
+        elapsed_us: observation.elapsed_us,
+        cancelled: false,
+        cancel_requested_at_bytes: None,
+        cancellation_latency_us: None,
+    })
 }
 
 /// Runs the same portable scan and snapshot construction used by the desktop
@@ -1156,8 +1234,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES, ScanBackend,
-        benchmark_aggregation_cancellation, benchmark_cancellation,
+        AGGREGATION_CANCELLATION_CHECK_INTERVAL_NODES, CONTENT_INTEGRITY_CHUNK_BYTES, ScanBackend,
+        benchmark_aggregation_cancellation, benchmark_cancellation, benchmark_content_integrity,
     };
     #[cfg(feature = "desktop")]
     use super::{
@@ -1338,6 +1416,29 @@ mod tests {
             identity_anchor.upgrade().is_none(),
             "clearing the plan must release its anchor after in-flight work ends"
         );
+    }
+
+    #[test]
+    fn content_integrity_benchmark_completes_and_cancels_the_production_loop() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("content.bin");
+        let logical_bytes = CONTENT_INTEGRITY_CHUNK_BYTES * 3;
+        fs::write(&path, vec![5_u8; logical_bytes]).expect("write content fixture");
+
+        let complete = benchmark_content_integrity(&path, None).expect("measure complete hash");
+        assert_eq!(complete.bytes_read, logical_bytes as u64);
+        assert!(!complete.cancelled);
+
+        let cancelled =
+            benchmark_content_integrity(&path, Some(CONTENT_INTEGRITY_CHUNK_BYTES as u64))
+                .expect("measure cancelled hash");
+        assert!(cancelled.cancelled);
+        assert_eq!(
+            cancelled.cancel_requested_at_bytes,
+            Some(CONTENT_INTEGRITY_CHUNK_BYTES as u64)
+        );
+        assert!(cancelled.bytes_read <= (CONTENT_INTEGRITY_CHUNK_BYTES.saturating_mul(2)) as u64);
+        assert!(cancelled.cancellation_latency_us.is_some());
     }
 
     #[test]
