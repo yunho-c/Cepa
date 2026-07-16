@@ -184,6 +184,10 @@ bounded initial and logical chart nodes, clean page-error capture, no horizontal
 overflow, backend disclosure, and state-file cleanup. This is programmatic
 WebView/IPC evidence, not native picker, physical input, drag-and-drop, or
 installed-package proof.
+macOS CI runs the harness directly. Linux CI runs the same production protocol
+under isolated Xvfb and DBus sessions through `native-scan-smoke-linux`; keep
+that gate after the ordinary native build and before packaging. Windows remains
+outside this UI gate until a native WebView2 run is measured successfully.
 The packaged webview CSP permits bundled assets and the two Tauri IPC transports;
 it does not allow remote content, inline scripts, or inline styles. The Vite-only
 development policy separately permits its localhost HMR socket and injected
@@ -610,6 +614,7 @@ just native-check # validate Rust core without Tauri desktop libraries
 just smoke-linux-desktop # Linux-only raw executable startup survival
 just window-state-smoke # prove native geometry persistence across two launches
 just native-scan-smoke /path/to/fixture # production WebView and real scan IPC
+just native-scan-smoke-linux /path/to/fixture # same proof under Linux Xvfb/DBus
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles

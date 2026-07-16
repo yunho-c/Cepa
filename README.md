@@ -224,6 +224,16 @@ proves programmatic production-WebView and IPC behavior; it does not exercise
 physical input, the native folder picker, drag-and-drop, or an installed
 package.
 
+Linux CI and provisioned Linux workstations run the same proof inside isolated
+display and session buses:
+
+```sh
+just native-scan-smoke-linux /path/to/disposable-fixture
+```
+
+This wrapper requires `xvfb-run` and `dbus-run-session`; it does not weaken the
+application or WebKit sandbox.
+
 `just web` runs only the Vite frontend. Folder selection and scanning require
 the native Tauri application, so the web-only mode is intended for frontend
 layout work. During development, append one of the following mock scenarios to

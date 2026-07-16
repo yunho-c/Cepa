@@ -92,12 +92,16 @@ jobs:
       - name: Build native application
         run: just build
 
-      - name: Validate production macOS WebView scan flow
-        if: runner.os == 'macOS'
+      - name: Validate production WebView scan flow
+        if: runner.os != 'Windows'
         run: |
           fixture="$RUNNER_TEMP/cepa-native-scan-fixture"
           just benchmark-fixture "$fixture" 32 32 4096
-          just native-scan-smoke "$fixture"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            just native-scan-smoke-linux "$fixture"
+          else
+            just native-scan-smoke "$fixture"
+          fi
 
       - name: Smoke Linux desktop startup
         if: runner.os == 'Linux'

@@ -50,6 +50,10 @@ native-scan-smoke path:
     bun --bun run build
     cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}"
 
+# Run the production WebView scan proof under isolated Linux display/session buses.
+native-scan-smoke-linux path:
+    dbus-run-session -- xvfb-run -a just native-scan-smoke "{{ path }}"
+
 # Check the Svelte and TypeScript frontend.
 frontend-check:
     bun --bun run check

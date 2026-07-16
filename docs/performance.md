@@ -1270,6 +1270,31 @@ drag-and-drop, installed-package launch, cold storage, or another platform's
 WebView. Raw runs are preserved in
 [`performance-results/2026-07-16-macos-native-webview.csv`](performance-results/2026-07-16-macos-native-webview.csv).
 
+### 2026-07-16 production Linux WebView and IPC smoke
+
+The same exact `a0d6edd` harness was built on the Rust 1.97.0 Ubuntu 22.04
+workstation against a disposable user-local WebKitGTK 4.1 development/runtime
+sysroot. WebKit's helper directory was exposed only inside an unprivileged mount
+namespace, and the application ran under isolated Xvfb and DBus sessions. The
+standing checkout and system installation were unchanged.
+
+Seven separate release-process launches scanned one 1,056-entry ext4 fixture:
+32 directories containing 32 sparse 4 KiB files each. Median initial-page
+readiness was 182.79 ms (166.06–217.83 ms), and median process start through the
+complete report was 882.26 ms (864.78–967.64 ms). Scan submission through the
+painted result had a 190 ms median, metric switching 47 ms, directory navigation
+59 ms, and debounced search 208 ms. Every run selected `Linux native`, retained
+one chart and two list Tab stops, rendered 272 allocated and 16 logical chart
+segments within the 512-node bound, found the selected row, emitted no page
+error, and had no horizontal overflow at 620×480.
+
+This closes production WebKitGTK/IPC interaction for this fixture and host; it
+is not physical-input, native-picker, installed-package, cold-cache, or general
+Linux performance evidence. CI now runs the same harness after the Linux native
+build using its provisioned WebKitGTK packages and isolated display/session
+buses. Raw runs are preserved in
+[`performance-results/2026-07-16-linux-native-webview.csv`](performance-results/2026-07-16-linux-native-webview.csv).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

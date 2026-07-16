@@ -1,0 +1,8 @@
+run,page_ready_ms,process_to_report_ms,scan_to_paint_ms,metric_switch_ms,navigation_ms,search_ms,initial_rows,initial_chart_segments,logical_chart_segments,searched_rows,page_errors,horizontal_overflow,backend
+1,192.112258,882.257850,190,49,67,208,32,272,16,1,0,false,Linux native
+2,217.827276,967.642913,198,58,59,209,32,272,16,1,0,false,Linux native
+3,187.277885,907.304499,203,45,58,207,32,272,16,1,0,false,Linux native
+4,173.658266,873.286801,187,45,56,208,32,272,16,1,0,false,Linux native
+5,168.005343,867.848196,183,47,59,205,32,272,16,1,0,false,Linux native
+6,166.059135,896.307507,188,45,66,214,32,272,16,1,0,false,Linux native
+7,182.788620,864.776600,206,47,60,202,32,272,16,1,0,false,Linux native
