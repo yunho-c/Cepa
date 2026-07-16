@@ -580,6 +580,8 @@ body {
 }
 .scan-kicker { display: flex; align-items: center; gap: 9px; color: var(--muted-foreground); font-size: 12px; }
 .scan-titlebar h1 { max-width: 580px; margin: 7px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 28px; line-height: 1.15; letter-spacing: -0.035em; font-weight: 650; }
+.scan-stop-action[aria-disabled="true"],
+.estimate-cancel-action[aria-disabled="true"] { cursor: wait; opacity: 0.5; }
 
 .scan-total { margin-top: 48px; display: grid; gap: 5px; }
 .scan-total strong { font-size: clamp(48px, 8vw, 72px); line-height: 1; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }

@@ -635,7 +635,7 @@
   }
 
   async function cancelScan() {
-    if (scanId === null || !isBusy) return;
+    if (scanId === null || status !== "scanning") return;
     const cancellingScanId = scanId;
     scanActionError = "";
     status = "cancelling";
@@ -884,6 +884,7 @@
     if (
       activeEstimateRequestId === null ||
       !isEstimatingSavings ||
+      isCancellingEstimate ||
       isDiscardingScan
     ) return;
     const requestId = activeEstimateRequestId;
@@ -1540,10 +1541,11 @@
             >{scanTargetName}</h1>
           </div>
           <Button
+            class="scan-stop-action"
             variant="outline"
             size="sm"
             onclick={cancelScan}
-            disabled={scanId === null || status === "cancelling"}
+            aria-disabled={scanId === null || status === "cancelling"}
           >
             {status === "cancelling" ? "Stopping…" : "Stop"}
           </Button>
@@ -1883,9 +1885,10 @@
                 <div class="inspector-actions">
                   {#if isEstimatingSavings}
                     <Button
+                      class="estimate-cancel-action"
                       variant="outline"
                       size="xs"
-                      disabled={isCancellingEstimate}
+                      aria-disabled={isCancellingEstimate}
                       bind:ref={estimateCancelButton}
                       aria-label="Cancel savings estimate"
                       onclick={cancelEstimate}

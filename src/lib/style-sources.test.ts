@@ -41,4 +41,28 @@ describe("production style sources", () => {
     );
     expect(revealButton).not.toMatch(/^\s*disabled=/m);
   });
+
+  test("keeps pending cancellation actions focused with guarded aria-disabled state", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const stopStart = component.indexOf('class="scan-stop-action"');
+    const estimateCancelStart = component.indexOf('class="estimate-cancel-action"');
+    const stopButton = component.slice(stopStart, component.indexOf("</Button>", stopStart));
+    const estimateCancelButton = component.slice(
+      estimateCancelStart,
+      component.indexOf("</Button>", estimateCancelStart),
+    );
+
+    expect(stopStart).toBeGreaterThan(-1);
+    expect(estimateCancelStart).toBeGreaterThan(-1);
+    expect(stopButton).toContain(
+      'aria-disabled={scanId === null || status === "cancelling"}',
+    );
+    expect(stopButton).not.toMatch(/^\s*disabled=/m);
+    expect(estimateCancelButton).toContain("aria-disabled={isCancellingEstimate}");
+    expect(estimateCancelButton).not.toMatch(/^\s*disabled=/m);
+    expect(component).toContain('if (scanId === null || status !== "scanning") return;');
+    expect(component).toMatch(
+      /!isEstimatingSavings \|\|\s+isCancellingEstimate \|\|\s+isDiscardingScan/,
+    );
+  });
 });

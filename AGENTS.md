@@ -61,7 +61,10 @@ and do not expose aggregation terminology in the primary UI. Refresh its elapsed
 time only from the existing 2,048-node checkpoints and at most once per 100 ms;
 never turn arena size into unbounded bridge traffic. A pending or failed Stop
 request must retain the finishing phase's `Space found` and `Preparing results…`
-context instead of visually regressing to traversal copy.
+context instead of visually regressing to traversal copy. Stop must remain
+focusable with guarded `aria-disabled` state while its request is live, reject
+repeat activation, and move focus to either the cancelled state or its contextual
+retry error when the request settles.
 The native window also accepts exactly one dropped folder. Drag state is reduced
 through `src/lib/folder-drop.ts`; after release, Rust canonicalizes and validates
 the root before the existing result is cleared and a scan begins. Invalid or
@@ -190,7 +193,10 @@ overflowing the explorer at the minimum window height. Keep its identity header
 and live Estimate Cancel action outside the scrollable evidence body so a focused
 recovery message cannot hide the selected item or retry control. Keep Cancel and
 Close in one horizontal action row; scope heading-copy layout to its named copy
-wrapper instead of a broad child selector that also matches the actions. In the
+wrapper instead of a broad child selector that also matches the actions. A live
+estimate's Cancel action must remain focusable with guarded `aria-disabled`
+state while its stop request is pending and reject repeat activation; a failed
+request moves focus to its contextual error and makes Cancel retryable. In the
 560 through 720 logical-pixel compact two-column layout, keep the primary Estimate
 prompt inline so its action remains visible at 620 by 480; secondary metadata
 may stay below the inspector fold. Browser previews below 560 pixels use the

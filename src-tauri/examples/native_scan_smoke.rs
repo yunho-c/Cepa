@@ -273,6 +273,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["terminalFailureDetailsCollapsed"].as_bool() == Some(true)
         && report["initialScanHeadingFocused"].as_bool() == Some(true)
         && report["cancellationStopped"].as_bool() == Some(true)
+        && report["cancellationPendingFocusRetained"].as_bool() == Some(true)
         && report["cancellationFocusRestored"].as_bool() == Some(true)
         && report["cancellationRecoveryAvailable"].as_bool() == Some(true)
         && report["cancellationMs"]
@@ -404,6 +405,7 @@ void (async () => {{
     }}
 
     let cancellationStopped = cancellationFixture === null;
+    let cancellationPendingFocusRetained = cancellationFixture === null;
     let cancellationFocusRestored = cancellationFixture === null;
     let cancellationRecoveryAvailable = cancellationFixture === null;
     let cancellationMs = 0;
@@ -426,7 +428,15 @@ void (async () => {{
         'enabled Stop control',
         5000,
       );
+      stopButton.focus();
       stopButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      cancellationPendingFocusRetained =
+        document.activeElement === stopButton
+        && stopButton.getAttribute('aria-disabled') === 'true'
+        && !stopButton.hasAttribute('disabled')
+        && stopButton.textContent?.trim() === 'Stopping…';
       const cancelledNotice = await waitFor(
         () => {{
           if (document.querySelector('.results-view')) {{
@@ -651,6 +661,7 @@ void (async () => {{
       terminalFailureDetailsCollapsed,
       initialScanHeadingFocused,
       cancellationStopped,
+      cancellationPendingFocusRetained,
       cancellationFocusRestored,
       cancellationRecoveryAvailable,
       cancellationMs,
@@ -734,6 +745,7 @@ mod tests {
             "terminalFailureDetailsCollapsed": true,
             "initialScanHeadingFocused": true,
             "cancellationStopped": true,
+            "cancellationPendingFocusRetained": true,
             "cancellationFocusRestored": true,
             "cancellationRecoveryAvailable": true,
             "cancellationMs": 50.0,
@@ -778,6 +790,10 @@ mod tests {
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();
         assert!(!validate_report(&cancellation_focus_lost, 2));
+
+        let mut pending_cancellation_focus_lost = complete.clone();
+        pending_cancellation_focus_lost["cancellationPendingFocusRetained"] = false.into();
+        assert!(!validate_report(&pending_cancellation_focus_lost, 2));
 
         let mut pending_navigation_focus_lost = complete.clone();
         pending_navigation_focus_lost["pendingNavigationFocusRetained"] = false.into();

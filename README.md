@@ -231,7 +231,9 @@ scan recovery available. Its primary guidance must stay cause-neutral, its exact
 diagnostic must remain collapsed, and the early terminal event must not surface
 as an unhandled page rejection. It next starts the optional second fixture as a
 larger scan, activates the real Stop control, and requires the cancelled landing
-notice to own focus while another scan remains available. It then submits the
+notice to own focus while another scan remains available. Before cancellation
+settles, the focused Stop control must expose guarded `aria-disabled` state
+without a native disabled attribute. It then submits the
 ordinary completion fixture, waits for the terminal channel event
 and two painted frames, switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates

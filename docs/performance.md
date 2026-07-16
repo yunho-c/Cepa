@@ -1602,6 +1602,33 @@ manager Reveal timing, installed package, or Windows WebView2. Exact hashes,
 commands, results, and evidence boundaries are preserved in
 [`validation-results/2026-07-16-pending-explorer-focus.txt`](validation-results/2026-07-16-pending-explorer-focus.txt).
 
+### 2026-07-16 pending cancellation focus
+
+A follow-up keyboard audit found the same focus discontinuity in the two live
+cancellation controls. Activating Stop during a delayed finishing-phase cancel,
+or Cancel during a delayed savings-estimate stop, applied a native `disabled`
+attribute and moved focus to the document body until the operation settled.
+
+Both controls now remain focusable with guarded `aria-disabled` state and
+restrained pending opacity. Their handlers reject repeated activation, including
+a programmatic second click, while preserving the existing terminal focus
+destinations: the cancelled landing notice, the Stop error, the completed
+estimate action, or the estimate-stop error. The production WebView smoke now
+requires the real Stop control to retain focus, report `Stopping…`, expose
+`aria-disabled=true`, and omit the native disabled attribute before the scanner
+acknowledges cancellation.
+
+At 620 by 480 in light appearance, delayed scan cancellation retained Stop focus
+without horizontal overflow and then focused the cancelled notice. In dark
+appearance at the same geometry, a deliberately delayed failed estimate stop
+retained Cancel focus; a second activation left the invocation count at one, and
+the contextual error received focus when the request failed. The exact local,
+production-WebView, cross-target, and Linux Rust 1.97.0 results are recorded in
+[`validation-results/2026-07-16-pending-cancellation-focus.txt`](validation-results/2026-07-16-pending-cancellation-focus.txt).
+This is deterministic browser and programmatic production-WebView evidence. It
+does not certify a screen reader, physical keyboard, Windows WebView2, or Linux
+WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
