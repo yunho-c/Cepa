@@ -291,13 +291,21 @@ Compression-plan preparation is also scan-authorized: the frontend supplies a
 completed scan ID, opaque node ID, and operation, never a path. Rust opens the
 file without following links, retains that read-only handle as the active plan's
 identity anchor, snapshots platform identity and revision metadata, and inspects
-compression state through the same open file. Revalidation compares both the
-retained file and a fresh no-follow open of its current path. A new scan or newer
-plan invalidates the old plan and releases its anchor after any in-flight
-validation completes. For regular files, the scanner retains a compact exact
-identity plus modification/change revision when the backend can provide it, and
-preparation rejects unavailable or mismatched scan-time revisions before
-producing a plan.
+compression state through the same open file. After the scan-time revision
+matches, preparation reads the complete file through positioned reads into a
+BLAKE3 content digest. The buffer is fixed at 1 MiB and cancellation is checked
+between chunks. Revalidation compares both the retained file and a fresh
+no-follow open of its current path, then recomputes the digest while bracketing
+that read with metadata snapshots and rechecks the path afterward. A new scan,
+newer plan, or Home transition cancels the old plan's hashing and releases its
+anchor after any in-flight validation completes. For regular files, the scanner
+retains a compact exact identity plus modification/change revision when the
+backend can provide it, and preparation rejects unavailable or mismatched
+scan-time revisions before producing a plan.
+On Windows, keep ordinary `snapshot_no_follow` opens attribute-only so portable
+scans do not require content-read permission for every file. Only explicit plan
+preparation uses `open_content_snapshot_no_follow` to add `GENERIC_READ`; do not
+merge those access paths.
 Unix snapshots hoist their enforced single filesystem ID once and store a
 24-byte compact revision per eligible node; Windows retains the full 32-byte
 revision. `scan_benchmark` schema 7 reports capacity-aware retained snapshot
@@ -316,11 +324,15 @@ destructor. `aggregation_cancellation` deterministically measures the production
 loop and waits for reclamation between runs while reporting foreground latency
 and background release separately. Do not present its synthetic flat arena as a
 filesystem, traversal, Tauri IPC, or RSS benchmark.
-This metadata is not a content fingerprint: same-clock-tick data rewrites may
-remain indistinguishable. The current anchor is read-only and does
-not prove that a future writer can mutate and verify through that exact handle.
-Do not add an apply command or expose a dead-end plan UI until a
-mutation-capable held-handle/content-integrity design closes that gate.
+Scan metadata is not a content fingerprint: a same-clock-tick rewrite between
+scan and plan preparation may remain indistinguishable because hashing every
+scanned file would violate the scanner's performance contract. The plan's digest
+does detect content changes after preparation even when metadata collides, but
+the current anchor is read-only and does not prove that a future writer can
+mutate and verify through that exact handle without a race after validation. Do
+not add an apply command or expose a dead-end plan UI until a mutation-capable
+held-handle design performs immediate pre/post-operation integrity verification
+and closes that remaining handoff gate.
 The same constraint applies to destructive cleanup. Do not add a path-based
 trash or delete action authorized only by a completed scan: a replacement could
 occupy that path between scanning and mutation. Reclaim actions need an

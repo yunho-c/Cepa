@@ -169,6 +169,11 @@ pub(crate) fn open_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnaps
 }
 
 #[cfg(unix)]
+pub(crate) fn open_content_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnapshot> {
+    open_snapshot_no_follow(path)
+}
+
+#[cfg(unix)]
 pub(crate) fn snapshot_open_file(file: &File) -> io::Result<FileSnapshot> {
     use std::os::unix::fs::MetadataExt;
 
@@ -195,12 +200,30 @@ pub(crate) fn snapshot_open_file(file: &File) -> io::Result<FileSnapshot> {
 
 #[cfg(windows)]
 pub(crate) fn open_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnapshot> {
+    use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
+
+    open_snapshot_no_follow_with_access(path, FILE_READ_ATTRIBUTES)
+}
+
+#[cfg(windows)]
+pub(crate) fn open_content_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnapshot> {
+    use windows_sys::Win32::Foundation::GENERIC_READ;
+    use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
+
+    open_snapshot_no_follow_with_access(path, GENERIC_READ | FILE_READ_ATTRIBUTES)
+}
+
+#[cfg(windows)]
+fn open_snapshot_no_follow_with_access(
+    path: &Path,
+    desired_access: u32,
+) -> io::Result<OpenedFileSnapshot> {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::FromRawHandle;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
-        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        CreateFileW, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, OPEN_EXISTING,
     };
 
     let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
@@ -208,7 +231,7 @@ pub(crate) fn open_snapshot_no_follow(path: &Path) -> io::Result<OpenedFileSnaps
     let handle = unsafe {
         CreateFileW(
             wide.as_ptr(),
-            FILE_READ_ATTRIBUTES,
+            desired_access,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             std::ptr::null(),
             OPEN_EXISTING,
@@ -302,6 +325,14 @@ pub(crate) fn open_snapshot_no_follow(_path: &Path) -> io::Result<OpenedFileSnap
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "stable file identity is unavailable on this platform",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn open_content_snapshot_no_follow(_path: &Path) -> io::Result<OpenedFileSnapshot> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "read-only file content access is unavailable on this platform",
     ))
 }
 

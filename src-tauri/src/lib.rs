@@ -438,6 +438,7 @@ struct CompressionPlanState {
     next_id: AtomicU64,
     generation: AtomicU64,
     active: Mutex<Option<ActiveCompressionPlan>>,
+    cancel: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 #[cfg(feature = "desktop")]
@@ -448,14 +449,22 @@ struct ActiveCompressionPlan {
 
 #[cfg(feature = "desktop")]
 impl CompressionPlanState {
-    fn begin(&self) -> (u64, u64) {
+    fn begin(&self) -> (u64, u64, Arc<AtomicBool>) {
         let plan_id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
         *self
             .active
             .lock()
             .unwrap_or_else(|error| error.into_inner()) = None;
-        (plan_id, generation)
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut active_cancel = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(previous) = active_cancel.replace(cancel.clone()) {
+            previous.store(true, Ordering::Release);
+        }
+        (plan_id, generation, cancel)
     }
 
     fn finish(
@@ -482,19 +491,37 @@ impl CompressionPlanState {
             .unwrap_or_else(|error| error.into_inner());
         if self.generation.load(Ordering::Acquire) == generation {
             *active = None;
+            if let Some(cancel) = self
+                .cancel
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .take()
+            {
+                cancel.store(true, Ordering::Release);
+            }
         }
     }
 
-    fn get(&self, plan_id: u64) -> Result<(u64, compression::PreparedCompressionPlan), String> {
+    fn get(
+        &self,
+        plan_id: u64,
+    ) -> Result<(u64, compression::PreparedCompressionPlan, Arc<AtomicBool>), String> {
         let active = self
             .active
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        active
+        let active = active
             .as_ref()
             .filter(|active| active.plan.preview().plan_id == plan_id)
-            .map(|active| (active.generation, active.plan.clone()))
-            .ok_or_else(|| "That compression plan is no longer available.".to_string())
+            .ok_or_else(|| "That compression plan is no longer available.".to_string())?;
+        let cancel = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| "That compression plan is no longer available.".to_string())?;
+        Ok((active.generation, active.plan.clone(), cancel))
     }
 
     fn is_current(&self, generation: u64, plan_id: u64) -> bool {
@@ -514,6 +541,14 @@ impl CompressionPlanState {
             .active
             .lock()
             .unwrap_or_else(|error| error.into_inner()) = None;
+        if let Some(cancel) = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take()
+        {
+            cancel.store(true, Ordering::Release);
+        }
     }
 }
 
@@ -1015,9 +1050,9 @@ async fn prepare_compression_plan(
     plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<compression::CompressionPlanPreview, String> {
     let target = scans.compression_target(scan_id, node_id)?;
-    let (plan_id, generation) = plans.begin();
+    let (plan_id, generation, cancel) = plans.begin();
     let task = tauri::async_runtime::spawn_blocking(move || {
-        compression::prepare_plan(plan_id, scan_id, node_id, target, operation)
+        compression::prepare_plan(plan_id, scan_id, node_id, target, operation, &cancel)
     });
     match task.await {
         Ok(Ok(plan)) => plans.finish(generation, plan),
@@ -1040,9 +1075,9 @@ async fn revalidate_compression_plan(
     plan_id: u64,
     plans: tauri::State<'_, CompressionPlanState>,
 ) -> Result<compression::PlanValidation, String> {
-    let (generation, plan) = plans.get(plan_id)?;
+    let (generation, plan, cancel) = plans.get(plan_id)?;
     let validation =
-        tauri::async_runtime::spawn_blocking(move || compression::revalidate_plan(&plan))
+        tauri::async_runtime::spawn_blocking(move || compression::revalidate_plan(&plan, &cancel))
             .await
             .map_err(|error| format!("The plan-validation task stopped unexpectedly: {error}"))?;
     if !plans.is_current(generation, plan_id) {
@@ -1252,22 +1287,28 @@ mod tests {
         };
 
         let state = CompressionPlanState::default();
-        let (first_id, first_generation) = state.begin();
+        let (first_id, first_generation, first_cancel) = state.begin();
         let first = compression::prepare_plan(
             first_id,
             1,
             1,
             target.clone(),
             compression::CompressionOperation::Compress,
+            &first_cancel,
         )
         .expect("prepare first plan");
-        let (second_id, second_generation) = state.begin();
+        let (second_id, second_generation, second_cancel) = state.begin();
+        assert!(
+            first_cancel.load(Ordering::Acquire),
+            "a newer plan must cancel the superseded preparation"
+        );
         let second = compression::prepare_plan(
             second_id,
             1,
             1,
             target,
             compression::CompressionOperation::Compress,
+            &second_cancel,
         )
         .expect("prepare second plan");
 
@@ -1280,10 +1321,14 @@ mod tests {
             second_id
         );
         assert!(state.get(first_id).is_err());
-        let (_, in_flight) = state.get(second_id).expect("clone current plan");
+        let (_, in_flight, validation_cancel) = state.get(second_id).expect("clone current plan");
         let identity_anchor = in_flight.identity_anchor_weak();
         state.clear();
         assert!(state.get(second_id).is_err());
+        assert!(
+            validation_cancel.load(Ordering::Acquire),
+            "clearing the plan must cancel in-flight content validation"
+        );
         assert!(
             identity_anchor.upgrade().is_some(),
             "an in-flight validation clone must keep its anchor alive"

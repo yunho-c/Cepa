@@ -322,26 +322,43 @@ plan.
 
 Revalidation first opens the current path without following links, snapshots the
 retained file separately, and requires both revisions, sizes, allocations, and
-link counts to agree with each other and the prepared revision. It returns
-`valid`, `changed`, or `unavailable`; regular-file replacement, unlink, symlink
-replacement, and same-length mutation fixtures cover those boundaries. Unix
-opens are nonblocking until the regular-file type check completes, so replacing
-a scanned file with a FIFO cannot stall the planning worker. A new scan or newer
-plan invalidates the previous plan. The retained handle is shared only with an
+link counts to agree with each other and the prepared revision. Preparation also
+reads the complete retained file with positioned reads and stores a BLAKE3
+digest. Revalidation recomputes it, with metadata snapshots before and after the
+read, and rechecks the path binding afterward. The working buffer is fixed at
+1 MiB, reads do not disturb the held handle's cursor, and a newer plan, new scan,
+or Home transition cancels work between chunks. It returns `valid`, `changed`,
+or `unavailable`; regular-file replacement, unlink, symlink replacement,
+same-length mutation, a simulated metadata collision, positioned-read, and
+cancellation fixtures cover those boundaries. Unix opens are nonblocking until
+the regular-file type check completes, so replacing a scanned file with a FIFO
+cannot stall the planning worker. The retained handle is shared only with an
 already-running validation and otherwise closes with invalidation, so dormant
 previews cannot accumulate open files.
 
 Every preview currently contains a `writerUnavailable` blocker, no apply command
 exists, and the UI intentionally exposes no dead-end planning action. The
-metadata revision is not a content fingerprint, and the retained scan snapshot
-rejects planning when a usable scan-time revision is unavailable. A
-same-clock-tick rewrite can still be indistinguishable because the revision is
-metadata. The identity anchor is also read-only; it proves that plan validation
-can keep referring to the originally opened file, not that a platform writer can
-mutate through that exact handle. A future writer must acquire the necessary
-rights without reopening a mutable path and add byte-integrity verification
-before and after the filesystem operation. This preview is not mutation
-authority.
+retained scan snapshot rejects planning when a usable scan-time revision is
+unavailable. The plan-time content digest does not turn scan metadata into a
+content fingerprint: a same-clock-tick rewrite that occurs after scanning but
+before the initial plan read may still be indistinguishable from the scanned
+state. Hashing every file during traversal would violate the scanner's I/O and
+performance contract. The identity anchor is also read-only; it proves that
+plan validation can keep referring to the originally opened file, not that a
+platform writer can mutate through that exact handle or prevent a change after
+validation. A future writer must acquire the necessary rights without reopening
+a mutable path and perform immediate byte-integrity verification before and
+after the filesystem operation. This preview is not mutation authority.
+
+The content-anchor candidate passed formatting, dependency-light check, strict
+Clippy, and 75 tests on native Rust 1.97 Linux, with the real-Btrfs fixture
+ignored. On macOS, all 46 frontend tests and 91 Rust library tests passed, one
+file-manager-opening test remained intentionally ignored, and the optimized
+desktop application built. The exact default-feature Windows target graph also
+cross-compiled from macOS; native Windows runtime validation remains required
+before treating its positioned-read path as proven. These checks strengthen
+dormant plan validation only and do not satisfy the writable-backend gates
+below.
 
 The identity-anchor change was validated natively on macOS, Linux, and Windows.
 The full macOS frontend/Rust suite and optimized desktop build passed. Rust
@@ -363,7 +380,8 @@ fixture above validates metadata inspection, not estimator fidelity.
 1. Add capability and read-only state protocol on every platform; unsupported is
    a first-class result.
 2. Add bounded local estimation and candidate UX without mutation.
-3. Complete the held-handle/content-integrity gate, then
+3. Complete the mutation-capable held-handle and immediate writer-verification
+   gate, then
    pilot explicit regular-file NTFS compression/decompression behind an
    experimental flag.
 4. Add Btrfs future-write policy, then separately gate existing-extent rewrite.

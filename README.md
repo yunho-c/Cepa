@@ -142,12 +142,15 @@ can prepare and revalidate an immutable, scan-authorized single-file plan previe
 but every preview is blocked because no writer exists. This dormant protocol has
 no UI action and does not authorize mutation. Planning now requires an exact
 retained scan-time identity/revision match, closing ordinary identical-size
-replacement and rewrite gaps; same-clock-tick metadata collisions and
-content-integrity gating remain before an apply command can exist. The one
-active preview now keeps its no-follow file open as a read-only identity anchor,
-inspects state through that handle, and revalidates both the retained file and
-its current path binding. A future writer still needs a mutation-capable handle
-and byte-integrity verification; this anchor does not authorize writes.
+replacement and rewrite gaps. It then computes a complete BLAKE3 digest through
+bounded positioned reads on the retained no-follow handle, and revalidation
+requires the content, metadata, and current path binding to match. A newer plan,
+new scan, or Home transition cancels hashing between 1 MiB chunks. This detects
+post-plan content changes even when metadata timestamps collide, but a
+same-clock rewrite between the scan and initial plan can still evade scan
+metadata. A future writer also needs a mutation-capable held handle and immediate
+pre/post-operation verification; this read-only anchor does not authorize
+writes.
 The Unix snapshot hoists the shared filesystem identity out of each retained
 node; on one 101,011-entry APFS fixture this reduced measured retained payload
 by 5.15% without an observed throughput regression, though process peak RSS did

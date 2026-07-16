@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 use crate::scanner::EntryKind;
 
@@ -19,12 +20,16 @@ pub(crate) fn prepare_plan(
     node_id: u64,
     target: crate::scanner::CompressionTarget,
     operation: CompressionOperation,
+    cancel: &AtomicBool,
 ) -> Result<PreparedCompressionPlan, String> {
-    plan::prepare(plan_id, scan_id, node_id, target, operation)
+    plan::prepare(plan_id, scan_id, node_id, target, operation, cancel)
 }
 
-pub(crate) fn revalidate_plan(plan: &PreparedCompressionPlan) -> PlanValidation {
-    plan::revalidate(plan)
+pub(crate) fn revalidate_plan(
+    plan: &PreparedCompressionPlan,
+    cancel: &AtomicBool,
+) -> PlanValidation {
+    plan::revalidate(plan, cancel)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
