@@ -119,6 +119,10 @@ descendants. Its real segments use one roving Tab stop: arrow keys move and wrap
 Home and End jump to the bounds, and Enter or Space activates the focused item.
 Aggregate segments remain non-interactive. Keep the concise screen-reader
 instruction associated with the group when changing chart interaction.
+Sunburst render keys use real node identity for interactive segments and a
+stable traversal position for aggregates. Aggregate labels repeat across
+branches, so names and depths are not unique keys; preserve the repeated-label
+regression when changing chart geometry or keyed rendering.
 Pointer previews begin on actual pointer movement, not merely because a scan or
 directory transition rendered a segment or row beneath a stationary cursor.
 This keeps a newly completed view anchored on its current directory until the
@@ -171,6 +175,15 @@ startup monitor query can be empty and skip position restoration, so
 `desktop_window/placement.rs` reapplies only an on-screen saved position (or
 centers safely when monitor metadata is unavailable). Keep the two-launch
 smoke test green when changing startup ordering or window configuration.
+The `native_scan_smoke` example reuses the production builder, bundled frontend,
+custom protocol, commands, and startup path while isolating window state under a
+temporary filename. At 620×480 it submits the real manual-path form, scans a
+disposable fixture, waits through painted frames, switches metrics, navigates,
+and searches. Preserve its one chart Tab stop, at most two list Tab stops,
+bounded initial and logical chart nodes, clean page-error capture, no horizontal
+overflow, backend disclosure, and state-file cleanup. This is programmatic
+WebView/IPC evidence, not native picker, physical input, drag-and-drop, or
+installed-package proof.
 The packaged webview CSP permits bundled assets and the two Tauri IPC transports;
 it does not allow remote content, inline scripts, or inline styles. The Vite-only
 development policy separately permits its localhost HMR socket and injected
@@ -546,6 +559,8 @@ Start with these files:
   persistence policy and plugin construction.
 - `src-tauri/examples/window_state_smoke.rs`: two-process native initial-page,
   geometry persistence, and restoration proof with isolated temporary state.
+- `src-tauri/examples/native_scan_smoke.rs`: production-protocol WebView/IPC
+  scan, metric, navigation, search, focus-bound, and minimum-size smoke proof.
 - `src-tauri/examples/content_integrity_benchmark.rs`: release throughput and
   controller-rendezvoused cancellation measurement for the production
   plan-content hashing loop. The rendezvous excludes controller scheduling from
@@ -594,6 +609,7 @@ just web       # run only the Vite frontend
 just native-check # validate Rust core without Tauri desktop libraries
 just smoke-linux-desktop # Linux-only raw executable startup survival
 just window-state-smoke # prove native geometry persistence across two launches
+just native-scan-smoke /path/to/fixture # production WebView and real scan IPC
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles

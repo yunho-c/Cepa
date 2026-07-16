@@ -1232,6 +1232,44 @@ not alternating pairs, so they are treated only as a no-regression check rather
 than a UI-speed claim. Neither measurement covers native webview bridge cost,
 filesystem scanning, or cold application startup.
 
+### 2026-07-16 production macOS WebView and IPC smoke
+
+An exact candidate based on `6a1b1a8` added `native_scan_smoke`. The Tauri
+example reuses the production builder, plugins, bundled frontend, custom
+protocol, startup ordering, and command handler. It isolates window state under
+a smoke-only filename, sets the actual window to the supported 620×480 minimum,
+then injects a same-document controller after the packaged page reports ready.
+That controller submits the ordinary manual-path form, waits for the real scan
+response and two painted frames, switches the size metric, navigates into a
+directory, and performs the ordinary debounced folder search. Rust validates
+the returned report and removes the isolated state file.
+
+Seven separate release-process launches scanned the same warm APFS fixture with
+2,503 files and 103 child directories. Median initial-page readiness was
+228.90 ms (199.13–251.76 ms), and median process start through the complete
+scan/metric/navigation/search report was 734.94 ms (693.58–794.69 ms).
+Scan submission through painted result had a 35 ms median and 33–122 ms range.
+Metric switching had a 32 ms median, directory navigation 69 ms, and search
+219 ms; search includes the intentional 180 ms debounce. Every launch disclosed
+the `macOS native` backend, rendered one radial-map Tab stop and two list Tab
+stops, changed from one allocated chart segment to 21 logical segments without
+a page error, found the dynamically selected row, and had no horizontal
+overflow.
+
+An exact 32-directory by 32-file sparse fixture also exposed and now guards a
+metric-switch failure: repeated aggregate wedges previously shared a Svelte
+key, aborting the reactive update. Sunburst segments now carry stable unique
+keys, a focused frontend regression covers repeated aggregate labels, and the
+production smoke independently bounds both the initial and logical charts.
+
+These runs prove the programmatically driven production macOS WebView, bundled
+asset protocol, Tauri IPC commands, real native scanner, painted result, and
+minimum-size invariants on this one warm fixture. They are not a throughput
+benchmark and do not exercise physical input, the native folder picker,
+drag-and-drop, installed-package launch, cold storage, or another platform's
+WebView. Raw runs are preserved in
+[`performance-results/2026-07-16-macos-native-webview.csv`](performance-results/2026-07-16-macos-native-webview.csv).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

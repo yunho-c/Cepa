@@ -219,3 +219,33 @@ fn linux_ci_smokes_the_built_desktop_before_packaging() {
         package_step.contains("APPIMAGE_EXTRACT_AND_RUN=1 just smoke-linux-desktop \"$appimage\"")
     );
 }
+
+#[test]
+fn macos_ci_exercises_the_production_webview_scan_flow() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let justfile = include_str!("../../Justfile");
+
+    let build = workflow
+        .find("- name: Build native application")
+        .expect("CI must build the native application");
+    let smoke = workflow
+        .find("- name: Validate production macOS WebView scan flow")
+        .expect("CI must exercise the production macOS WebView scan flow");
+    let bundle = workflow
+        .find("- name: Build distribution bundles")
+        .expect("CI must build distribution bundles");
+    assert!(build < smoke && smoke < bundle);
+
+    let smoke_step = &workflow[smoke..bundle];
+    assert!(smoke_step.contains("if: runner.os == 'macOS'"));
+    assert!(smoke_step.contains("just benchmark-fixture \"$fixture\""));
+    assert!(smoke_step.contains("just native-scan-smoke \"$fixture\""));
+
+    let recipe = justfile
+        .split("native-scan-smoke path:")
+        .nth(1)
+        .expect("Justfile must define native-scan-smoke");
+    assert!(recipe.contains("bun --bun run build"));
+    assert!(recipe.contains("--features tauri/custom-protocol"));
+    assert!(recipe.contains("--example native_scan_smoke"));
+}

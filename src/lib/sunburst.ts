@@ -7,6 +7,7 @@ const RING_GAP = 3;
 const ANGLE_GAP = 0.012;
 
 export interface SunburstSegment {
+  key: string;
   item: ChartItem;
   depth: number;
   pathData: string;
@@ -27,7 +28,16 @@ export function createSunburst(
   metric: SizeMetric = "allocated",
 ): SunburstSegment[] {
   const segments: SunburstSegment[] = [];
-  appendSegments(segments, items, metric, 0, -Math.PI / 2, Math.PI * 1.5, 0);
+  appendSegments(
+    segments,
+    items,
+    metric,
+    0,
+    -Math.PI / 2,
+    Math.PI * 1.5,
+    0,
+    "",
+  );
   return segments;
 }
 
@@ -62,6 +72,7 @@ function appendSegments(
   startAngle: number,
   endAngle: number,
   colorSeed: number,
+  keyPrefix: string,
 ) {
   const weights = items.map((item) => itemWeight(item, metric));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
@@ -69,6 +80,7 @@ function appendSegments(
 
   let cursor = startAngle;
   items.forEach((item, index) => {
+    const keyPath = keyPrefix ? `${keyPrefix}.${index}` : String(index);
     const span = ((endAngle - startAngle) * weights[index]) / total;
     const itemStart = cursor;
     const itemEnd = cursor + span;
@@ -77,6 +89,7 @@ function appendSegments(
     if (span > ANGLE_GAP * 1.5) {
       const inner = INNER_RADIUS + depth * (RING_WIDTH + RING_GAP);
       output.push({
+        key: item.id === null ? `aggregate-${keyPath}` : `node-${item.id}`,
         item,
         depth,
         pathData: ringArc(
@@ -98,6 +111,7 @@ function appendSegments(
         itemStart,
         itemEnd,
         colorSeed + index,
+        keyPath,
       );
     }
   });

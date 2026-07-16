@@ -1197,7 +1197,9 @@ fn set_desktop_menu_availability(
 }
 
 #[cfg(feature = "desktop")]
-pub fn run() {
+fn desktop_builder(
+    window_state_plugin: tauri::plugin::TauriPlugin<tauri::Wry>,
+) -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .menu(desktop_menu::build)
         .on_menu_event(|app, event| {
@@ -1205,7 +1207,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(desktop_window::state_plugin())
+        .plugin(window_state_plugin)
         .manage(desktop_window::StartupWindowState::default())
         .on_page_load(desktop_window::handle_page_load)
         .setup(desktop_window::initialize)
@@ -1232,6 +1234,41 @@ pub fn run() {
             reveal_scan_item,
             set_desktop_menu_availability
         ])
+}
+
+/// Builds the production desktop command and plugin graph with isolated window
+/// state for the native scan smoke harness.
+#[cfg(feature = "desktop")]
+#[doc(hidden)]
+pub fn desktop_builder_for_smoke(state_filename: &str) -> tauri::Builder<tauri::Wry> {
+    desktop_builder(desktop_window::state_plugin_with_filename(Some(
+        state_filename,
+    )))
+}
+
+/// Applies the production startup placement and page-readiness behavior.
+#[cfg(feature = "desktop")]
+#[doc(hidden)]
+pub fn initialize_desktop(
+    app: &mut tauri::App<tauri::Wry>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    desktop_window::initialize(app)
+}
+
+/// Waits for the production main WebView's initial page to finish loading.
+#[cfg(feature = "desktop")]
+#[doc(hidden)]
+pub fn wait_for_desktop_page(app: &tauri::AppHandle<tauri::Wry>, timeout: Duration) -> bool {
+    use tauri::Manager;
+
+    app.state::<desktop_window::StartupWindowState>()
+        .wait_for_page_load(timeout)
+}
+
+#[cfg(feature = "desktop")]
+pub fn run() {
+    desktop_builder(desktop_window::state_plugin())
+        .setup(desktop_window::initialize)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

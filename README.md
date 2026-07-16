@@ -206,6 +206,24 @@ startup-survival gate; it does not prove physical desktop interaction,
 folder-picker integration, installed-package behavior, or public release
 readiness.
 
+On a provisioned desktop host, exercise the bundled production frontend, Tauri
+IPC transport, real scanner, and painted explorer at the supported 620×480
+minimum with a disposable directory:
+
+```sh
+just native-scan-smoke /path/to/disposable-fixture
+```
+
+The harness builds the frontend and explicitly enables Tauri's production
+custom protocol. It submits the ordinary manual-path form, waits for the real
+scan response and two painted frames, switches metrics, navigates into a
+directory, performs a debounced folder search, and validates bounded focus and
+overflow invariants in both size metrics while rejecting uncaught page errors.
+Its window state uses a dedicated filename that is removed after the run. This
+proves programmatic production-WebView and IPC behavior; it does not exercise
+physical input, the native folder picker, drag-and-drop, or an installed
+package.
+
 `just web` runs only the Vite frontend. Folder selection and scanning require
 the native Tauri application, so the web-only mode is intended for frontend
 layout work. During development, append one of the following mock scenarios to

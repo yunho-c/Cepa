@@ -50,6 +50,28 @@ describe("sunburst geometry", () => {
     expect(allocated[1].pathData).not.toBe(logical[1].pathData);
   });
 
+  test("gives repeated aggregate labels unique stable keys", () => {
+    const aggregate = (): ChartItem => ({
+      id: null,
+      name: "16 more items",
+      kind: "other",
+      logicalBytes: 25,
+      allocatedBytes: 25,
+      children: [],
+    });
+    const items = [
+      item(1, 50, 50, [aggregate()]),
+      item(2, 50, 50, [aggregate()]),
+    ];
+
+    const first = createSunburst(items);
+    const second = createSunburst(items);
+    const keys = first.map((segment) => segment.key);
+
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(second.map((segment) => segment.key)).toEqual(keys);
+  });
+
   test("moves through interactive segments with one wrapping focus target", () => {
     const segments = createSunburst([
       item(1, 75, 75, [item(2, 25)]),

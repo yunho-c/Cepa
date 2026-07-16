@@ -45,6 +45,11 @@ window-state-smoke:
     cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- seed
     cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- verify
 
+# Exercise the production WebView and IPC scan flow at the supported minimum size.
+native-scan-smoke path:
+    bun --bun run build
+    cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}"
+
 # Check the Svelte and TypeScript frontend.
 frontend-check:
     bun --bun run check

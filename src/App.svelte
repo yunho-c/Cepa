@@ -1679,7 +1679,7 @@
                 aria-describedby="sunburst-navigation-help"
                 bind:this={sunburstElement}
               >
-                {#each sunburstSegments as segment (`${segment.item.id ?? segment.item.name}-${segment.depth}`)}
+                {#each sunburstSegments as segment (segment.key)}
                   {#if segment.item.id !== null}
                     <g
                       role="button"

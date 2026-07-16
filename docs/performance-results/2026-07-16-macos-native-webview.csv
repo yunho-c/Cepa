@@ -1,0 +1,8 @@
+run,page_ready_ms,process_to_report_ms,scan_to_paint_ms,metric_switch_ms,navigation_ms,search_ms,initial_rows,initial_chart_segments,logical_chart_segments,searched_rows,page_errors,horizontal_overflow,backend
+1,199.128584,693.578459,35,31,67,217,4,1,21,1,0,false,macOS native
+2,214.362375,764.416334,34,33,69,220,4,1,21,1,0,false,macOS native
+3,251.757000,794.686833,33,32,83,204,4,1,21,1,0,false,macOS native
+4,213.291250,713.479667,117,33,66,219,4,1,21,1,0,false,macOS native
+5,246.002583,730.480708,110,33,68,221,4,1,21,1,0,false,macOS native
+6,244.574833,748.600208,122,31,74,218,4,1,21,1,0,false,macOS native
+7,228.897292,734.938208,35,32,69,219,4,1,21,1,0,false,macOS native

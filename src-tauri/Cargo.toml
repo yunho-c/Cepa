@@ -30,6 +30,11 @@ name = "window_state_smoke"
 path = "examples/window_state_smoke.rs"
 required-features = ["desktop"]
 
+[[example]]
+name = "native_scan_smoke"
+path = "examples/native_scan_smoke.rs"
+required-features = ["desktop"]
+
 [features]
 default = ["desktop"]
 desktop = [

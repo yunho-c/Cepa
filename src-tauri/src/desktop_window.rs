@@ -21,10 +21,17 @@ struct StartupSignal {
 }
 
 pub fn state_plugin<R: Runtime>() -> TauriPlugin<R> {
-    Builder::default()
+    state_plugin_with_filename(None)
+}
+
+pub fn state_plugin_with_filename<R: Runtime>(filename: Option<&str>) -> TauriPlugin<R> {
+    let mut builder = Builder::default()
         .with_state_flags(policy::persisted_state_flags())
-        .skip_initial_state("main")
-        .build()
+        .skip_initial_state("main");
+    if let Some(filename) = filename {
+        builder = builder.with_filename(filename);
+    }
+    builder.build()
 }
 
 pub fn initialize<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error::Error>> {
