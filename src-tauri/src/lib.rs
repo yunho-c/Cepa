@@ -196,24 +196,29 @@ pub fn benchmark_content_integrity(
         }
         let path = path.to_path_buf();
         let cancel = Arc::new(AtomicBool::new(false));
-        let (progress_tx, progress_rx) = mpsc::channel();
+        // Keep the worker at the requested chunk boundary until the controller
+        // has published the cancellation flag.
+        // Fast filesystems can otherwise finish the file before this thread is
+        // scheduled, turning the cancellation measurement into a race.
+        let (progress_tx, progress_rx) = mpsc::sync_channel(0);
+        let (resume_tx, resume_rx) = mpsc::sync_channel(0);
         return thread::scope(|scope| {
             let worker_cancel = cancel.clone();
             let worker = scope.spawn(move || {
                 compression::observe_content_integrity(&path, &worker_cancel, |offset| {
-                    let _ = progress_tx.send(offset);
+                    if offset >= cancel_after_bytes && progress_tx.send(offset).is_ok() {
+                        let _ = resume_rx.recv();
+                    }
                 })
             });
-            let requested_at_bytes = loop {
-                let offset = progress_rx.recv().map_err(|_| {
-                    "content-integrity worker stopped before the cancellation boundary".to_string()
-                })?;
-                if offset >= cancel_after_bytes {
-                    break offset;
-                }
-            };
+            let requested_at_bytes = progress_rx.recv().map_err(|_| {
+                "content-integrity worker stopped before the cancellation boundary".to_string()
+            })?;
             let requested_at = Instant::now();
             cancel.store(true, Ordering::Release);
+            resume_tx.send(()).map_err(|_| {
+                "content-integrity worker stopped at the cancellation boundary".to_string()
+            })?;
             let observation = worker
                 .join()
                 .map_err(|_| "content-integrity worker panicked".to_string())??;
@@ -1437,7 +1442,7 @@ mod tests {
             cancelled.cancel_requested_at_bytes,
             Some(CONTENT_INTEGRITY_CHUNK_BYTES as u64)
         );
-        assert!(cancelled.bytes_read <= (CONTENT_INTEGRITY_CHUNK_BYTES.saturating_mul(2)) as u64);
+        assert_eq!(cancelled.bytes_read, CONTENT_INTEGRITY_CHUNK_BYTES as u64);
         assert!(cancelled.cancellation_latency_us.is_some());
     }
 

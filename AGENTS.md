@@ -537,8 +537,9 @@ Start with these files:
 - `src-tauri/examples/window_state_smoke.rs`: two-process native initial-page,
   geometry persistence, and restoration proof with isolated temporary state.
 - `src-tauri/examples/content_integrity_benchmark.rs`: release throughput and
-  externally requested cancellation measurement for the production plan-content
-  hashing loop.
+  controller-rendezvoused cancellation measurement for the production
+  plan-content hashing loop. The rendezvous excludes controller scheduling from
+  the reported acknowledgement latency.
 - `src-tauri/src/scan_roots.rs`: cross-platform local-volume discovery,
   normalization, APFS system/Data collapsing, and compact wire contract.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and

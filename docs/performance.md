@@ -1187,6 +1187,27 @@ interactive progress requirements, peak RSS beyond the known 1 MiB userspace
 buffer, or native Windows behavior. Raw trials are preserved in
 [`performance-results/2026-07-16-content-integrity.csv`](performance-results/2026-07-16-content-integrity.csv).
 
+Rust 1.97.0 subsequently exposed a scheduling race in the benchmark harness: a
+small, cached fixture could finish before the controller thread published its
+cancellation request. The harness now holds the worker at the requested
+observed chunk until the controller publishes cancellation. This
+makes the requested byte boundary deterministic and isolates the production
+loop's acknowledgement and return latency from controller scheduling. The
+measurements above predate that rendezvous and must not be compared directly
+with current cancellation latency or bytes-after-request results. The current
+harness still does not measure UI dispatch, a request arriving during a blocked
+filesystem read, or worst-case scheduler delay.
+
+The exact rendezvous candidate based on `b0350c6` passed the complete
+dependency-light native check on the same 32-thread Linux host with Rust 1.97.0.
+Repeating the 512 MiB sparse, warm-cache workload for seven pairs produced a
+164,302 us complete-pass median (3,116 MiB/s). Cancellation acknowledgement
+ranged from 27 to 210 us with a 38 us median, and every run stopped at the exact
+256 MiB request boundary. These cancellation results describe only the
+rendezvoused production-loop return path under that cache state. Raw trials are
+preserved in
+[`performance-results/2026-07-16-content-integrity-rendezvous.csv`](performance-results/2026-07-16-content-integrity-rendezvous.csv).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
