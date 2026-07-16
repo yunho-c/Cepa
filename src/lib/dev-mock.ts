@@ -197,12 +197,13 @@ export function installDevMock(requestedScenario: string) {
           detail: "macOS does not report UF_COMPRESSED for this file.",
         } satisfies CompressionState;
       case "estimate_compression_savings": {
+        if (scenario === "estimate-cancel-error") {
+          return new Promise<SavingsEstimate>(() => {});
+        }
         const estimateSteps =
           scenario === "estimate-cancel-late-error"
             ? 15
-            : scenario === "estimate-cancel-error"
-              ? 200
-              : 30;
+            : 30;
         for (let step = 0; step < estimateSteps; step += 1) {
           await delay(20);
           if (cancelledEstimateRequests.delete(Number(args.requestId))) {

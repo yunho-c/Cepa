@@ -225,6 +225,9 @@ a large native fixture. `?mock=finishing-cancel-error` keeps that phase active
 after Stop fails so its recovery treatment can be checked separately.
 `?mock=inspection-error` verifies that a failed per-item metadata read stays
 cause-neutral in the primary inspector while retaining its reason in disclosure.
+`?mock=estimate-cancel-error` deliberately leaves the estimate pending after
+Cancel fails, matching the production contract that the live operation and its
+retry action must remain visible.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

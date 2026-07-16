@@ -1606,96 +1606,101 @@
                   <span>{inspectedEntry.kind === "file" ? "File details" : "Item details"}</span>
                   <strong title={inspectedEntry.name}>{inspectedEntry.name}</strong>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label="Close item details"
-                  title="Close (Esc)"
-                  onclick={closeInspection}
-                ><X /></Button>
-              </header>
-              <div class="inspection-state">
-                <span>Compression</span>
-                <strong data-state={compressionState?.state ?? "loading"}>
-                  {isInspectingCompression
-                    ? "Checking…"
-                    : compressionState
-                      ? formatCompressionState(compressionState)
-                      : "Couldn’t be checked"}
-                </strong>
-              </div>
-              {#if isEstimatingSavings}
-                <div class="estimate-readout" aria-live="polite">
-                  <div>
-                    <span>Potential savings</span>
-                    <strong>{isCancellingEstimate ? "Stopping…" : "Estimating…"}</strong>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isCancellingEstimate}
-                    bind:ref={estimateCancelButton}
-                    onclick={cancelEstimate}
-                  >
-                    Cancel
-                  </Button>
-                  {#if estimateActionError}
-                    <div
-                      class="estimate-action-error"
-                      role="alert"
-                      tabindex="-1"
-                      title={estimateActionError}
-                      bind:this={estimateActionNotice}
-                    >
-                      <AlertCircle aria-hidden="true" />
-                      <p>
-                        <strong>Couldn’t stop estimating.</strong>
-                        <span>The estimate is still running. Try again.</span>
-                      </p>
-                    </div>
+                <div class="inspector-actions">
+                  {#if isEstimatingSavings}
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      disabled={isCancellingEstimate}
+                      bind:ref={estimateCancelButton}
+                      aria-label="Cancel savings estimate"
+                      onclick={cancelEstimate}
+                    >Cancel</Button>
                   {/if}
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Close item details"
+                    title="Close (Esc)"
+                    onclick={closeInspection}
+                  ><X /></Button>
                 </div>
-              {:else if savingsEstimate}
-                <div class="estimate-readout" data-status={savingsEstimate.status}>
-                  <div>
-                    <span>Potential savings</span>
-                    <strong>{formatSavingsEstimate(savingsEstimate)}</strong>
+              </header>
+              <div class="inspector-body">
+                <div class="inspection-state">
+                  <span>Compression</span>
+                  <strong data-state={compressionState?.state ?? "loading"}>
+                    {isInspectingCompression
+                      ? "Checking…"
+                      : compressionState
+                        ? formatCompressionState(compressionState)
+                        : "Couldn’t be checked"}
+                  </strong>
+                </div>
+                {#if isEstimatingSavings}
+                  <div class="estimate-readout estimate-readout-active" aria-live="polite">
+                    <div>
+                      <span>Potential savings</span>
+                      <strong>{isCancellingEstimate ? "Stopping…" : "Estimating…"}</strong>
+                    </div>
+                    {#if estimateActionError}
+                      <div
+                        class="estimate-action-error"
+                        role="alert"
+                        tabindex="-1"
+                        title={estimateActionError}
+                        bind:this={estimateActionNotice}
+                      >
+                        <AlertCircle aria-hidden="true" />
+                        <p>
+                          <strong>Couldn’t stop estimating.</strong>
+                          <span>The estimate is still running. Try again.</span>
+                        </p>
+                      </div>
+                    {/if}
                   </div>
-                  {#if canEstimateSavings}
+                {:else if savingsEstimate}
+                  <div class="estimate-readout" data-status={savingsEstimate.status}>
+                    <div>
+                      <span>Potential savings</span>
+                      <strong>{formatSavingsEstimate(savingsEstimate)}</strong>
+                    </div>
+                    {#if canEstimateSavings}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        bind:ref={estimateActionButton}
+                        onclick={estimateSavings}
+                      >Estimate again</Button>
+                    {/if}
+                    <details class="metadata-disclosure">
+                      <summary>Estimate details</summary>
+                      {#if savingsEstimate.algorithm}
+                        <p>
+                          {savingsEstimate.algorithm} · {savingsEstimate.fidelity === "exact" ? "target codec" : "proxy codec"} · {savingsEstimate.confidence} confidence · {formatBytes(savingsEstimate.sampledBytes)} sampled
+                        </p>
+                      {/if}
+                      <p>{savingsEstimate.detail}</p>
+                    </details>
+                  </div>
+                {:else if canEstimateSavings}
+                  <div class="estimate-prompt">
+                    <span>See how much space compression might save.</span>
                     <Button
                       variant="outline"
                       size="sm"
                       bind:ref={estimateActionButton}
                       onclick={estimateSavings}
-                    >Estimate again</Button>
-                  {/if}
+                    >Estimate</Button>
+                  </div>
+                {/if}
+                {#if compressionState}
                   <details class="metadata-disclosure">
-                    <summary>Estimate details</summary>
-                    {#if savingsEstimate.algorithm}
-                      <p>
-                        {savingsEstimate.algorithm} · {savingsEstimate.fidelity === "exact" ? "target codec" : "proxy codec"} · {savingsEstimate.confidence} confidence · {formatBytes(savingsEstimate.sampledBytes)} sampled
-                      </p>
-                    {/if}
-                    <p>{savingsEstimate.detail}</p>
+                    <summary>Compression details</summary>
+                    <p>{compressionState.detail}</p>
                   </details>
-                </div>
-              {:else if canEstimateSavings}
-                <div class="estimate-prompt">
-                  <span>See how much space compression might save.</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    bind:ref={estimateActionButton}
-                    onclick={estimateSavings}
-                  >Estimate</Button>
-                </div>
-              {/if}
-              {#if compressionState}
-                <details class="metadata-disclosure">
-                  <summary>Compression details</summary>
-                  <p>{compressionState.detail}</p>
-                </details>
-              {/if}
+                {/if}
+              </div>
             </section>
           {/if}
 
