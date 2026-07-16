@@ -62,6 +62,9 @@ describe("production style sources", () => {
     expect(estimateCancelButton).not.toMatch(/^\s*disabled=/m);
     expect(component).toContain('if (scanId === null || status !== "scanning") return;');
     expect(component).toMatch(
+      /status = "scanning";\s+scanProgressAnnouncement = "";\s+scanAnnouncementCheckpoint = \{/,
+    );
+    expect(component).toMatch(
       /!isEstimatingSavings \|\|\s+isCancellingEstimate \|\|\s+isDiscardingScan/,
     );
   });
@@ -233,5 +236,7 @@ describe("production style sources", () => {
     expect(announcementStart).toBeGreaterThan(-1);
     expect(announcement).toContain('aria-live="polite"');
     expect(announcement).toContain('aria-atomic="true"');
+    expect(announcement).toContain("{scanProgressAnnouncement}");
+    expect(announcement).not.toContain("{progressPresentation.announcement}");
   });
 });

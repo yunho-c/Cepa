@@ -53,7 +53,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   prepared, with time-bounded elapsed updates instead of leaving a completed
   traversal looking stalled
 - A focused scan target described by its visible status, with an atomic progress
-  announcement that stays quiet until real filesystem progress exists
+  announcement that stays quiet until real filesystem progress exists, then
+  speaks ordinary updates at least two seconds apart while keeping phase and
+  Stop transitions immediate
 - On-demand directory views backed by the completed in-memory scan snapshot
 - A scan-authorized Home transition that releases the retained snapshot and
   cancels related background work instead of hiding a still-resident result;
@@ -296,6 +298,7 @@ exercise the complete workflow without a native process:
 
 ```text
 http://localhost:1420/?mock=complete
+http://localhost:1420/?mock=announcement-cadence
 http://localhost:1420/?mock=scanning
 http://localhost:1420/?mock=finishing
 http://localhost:1420/?mock=finishing-cancel-error
@@ -332,6 +335,10 @@ alias for `preview`.
 chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
 scan active after a failed stop request so its recovery state can be exercised.
+`?mock=announcement-cadence` emits visual progress every 100 ms for 2.6 seconds
+while leaving the scan active. It verifies that the polite screen-reader status
+speaks the first useful update and then waits at least two seconds, without
+slowing the visible progress surface.
 `?mock=finishing` holds the scan after traversal so the cancellable result-
 preparation state and its delayed Stop acknowledgement can be reviewed without
 a large native fixture. `?mock=finishing-cancel-error` keeps that phase active

@@ -1849,9 +1849,9 @@ the meaningful target and phase were only visually adjacent.
 
 The target heading is now described by the visible status label. The polite
 progress node is atomic and remains mounted but empty until the first real
-filesystem event. Actual scanning, finishing, and stopping updates keep their
-existing bounded cadence. Their shared entry-count formatter now also says
-`1 entry` rather than `1 entries` without changing compact plural counts.
+filesystem event. Their shared entry-count formatter now also says `1 entry`
+rather than `1 entries` without changing compact plural counts. Visual and
+assistive progress cadence were subsequently separated as recorded below.
 
 At 620 by 480 in dark appearance, a deterministic scan-start transition focused
 the `demo` heading, resolved its description to `Scanning`, and observed an empty
@@ -1906,6 +1906,41 @@ Raw alternating measurements are preserved in
 Exact source, commands, cross-target checks, and Linux Rust 1.97.0 evidence are
 recorded in
 [`validation-results/2026-07-16-progress-cadence.txt`](validation-results/2026-07-16-progress-cadence.txt).
+
+### 2026-07-16 calm assistive scan progress
+
+Time-bounding bridge progress to 100 ms removed unbounded transport work, but
+the polite atomic live region still consumed every visual update. A sustained
+scan could therefore change its spoken sentence ten times per second. Polite
+regions may coalesce in a particular accessibility stack, but relying on that
+is neither calm nor deterministic.
+
+The active scan now keeps a separate announcement checkpoint. It speaks the
+first non-placeholder observation, then waits at least two seconds of scanner
+elapsed time between ordinary announcements. Entering `finishing` and starting
+a Stop request bypass that interval so lifecycle feedback remains immediate.
+Starting another scan clears the checkpoint. The visible path,
+totals, facts, and partial ranking still render at the bounded bridge cadence;
+assistive pacing does not make the visual application stale.
+
+The development-only `?mock=announcement-cadence` scenario emitted 26 visual
+updates at 100 ms intervals. At 620 by 480, the visible surface reached 53K
+items, 6.50 GB, and 2.6 seconds while a `MutationObserver` recorded exactly two
+live sentences: the first update at 2K items and the next at 43K items two
+seconds later. Activating Stop immediately changed the live sentence to
+`Stopping after 53K entries.` before the focused cancelled recovery state
+replaced the scan. The failed-Stop mock separately returned the visible phase to
+`Scanning`, focused its contextual alert, and cleared the obsolete live sentence
+instead of leaving contradictory `Stopping` state. Pure helper regressions cover
+placeholder suppression, minimum spacing, finishing, and stopping independent
+of browser scheduling.
+
+Exact commands, source hashes, build checks, native smoke evidence, and the
+remaining validation boundary are recorded in
+[`validation-results/2026-07-16-calm-scan-announcements.txt`](validation-results/2026-07-16-calm-scan-announcements.txt).
+This is deterministic DOM mutation and programmatic WebView evidence; it is not
+a certification of VoiceOver, Narrator, Orca, or any other particular screen
+reader's speech queue.
 
 ### 2026-07-16 macOS real-tree refresh
 

@@ -47,6 +47,10 @@
     type ScanRootsStatus,
   } from "$lib/scan-roots";
   import {
+    nextScanProgressAnnouncement,
+    type ScanProgressAnnouncementCheckpoint,
+  } from "$lib/scan-progress-announcement";
+  import {
     formatBytes,
     formatBackend,
     formatCompressionState,
@@ -114,6 +118,8 @@
   let errorMessage = $state("");
   let scanStarted = $state(false);
   let scanActionError = $state("");
+  let scanProgressAnnouncement = $state("");
+  let scanAnnouncementCheckpoint: ScanProgressAnnouncementCheckpoint | null = null;
   let navigationError = $state("");
   let navigationErrorTitle = $state("That folder could not be opened.");
   let navigationRecovery = $state<NavigationRecovery | null>(null);
@@ -576,6 +582,8 @@
       delete document.documentElement.dataset.cepaScanRenderMs;
     }
     progress = null;
+    scanProgressAnnouncement = "";
+    scanAnnouncementCheckpoint = null;
     result = null;
     view = null;
     pointerEntry = null;
@@ -605,6 +613,10 @@
         scanStarted = true;
         scanId = message.scanId;
         progress = message.progress;
+        publishScanProgressAnnouncement(
+          message.progress,
+          status === "cancelling",
+        );
       } else if (message.event === "completed") {
         resolveScan(message.response);
       } else {
@@ -662,16 +674,37 @@
     });
   }
 
+  function publishScanProgressAnnouncement(
+    nextProgress: ScanProgress,
+    cancelling: boolean,
+  ) {
+    const update = nextScanProgressAnnouncement(
+      scanAnnouncementCheckpoint,
+      nextProgress,
+      cancelling,
+    );
+    if (!update) return;
+    scanAnnouncementCheckpoint = update.checkpoint;
+    scanProgressAnnouncement = update.announcement;
+  }
+
   async function cancelScan() {
     if (scanId === null || status !== "scanning") return;
     const cancellingScanId = scanId;
     scanActionError = "";
     status = "cancelling";
+    publishScanProgressAnnouncement(displayProgress, true);
     try {
       await invoke<boolean>("cancel_scan", { scanId: cancellingScanId });
     } catch (error) {
       if (scanId !== cancellingScanId || status !== "cancelling") return;
       status = "scanning";
+      scanProgressAnnouncement = "";
+      scanAnnouncementCheckpoint = {
+        phase: displayProgress.phase,
+        cancelling: false,
+        announcedElapsedMs: Math.max(0, displayProgress.elapsedMs),
+      };
       scanActionError = String(error);
       await tick();
       scanActionNotice?.focus();
@@ -1571,7 +1604,7 @@
         class="sr-only scan-progress-announcement"
         aria-live="polite"
         aria-atomic="true"
-      >{progressPresentation.announcement}</p>
+      >{scanProgressAnnouncement}</p>
       <section class="scan-progress" aria-labelledby="scan-progress-title">
         <div class="scan-titlebar">
           <div>

@@ -58,9 +58,14 @@ target heading and associate it with the visible Scanning status. Keep the polit
 atomic progress region empty while the frontend still has only its zero-value
 placeholder; `Scanned 0 entries and 0 B` is not a useful transition announcement.
 Begin live progress only after a real event, and retain accurate singular/plural
-entry wording through scanning, finishing, and stopping states. The shared
-completion path emits one backend-neutral `finishing` progress phase before
-bottom-up aggregation
+entry wording through scanning, finishing, and stopping states. Do not bind the
+polite region directly to every visual progress render: speak the first useful
+event, wait at least two seconds between ordinary updates, and announce a phase
+change or Stop request immediately. Reset this checkpoint for every scan. The
+100 ms bridge/visual cadence and the two-second assistive cadence are separate
+contracts; do not slow the visible surface to make the live region calm. The
+shared completion path emits one backend-neutral `finishing` progress phase
+before bottom-up aggregation
 and no redundant post-aggregation update. Present it as `Finishing` with
 `Preparing resultsâ€¦`, keep Stop available because aggregation is cancellable,
 and do not expose aggregation terminology in the primary UI. Refresh its elapsed
@@ -70,7 +75,9 @@ request must retain the finishing phase's `Space found` and `Preparing resultsâ€
 context instead of visually regressing to traversal copy. Stop must remain
 focusable with guarded `aria-disabled` state while its request is live, reject
 repeat activation, and move focus to either the cancelled state or its contextual
-retry error when the request settles.
+retry error when the request settles. If the Stop command fails, clear the stale
+`Stopping` live sentence and resynchronize the announcement checkpoint to the
+still-running scan; the focused error callout owns that recovery message.
 Traversal progress transport is time-bounded to one update per 100 ms on
 `jwalk`, macOS, and Linux, matching Windows and finishing heartbeats. Do not
 restore the former 2,048-entry OR condition: fast local scans could emit hundreds

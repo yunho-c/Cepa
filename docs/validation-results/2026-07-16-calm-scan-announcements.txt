@@ -1,0 +1,94 @@
+Cepa calm scan-announcement validation
+Date: 2026-07-16
+Candidate baseline: 7cb78f9 plus the calm-announcement working-tree change
+
+Invariant under test
+- visual scan progress remains current at the bounded bridge cadence
+- the first useful filesystem observation is announced immediately
+- ordinary polite live-region changes are separated by at least 2,000 ms of
+  scanner elapsed time
+- entering finishing and starting Stop bypass the ordinary interval
+- every scan starts with a fresh checkpoint and an empty placeholder status
+- a failed Stop clears obsolete Stopping copy, returns the visible phase to
+  Scanning, and leaves its focused alert as the recovery announcement owner
+
+Exact candidate hashes
+- src/App.svelte:
+  5cd123fce3aec9bac5453a53acee17622f7445c88c46293d748f84dc2a8fe4d0
+- src/lib/scan-progress-announcement.ts:
+  e9e9dbd250dd57b2a6956e664bbb247a4e3ed174ee84e319787c70f298f2a6be
+- src/lib/scan-progress-announcement.test.ts:
+  87493bb88551559d8834a00ae01eecdfdaaa3deae76b288de5c37ff47239f5fe
+- src/lib/dev-mock.ts:
+  49163b22db87287acf33125cf963d3cef5a559acdf3be848838321f33471ea70
+- src/lib/style-sources.test.ts:
+  33a9626b5d7904e02411ec2003de5bfbb0128afe248052b5bfefc0c7aed47e02
+
+Deterministic frontend regressions: passed
+- placeholder zero progress did not create an announcement checkpoint
+- the first nonzero update published immediately
+- an ordinary update 1,999 ms later was coalesced
+- an ordinary update 2,000 ms later published
+- finishing and stopping transitions published within the same ordinary window
+- source regression keeps the live region bound to the paced sentence rather
+  than the 10 Hz visual presentation
+- source regression keeps failed-Stop recovery from retaining Stopping copy
+
+Browser DOM validation at 620 by 480: passed
+- Playwright CLI drove `?mock=announcement-cadence&appearance=light`
+- the fixture emitted 26 visual updates at 100 ms intervals over 2.6 seconds
+- visible final state: 53K items, 6.50 GB, 2.6 s, no horizontal overflow
+- a MutationObserver recorded exactly two ordinary live sentences:
+  - Scanned 2K entries and 256 MB.
+  - Scanned 43K entries and 5.25 GB.
+- Stop immediately produced `Stopping after 53K entries.` before focus moved to
+  the completed `Scan stopped` recovery notice
+- `?mock=cancel-error` returned the visible phase to Scanning, focused the
+  contextual alert, and left the polite progress node empty
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- Bun: 1.3.14
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 72 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 102 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: production frontend and optimized desktop executable passed
+- production bundle contained none of the development cadence scenario, fixture
+  helper, or mock root strings
+- production macOS WebView/IPC smoke: passed
+  - native backend, terminal failure, real cancellation, completion, inspector,
+    metrics, keyboard navigation, search, discard, stale-ID rejection, and
+    same-process rescan all passed
+  - Stop completed in 50 ms
+  - no page errors or horizontal overflow at 620 by 480
+
+Native Linux exact-source validation: passed
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- Cargo: 1.97.0 (c980f4866 2026-06-30)
+- Bun: 1.2.21 through the existing NVM installation
+- all five candidate source hashes matched the local source exactly
+- Svelte diagnostics: 0 errors and 0 warnings
+- frontend tests: 72 passed
+- production Vite build: passed
+- dependency-light formatting, all-target check, strict Clippy, and tests: passed
+- Linux native-core tests: 77 passed, 1 real-Btrfs fixture ignored
+- configuration and auxiliary target suites: passed
+- disposable source, dependencies, build outputs, and target directory removed
+  after validation; the standing checkout was unchanged
+
+Native Windows validation: unavailable
+- the Windows host timed out on an eight-second SSH probe
+- no Rust or platform-specific frontend branch changed in this slice
+- the production bundle built independently on macOS and Linux, but this is not
+  native WebView2 or Narrator evidence
+
+Evidence boundary
+This proves deterministic live-region DOM mutation pacing, immediate lifecycle
+state changes, focused failed-Stop recovery, production compilation, and a real
+macOS WebView scan lifecycle. It does not certify what VoiceOver, Narrator,
+Orca, or another screen reader ultimately speaks or how its queue coalesces. It
+also does not provide fresh native Windows or Linux desktop-WebView runtime
+evidence; the Linux result is exact-source frontend and native-core validation.

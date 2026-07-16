@@ -14,6 +14,7 @@ import { createStressDirectoryView, createStressView } from "./dev-stress";
 
 type DevScenario =
   | "complete"
+  | "announcement-cadence"
   | "discard-error"
   | "scanning"
   | "cancel-error"
@@ -77,6 +78,20 @@ export function installDevMock(requestedScenario: string) {
         const scan = { channelId, index: 1, cancelled: false };
         pendingScan = scan;
         void (async () => {
+          if (scenario === "announcement-cadence") {
+            await delay(250);
+            for (let step = 1; step <= 26; step += 1) {
+              if (scan.cancelled) return;
+              emitChannel(channelId, scan.index, {
+                event: "progress",
+                scanId,
+                progress: mockCadenceProgress(step),
+              });
+              scan.index += 1;
+              await delay(100);
+            }
+            return;
+          }
           await delay(35);
           if (scan.cancelled) return;
           emitChannel(channelId, 1, {
@@ -312,6 +327,7 @@ export function installDevMock(requestedScenario: string) {
 function isScenario(value: string): value is DevScenario {
   return [
     "complete",
+    "announcement-cadence",
     "discard-error",
     "scanning",
     "cancel-error",
@@ -366,6 +382,18 @@ function mockProgress(
         logicalBytes: Math.round(item.logicalBytes * 0.58),
         allocatedBytes: Math.round(item.allocatedBytes * 0.58),
       })),
+  };
+}
+
+function mockCadenceProgress(step: number): ScanProgress {
+  const entriesScanned = step * 2_048;
+  return {
+    ...mockProgress("scanning", step * 100),
+    entriesScanned,
+    filesScanned: entriesScanned - 48,
+    directoriesScanned: 48,
+    logicalBytes: step * 314_572_800,
+    allocatedBytes: step * 268_435_456,
   };
 }
 
