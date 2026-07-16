@@ -1,0 +1,65 @@
+Cepa cancellable-request lifecycle validation
+Date: 2026-07-16
+Candidate baseline: 61ba647 plus the request-lifecycle working-tree change
+
+Invariant under test
+- estimate and directory-search tokens are allocated while replacing the active
+  backend request under the same lock
+- a concurrent newer request cancels every earlier owner, and an earlier finish
+  cannot clear the latest request
+- compression plan ID, generation, prepared plan, and cancellation token are
+  one atomic lifecycle
+- plan completion can install only the current still-preparing generation
+- current preparation failure cancels and invalidates that generation, while a
+  stale failure cannot clear a newer preparation or stored plan
+
+Deterministic Rust regressions: passed
+- 16 estimate starts rendezvoused at one barrier; tokens 1 through 16 were
+  issued once, tokens 1 through 15 were cancelled, and token 16 remained active
+- the same 16-start ownership proof passed for directory search
+- 16 plan starts issued paired IDs/generations 1 through 16; every earlier
+  cancellation token was set and the stored plan returned token 16 exactly
+- a stale plan failure preserved the current stored plan and token
+- a current plan failure cancelled its token, advanced the generation, and did
+  not affect the next preparation
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 49 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 99 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: optimized desktop executable built
+- production WebView/IPC smoke at 620 by 480: passed
+  - backend: macOS native
+  - real debounced search returned one match through Tauri
+  - scan discard, stale-ID rejection, and same-process rescan passed
+  - no page errors or horizontal overflow
+
+Native Linux validation: passed
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- exact `src-tauri/src/lib.rs` candidate hash matched the local source
+- full desktop formatting and all-target `cargo check`: passed
+- full desktop all-target Clippy with `-D warnings`: passed
+- full desktop all-target tests: passed
+  - Rust library tests: 101 passed
+  - real-Btrfs and file-manager tests: 2 ignored as designed
+  - configuration and auxiliary target suites: passed
+- GTK, WebKitGTK 4.1, AppIndicator, librsvg, and DBus development files were
+  extracted into a disposable user-local sysroot; no system packages or
+  standing checkout files were changed
+
+Windows GNU cross-target validation: passed
+- default-feature all-target `cargo check`: passed
+- default-feature all-target Clippy with `-D warnings`: passed
+- the native Windows machine did not answer a short SSH probe, so this candidate
+  has no fresh Windows runtime or WebView2 evidence
+
+Evidence boundary
+This proves backend ownership and cancellation-token pairing under concurrent
+starts, ordinary production macOS search/lifecycle behavior, and native Linux
+desktop compilation and tests under Rust 1.97. It is not scheduler fairness,
+worst-case cancellation-latency, simultaneous frontend gesture, native Windows
+runtime, or compression-writer evidence.

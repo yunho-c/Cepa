@@ -512,26 +512,30 @@ impl RejectedScanCompletion {
 #[cfg(feature = "desktop")]
 #[derive(Default)]
 struct EstimateState {
-    next_token: AtomicU64,
-    active: Mutex<Option<ActiveEstimate>>,
-}
-
-#[cfg(feature = "desktop")]
-struct ActiveEstimate {
-    token: u64,
-    request_id: u64,
-    cancel: Arc<AtomicBool>,
+    requests: CancellableRequestState,
 }
 
 #[cfg(feature = "desktop")]
 #[derive(Default)]
 struct SearchState {
-    next_token: AtomicU64,
-    active: Mutex<Option<ActiveSearch>>,
+    requests: CancellableRequestState,
 }
 
 #[cfg(feature = "desktop")]
-struct ActiveSearch {
+#[derive(Default)]
+struct CancellableRequestState {
+    lifecycle: Mutex<CancellableRequestLifecycle>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Default)]
+struct CancellableRequestLifecycle {
+    next_token: u64,
+    active: Option<ActiveRequest>,
+}
+
+#[cfg(feature = "desktop")]
+struct ActiveRequest {
     token: u64,
     request_id: u64,
     cancel: Arc<AtomicBool>,
@@ -540,10 +544,16 @@ struct ActiveSearch {
 #[cfg(feature = "desktop")]
 #[derive(Default)]
 struct CompressionPlanState {
-    next_id: AtomicU64,
-    generation: AtomicU64,
-    active: Mutex<Option<ActiveCompressionPlan>>,
-    cancel: Mutex<Option<Arc<AtomicBool>>>,
+    lifecycle: Mutex<CompressionPlanLifecycle>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Default)]
+struct CompressionPlanLifecycle {
+    next_id: u64,
+    generation: u64,
+    active: Option<ActiveCompressionPlan>,
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 #[cfg(feature = "desktop")]
@@ -555,21 +565,24 @@ struct ActiveCompressionPlan {
 #[cfg(feature = "desktop")]
 impl CompressionPlanState {
     fn begin(&self) -> (u64, u64, Arc<AtomicBool>) {
-        let plan_id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
-        *self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = None;
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut active_cancel = self
-            .cancel
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if let Some(previous) = active_cancel.replace(cancel.clone()) {
+        lifecycle.next_id = lifecycle
+            .next_id
+            .checked_add(1)
+            .expect("compression plan ID space exhausted");
+        lifecycle.generation = lifecycle
+            .generation
+            .checked_add(1)
+            .expect("compression plan generation space exhausted");
+        lifecycle.active = None;
+        if let Some(previous) = lifecycle.cancel.replace(cancel.clone()) {
             previous.store(true, Ordering::Release);
         }
-        (plan_id, generation, cancel)
+        (lifecycle.next_id, lifecycle.generation, cancel)
     }
 
     fn finish(
@@ -577,33 +590,34 @@ impl CompressionPlanState {
         generation: u64,
         plan: compression::PreparedCompressionPlan,
     ) -> Result<compression::CompressionPlanPreview, String> {
-        let mut active = self
-            .active
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if self.generation.load(Ordering::Acquire) != generation {
+        if lifecycle.generation != generation
+            || lifecycle.active.is_some()
+            || lifecycle.cancel.is_none()
+        {
             return Err("That compression plan was superseded by a newer request.".into());
         }
         let preview = plan.preview().clone();
-        *active = Some(ActiveCompressionPlan { generation, plan });
+        lifecycle.active = Some(ActiveCompressionPlan { generation, plan });
         Ok(preview)
     }
 
     fn fail(&self, generation: u64) {
-        let mut active = self
-            .active
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if self.generation.load(Ordering::Acquire) == generation {
-            *active = None;
-            if let Some(cancel) = self
-                .cancel
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .take()
-            {
+        if lifecycle.generation == generation && lifecycle.active.is_none() {
+            if let Some(cancel) = lifecycle.cancel.take() {
                 cancel.store(true, Ordering::Release);
             }
+            lifecycle.generation = lifecycle
+                .generation
+                .checked_add(1)
+                .expect("compression plan generation space exhausted");
         }
     }
 
@@ -611,18 +625,17 @@ impl CompressionPlanState {
         &self,
         plan_id: u64,
     ) -> Result<(u64, compression::PreparedCompressionPlan, Arc<AtomicBool>), String> {
-        let active = self
-            .active
+        let lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        let active = active
+        let active = lifecycle
+            .active
             .as_ref()
             .filter(|active| active.plan.preview().plan_id == plan_id)
             .ok_or_else(|| "That compression plan is no longer available.".to_string())?;
-        let cancel = self
+        let cancel = lifecycle
             .cancel
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
             .as_ref()
             .cloned()
             .ok_or_else(|| "That compression plan is no longer available.".to_string())?;
@@ -630,29 +643,102 @@ impl CompressionPlanState {
     }
 
     fn is_current(&self, generation: u64, plan_id: u64) -> bool {
-        let active = self
-            .active
+        let lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        self.generation.load(Ordering::Acquire) == generation
-            && active
+        lifecycle.generation == generation
+            && lifecycle
+                .active
                 .as_ref()
                 .is_some_and(|active| active.plan.preview().plan_id == plan_id)
     }
 
     fn clear(&self) {
-        self.generation.fetch_add(1, Ordering::AcqRel);
-        *self
-            .active
+        let mut lifecycle = self
+            .lifecycle
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = None;
-        if let Some(cancel) = self
-            .cancel
+            .unwrap_or_else(|error| error.into_inner());
+        lifecycle.generation = lifecycle
+            .generation
+            .checked_add(1)
+            .expect("compression plan generation space exhausted");
+        lifecycle.active = None;
+        if let Some(cancel) = lifecycle.cancel.take() {
+            cancel.store(true, Ordering::Release);
+        }
+    }
+
+    #[cfg(test)]
+    fn generation(&self) -> u64 {
+        self.lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner())
+            .generation
+    }
+}
+
+#[cfg(feature = "desktop")]
+impl CancellableRequestState {
+    fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        lifecycle.next_token = lifecycle
+            .next_token
+            .checked_add(1)
+            .expect("request token space exhausted");
+        let token = lifecycle.next_token;
+        if let Some(previous) = lifecycle.active.replace(ActiveRequest {
+            token,
+            request_id,
+            cancel: cancel.clone(),
+        }) {
+            previous.cancel.store(true, Ordering::Relaxed);
+        }
+        (token, cancel)
+    }
+
+    fn cancel(&self, request_id: u64) -> bool {
+        let lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        lifecycle.active.as_ref().is_some_and(|request| {
+            if request.request_id == request_id {
+                request.cancel.store(true, Ordering::Relaxed);
+                true
+            } else {
+                false
+            }
+        })
+    }
+
+    fn cancel_active(&self) {
+        if let Some(active) = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .active
             .take()
         {
-            cancel.store(true, Ordering::Release);
+            active.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn finish(&self, token: u64) {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if lifecycle
+            .active
+            .as_ref()
+            .is_some_and(|request| request.token == token)
+        {
+            lifecycle.active = None;
         }
     }
 }
@@ -660,115 +746,38 @@ impl CompressionPlanState {
 #[cfg(feature = "desktop")]
 impl EstimateState {
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
-        let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
-        let cancel = Arc::new(AtomicBool::new(false));
-        let mut active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if let Some(previous) = active.replace(ActiveEstimate {
-            token,
-            request_id,
-            cancel: cancel.clone(),
-        }) {
-            previous.cancel.store(true, Ordering::Relaxed);
-        }
-        (token, cancel)
+        self.requests.begin(request_id)
     }
 
     fn cancel(&self, request_id: u64) -> bool {
-        let active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        active.as_ref().is_some_and(|estimate| {
-            if estimate.request_id == request_id {
-                estimate.cancel.store(true, Ordering::Relaxed);
-                true
-            } else {
-                false
-            }
-        })
+        self.requests.cancel(request_id)
     }
 
     fn cancel_active(&self) {
-        if let Some(active) = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take()
-        {
-            active.cancel.store(true, Ordering::Relaxed);
-        }
+        self.requests.cancel_active();
     }
 
     fn finish(&self, token: u64) {
-        let mut active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if active
-            .as_ref()
-            .is_some_and(|estimate| estimate.token == token)
-        {
-            *active = None;
-        }
+        self.requests.finish(token);
     }
 }
 
 #[cfg(feature = "desktop")]
 impl SearchState {
     fn begin(&self, request_id: u64) -> (u64, Arc<AtomicBool>) {
-        let token = self.next_token.fetch_add(1, Ordering::Relaxed) + 1;
-        let cancel = Arc::new(AtomicBool::new(false));
-        let mut active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if let Some(previous) = active.replace(ActiveSearch {
-            token,
-            request_id,
-            cancel: cancel.clone(),
-        }) {
-            previous.cancel.store(true, Ordering::Relaxed);
-        }
-        (token, cancel)
+        self.requests.begin(request_id)
     }
 
     fn cancel(&self, request_id: u64) -> bool {
-        let active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        active.as_ref().is_some_and(|search| {
-            if search.request_id == request_id {
-                search.cancel.store(true, Ordering::Relaxed);
-                true
-            } else {
-                false
-            }
-        })
+        self.requests.cancel(request_id)
     }
 
     fn cancel_active(&self) {
-        if let Some(active) = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take()
-        {
-            active.cancel.store(true, Ordering::Relaxed);
-        }
+        self.requests.cancel_active();
     }
 
     fn finish(&self, token: u64) {
-        let mut active = self
-            .active
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if active.as_ref().is_some_and(|search| search.token == token) {
-            *active = None;
-        }
+        self.requests.finish(token);
     }
 }
 
@@ -1513,6 +1522,47 @@ mod tests {
     }
 
     #[cfg(feature = "desktop")]
+    fn assert_concurrent_request_ownership<State>(
+        state: Arc<State>,
+        begin: fn(&State, u64) -> (u64, Arc<AtomicBool>),
+        cancel: fn(&State, u64) -> bool,
+    ) where
+        State: Send + Sync + 'static,
+    {
+        const START_COUNT: usize = 16;
+
+        let barrier = Arc::new(std::sync::Barrier::new(START_COUNT));
+        let mut workers = Vec::with_capacity(START_COUNT);
+        for request_id in 100..100 + START_COUNT as u64 {
+            let state = Arc::clone(&state);
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                let (token, cancel) = begin(&state, request_id);
+                (token, request_id, cancel)
+            }));
+        }
+
+        let mut starts = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("request starter must finish"))
+            .collect::<Vec<_>>();
+        starts.sort_unstable_by_key(|(token, _, _)| *token);
+        for (index, (token, _, cancellation)) in starts.iter().enumerate() {
+            assert_eq!(*token, index as u64 + 1);
+            assert_eq!(
+                cancellation.load(Ordering::Relaxed),
+                index + 1 < START_COUNT
+            );
+        }
+
+        let (_, active_request_id, active_cancel) = &starts[START_COUNT - 1];
+        assert!(!cancel(&state, starts[0].1));
+        assert!(cancel(&state, *active_request_id));
+        assert!(active_cancel.load(Ordering::Relaxed));
+    }
+
+    #[cfg(feature = "desktop")]
     #[test]
     fn estimate_requests_cancel_superseded_work() {
         let state = EstimateState::default();
@@ -1556,6 +1606,26 @@ mod tests {
         assert!(second.load(Ordering::Relaxed));
         state.finish(second_token);
         assert!(!state.cancel(31));
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn concurrent_estimate_starts_leave_the_latest_token_active() {
+        assert_concurrent_request_ownership(
+            Arc::new(EstimateState::default()),
+            EstimateState::begin,
+            EstimateState::cancel,
+        );
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn concurrent_search_starts_leave_the_latest_token_active() {
+        assert_concurrent_request_ownership(
+            Arc::new(SearchState::default()),
+            SearchState::begin,
+            SearchState::cancel,
+        );
     }
 
     #[cfg(feature = "desktop")]
@@ -1636,6 +1706,97 @@ mod tests {
             identity_anchor.upgrade().is_none(),
             "clearing the plan must release its anchor after in-flight work ends"
         );
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn failed_plan_preparation_invalidates_only_its_generation() {
+        let state = CompressionPlanState::default();
+        let (failed_id, failed_generation, failed_cancel) = state.begin();
+
+        state.fail(failed_generation);
+        assert!(failed_cancel.load(Ordering::Acquire));
+        assert!(state.generation() > failed_generation);
+        assert!(state.get(failed_id).is_err());
+
+        let (_, current_generation, current_cancel) = state.begin();
+        state.fail(failed_generation);
+        assert_eq!(state.generation(), current_generation);
+        assert!(!current_cancel.load(Ordering::Acquire));
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn concurrent_plan_starts_keep_generation_and_cancellation_together() {
+        const START_COUNT: usize = 16;
+
+        let state = Arc::new(CompressionPlanState::default());
+        let barrier = Arc::new(std::sync::Barrier::new(START_COUNT));
+        let mut workers = Vec::with_capacity(START_COUNT);
+        for _ in 0..START_COUNT {
+            let state = Arc::clone(&state);
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                state.begin()
+            }));
+        }
+
+        let mut starts = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("plan starter must finish"))
+            .collect::<Vec<_>>();
+        starts.sort_unstable_by_key(|(_, generation, _)| *generation);
+        for (index, (plan_id, generation, cancellation)) in starts.iter().enumerate() {
+            let expected = index as u64 + 1;
+            assert_eq!(*plan_id, expected);
+            assert_eq!(*generation, expected);
+            assert_eq!(
+                cancellation.load(Ordering::Acquire),
+                index + 1 < START_COUNT
+            );
+        }
+
+        let (plan_id, generation, active_cancel) = &starts[START_COUNT - 1];
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, vec![1_u8; 4096]).expect("write fixture file");
+        let metadata = fs::metadata(&path).expect("read fixture metadata");
+        #[cfg(unix)]
+        let allocated_bytes = {
+            use std::os::unix::fs::MetadataExt;
+            metadata.blocks() * 512
+        };
+        #[cfg(not(unix))]
+        let allocated_bytes = metadata.len();
+        let target = scanner::CompressionTarget {
+            path: path.clone(),
+            kind: scanner::EntryKind::File,
+            logical_bytes: metadata.len(),
+            allocated_bytes,
+            allocated_size_is_estimate: !cfg!(unix),
+            scan_revision: crate::file_revision::snapshot_no_follow(&path)
+                .ok()
+                .map(|snapshot| snapshot.scanned),
+        };
+        let plan = compression::prepare_plan(
+            *plan_id,
+            1,
+            1,
+            target,
+            compression::CompressionOperation::Compress,
+            active_cancel,
+        )
+        .expect("prepare current plan");
+
+        state.finish(*generation, plan).expect("store current plan");
+        state.fail(starts[0].1);
+        let (stored_generation, _, stored_cancel) =
+            state.get(*plan_id).expect("retrieve current plan");
+        assert_eq!(stored_generation, *generation);
+        assert!(Arc::ptr_eq(&stored_cancel, active_cancel));
+        state.clear();
+        assert!(active_cancel.load(Ordering::Acquire));
     }
 
     #[test]
@@ -1788,7 +1949,7 @@ mod tests {
         let searches = SearchState::default();
         let (_, search_cancel) = searches.begin(92);
         let plans = CompressionPlanState::default();
-        let plan_generation = plans.generation.load(Ordering::Acquire);
+        let plan_generation = plans.generation();
 
         assert_eq!(
             discard_scan_state(stale_scan_id, &scans, &estimates, &searches, &plans)
@@ -1798,7 +1959,7 @@ mod tests {
         assert!(retained_weak.upgrade().is_some());
         assert!(!estimate_cancel.load(Ordering::Relaxed));
         assert!(!search_cancel.load(Ordering::Relaxed));
-        assert_eq!(plans.generation.load(Ordering::Acquire), plan_generation);
+        assert_eq!(plans.generation(), plan_generation);
 
         let released = discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
             .expect("discard current scan")
@@ -1806,7 +1967,7 @@ mod tests {
         assert!(retained_weak.upgrade().is_some());
         assert!(estimate_cancel.load(Ordering::Relaxed));
         assert!(search_cancel.load(Ordering::Relaxed));
-        assert!(plans.generation.load(Ordering::Acquire) > plan_generation);
+        assert!(plans.generation() > plan_generation);
         assert_eq!(
             scans
                 .root_path(scan_id)

@@ -255,6 +255,11 @@ Completed directory views also support debounced, current-folder name search.
 Rust matches every direct child before retaining the metric-ranked top 500, so
 items below the ordinary list cutoff remain discoverable without expanding IPC
 or rendering bounds. Search is scan-authorized and never accepts a path.
+Search and savings-estimate requests each own a separate cancellable backend
+lifecycle, but use the same atomic transition contract: allocate the monotonic
+token and replace the active request under one lock, cancel the prior token, and
+let finish clear only the matching owner. Preserve the concurrent-start tests;
+an older call must not become active after a newer token has been issued.
 Completed scans can be rerun against the same root without reopening the folder
 picker. At native desktop widths, keep this action visibly labeled `Scan again`
 in the persistent header; browser previews at 400 logical pixels or narrower may
@@ -353,6 +358,12 @@ anchor after any in-flight validation completes. For regular files, the scanner
 retains a compact exact identity plus modification/change revision when the
 backend can provide it, and preparation rejects unavailable or mismatched
 scan-time revisions before producing a plan.
+Plan ID allocation, generation, prepared plan, and cancellation token share one
+lifecycle lock. Begin invalidates the previous plan and token atomically;
+finish can install only the current still-preparing generation; current failure
+advances that generation, while a stale failure cannot clear a newer preparation
+or stored plan. Keep the concurrent-start token-pairing and stale-failure
+regressions when changing this dormant protocol.
 On Windows, keep ordinary `snapshot_no_follow` opens attribute-only so portable
 scans do not require content-read permission for every file. Only explicit plan
 preparation uses `open_content_snapshot_no_follow` to add `GENERIC_READ`; do not

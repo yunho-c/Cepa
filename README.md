@@ -57,7 +57,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   capping transient child-ID storage at 2 MiB for extremely wide directories
 - Case-insensitive current-folder search across every retained direct child,
   bounded to 500 metric-ranked results after matching, with one responsive-safe
-  live result-count announcement
+  live result-count announcement and atomic backend request ownership
 - Reveal-in-file-manager actions authorized by completed scan and item IDs
 - Compact scan-time file identity and revision retention across native and
   portable backends, used to reject changed files before compression planning
@@ -70,8 +70,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   replacement
 - Explicit, cancellable savings estimates that read at most three 256 KiB ranges,
   report a range and confidence, and identify exact target codecs versus proxies
-- Request-owned estimate cancellation so a late stop error cannot replace a
-  valid result, with retry kept available when estimation is still running
+- Request-owned estimate cancellation with atomic concurrent-start ordering so
+  an older worker cannot become current after a newer token, while retry remains
+  available when estimation is still running
 - Single-Tab-stop radial navigation with wrapping arrow keys, Home/End movement,
   Enter/Space activation, and coordinated breadcrumbs and ranked item lists
 - Roving directory-list focus that keeps at most the current row's primary and

@@ -336,6 +336,16 @@ cannot stall the planning worker. The retained handle is shared only with an
 already-running validation and otherwise closes with invalidation, so dormant
 previews cannot accumulate open files.
 
+The single-plan backend lifecycle keeps its next ID, generation, prepared plan,
+and cancellation token under one mutex. A new preparation advances both
+identifiers, removes the old plan, and replaces and cancels the old token in one
+transition. Completion installs a plan only if that generation is still in its
+preparing phase. Failure cancels and invalidates only the matching preparation;
+a delayed failure cannot remove a newer preparation or a stored plan. A
+barrier-started regression additionally requires each issued ID and generation
+to remain paired with its own cancellation token. These ownership rules make
+the read-only protocol internally coherent; they do not close any writer gate.
+
 Every preview currently contains a `writerUnavailable` blocker, no apply command
 exists, and the UI intentionally exposes no dead-end planning action. The
 retained scan snapshot rejects planning when a usable scan-time revision is
