@@ -20,7 +20,9 @@ fn main() {
             std::process::exit(2);
         }
         None => {
-            eprintln!("usage: native_scan_smoke <directory>");
+            eprintln!(
+                "usage: native_scan_smoke <directory> [cancellation-directory] [failure-file]"
+            );
             std::process::exit(2);
         }
     };
@@ -46,7 +48,22 @@ fn main() {
             .map(|path| path.to_string_lossy()),
     )
     .expect("serialize native cancellation smoke fixture path");
-    let completed_scan_id = 1 + u64::from(cancellation_fixture.is_some());
+    let failure_fixture = match std::env::args_os().nth(3).map(PathBuf::from) {
+        Some(path) if path.is_file() => Some(
+            path.canonicalize()
+                .expect("canonicalize native failure smoke fixture"),
+        ),
+        Some(path) => {
+            eprintln!("{} is not a failure fixture file", path.display());
+            std::process::exit(2);
+        }
+        None => None,
+    };
+    let failure_fixture_json =
+        serde_json::to_string(&failure_fixture.as_ref().map(|path| path.to_string_lossy()))
+            .expect("serialize native failure smoke fixture path");
+    let completed_scan_id =
+        1 + u64::from(cancellation_fixture.is_some()) + u64::from(failure_fixture.is_some());
     let succeeded = Arc::new(AtomicBool::new(false));
     let state_path = Arc::new(Mutex::new(None));
 
@@ -83,6 +100,7 @@ fn main() {
                     let script = smoke_script(
                         &fixture_json,
                         &cancellation_fixture_json,
+                        &failure_fixture_json,
                         completed_scan_id,
                     );
                     let deadline = Instant::now() + SMOKE_TIMEOUT;
@@ -242,6 +260,9 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["searchedRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["terminalFailureShown"].as_bool() == Some(true)
+        && report["terminalFailureFocusRestored"].as_bool() == Some(true)
+        && report["terminalFailureRecoveryAvailable"].as_bool() == Some(true)
         && report["cancellationStopped"].as_bool() == Some(true)
         && report["cancellationFocusRestored"].as_bool() == Some(true)
         && report["cancellationRecoveryAvailable"].as_bool() == Some(true)
@@ -271,6 +292,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
 fn smoke_script(
     fixture_json: &str,
     cancellation_fixture_json: &str,
+    failure_fixture_json: &str,
     completed_scan_id: u64,
 ) -> String {
     format!(
@@ -280,6 +302,7 @@ window.__CEPA_NATIVE_SCAN_SMOKE_STARTED__ = true;
 void (async () => {{
   const fixture = {fixture_json};
   const cancellationFixture = {cancellation_fixture_json};
+  const failureFixture = {failure_fixture_json};
   const completedScanId = {completed_scan_id};
   const pageErrors = [];
   window.addEventListener('error', (event) => pageErrors.push(String(event.error || event.message)));
@@ -311,20 +334,39 @@ void (async () => {{
   const phase = (name) => {{
     history.replaceState(null, '', '#CEPA_NATIVE_SCAN_SMOKE_PHASE:' + name);
   }};
-  const submitFixture = async (label) => {{
+  const submitPath = async (path, label) => {{
     const details = await waitFor(() => document.querySelector('.manual-path'), `${{label}} manual path entry`);
     details.open = true;
     const input = details.querySelector('.path-input');
     const form = details.querySelector('.path-form');
-    input.value = fixture;
+    input.value = path;
     input.dispatchEvent(new Event('input', {{ bubbles: true }}));
     await frame();
     form.requestSubmit();
   }};
+  const submitFixture = (label) => submitPath(fixture, label);
   const backendLabel = () => [...document.querySelectorAll('.scan-details dl > div')]
     .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Scanner')
     ?.querySelector('dd')?.textContent?.trim() || '';
   try {{
+    let terminalFailureShown = failureFixture === null;
+    let terminalFailureFocusRestored = failureFixture === null;
+    let terminalFailureRecoveryAvailable = failureFixture === null;
+    if (failureFixture !== null) {{
+      phase('failing-scan');
+      await submitPath(failureFixture, 'failure');
+      const failureNotice = await waitFor(
+        () => document.querySelector('.landing .error-callout'),
+        'terminal scan failure',
+        10000,
+      );
+      await painted();
+      terminalFailureShown =
+        failureNotice.textContent?.includes('The scan couldn’t finish.') === true;
+      terminalFailureFocusRestored = document.activeElement === failureNotice;
+      terminalFailureRecoveryAvailable = document.querySelector('.manual-path') !== null;
+    }}
+
     let cancellationStopped = cancellationFixture === null;
     let cancellationFocusRestored = cancellationFixture === null;
     let cancellationRecoveryAvailable = cancellationFixture === null;
@@ -507,6 +549,9 @@ void (async () => {{
       navigationChangedFolder: navigatedHeading !== rootHeading,
       searchStatus,
       searchedRows,
+      terminalFailureShown,
+      terminalFailureFocusRestored,
+      terminalFailureRecoveryAvailable,
       cancellationStopped,
       cancellationFocusRestored,
       cancellationRecoveryAvailable,
@@ -578,6 +623,9 @@ mod tests {
             "navigationChangedFolder": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
+            "terminalFailureShown": true,
+            "terminalFailureFocusRestored": true,
+            "terminalFailureRecoveryAvailable": true,
             "cancellationStopped": true,
             "cancellationFocusRestored": true,
             "cancellationRecoveryAvailable": true,
@@ -604,6 +652,10 @@ mod tests {
         assert!(!validate_report(&stale_scan_retained, 2));
 
         assert!(!validate_report(&complete, 1));
+
+        let mut terminal_failure_focus_lost = complete.clone();
+        terminal_failure_focus_lost["terminalFailureFocusRestored"] = false.into();
+        assert!(!validate_report(&terminal_failure_focus_lost, 2));
 
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();

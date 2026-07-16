@@ -1,0 +1,66 @@
+Cepa production terminal-failure recovery validation
+date=2026-07-16
+source=candidate based on 2f27018
+
+fixture sequence:
+1. regular file submitted as a scan root
+2. 100000 requested leaf directories x 1 empty file, cancelled through Stop
+3. 32 requested directories x 32 files x 4096 logical bytes, completed
+4. Home and direct stale-ID rejection
+5. successful rescan of the completion fixture
+
+required terminal-failure invariants:
+- scan_directory acknowledges before the scanner rejects the regular file
+- failure arrives through the real failed terminal channel event
+- The scan could not finish callout is shown
+- the failure callout owns focus
+- the manual scan recovery entry point remains available
+
+macOS production WebView:
+- backend=macOS native
+- terminal failure shown=true
+- terminal failure focus restored=true
+- terminal failure recovery available=true
+- cancellation_ms=50
+- discarded_scan_id=3
+- rescan completed=true
+- page errors=none
+- process_to_report_ms=1023.61
+
+Linux production WebView:
+- kernel=Linux 6.8.0-124-generic x86_64
+- rustc=1.97.0 (2d8144b78 2026-07-07)
+- cargo=1.97.0 (c980f4866 2026-06-30)
+- bun=1.2.21
+- backend=Linux native
+- terminal failure shown=true
+- terminal failure focus restored=true
+- terminal failure recovery available=true
+- cancellation_ms=64
+- discarded_scan_id=3
+- rescan completed=true
+- page errors=none
+- production WebKitGTK ran under isolated Xvfb and DBus sessions
+- a disposable user-local dependency sysroot and unprivileged helper mount were used
+- the standing checkout and system installation were unchanged
+
+CI contract:
+- macOS and Linux create a real regular-file failure fixture
+- both pass completion, cancellation, and failure fixtures to native_scan_smoke
+- Windows remains excluded until a native WebView2 run is measured successfully
+
+repository validation:
+- svelte-check: 0 errors, 0 warnings
+- frontend tests: 49 passed
+- Rust library tests: 93 passed, 1 intentionally ignored
+- Tauri configuration tests: 6 passed
+- example tests: 24 passed
+- warning-denied all-target Clippy: passed
+- production desktop build: passed
+- Windows GNU all-target cross-check: passed
+- CI workflow YAML parse: passed
+
+Scope: this proves one deterministic post-acknowledgement terminal scanner
+failure and recovery through production WebKit views. It is not general proof of
+permission-denied roots, arbitrary traversal I/O failures, physical input,
+native-picker behavior, installed packages, or Windows WebView2.

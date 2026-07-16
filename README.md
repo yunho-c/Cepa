@@ -213,33 +213,36 @@ IPC transport, real scanner, and painted explorer at the supported 620×480
 minimum with a disposable directory:
 
 ```sh
-just native-scan-smoke /path/to/completion-fixture /path/to/cancellation-fixture
+just native-scan-smoke /path/to/completion-fixture /path/to/cancellation-fixture /path/to/failure-file
 ```
 
 The harness builds the frontend and explicitly enables Tauri's production
-custom protocol. When the optional second fixture is supplied, it first starts
-that larger scan, activates the real Stop control, and requires the cancelled
-landing notice to own focus while another scan remains available. It then
-submits the ordinary completion fixture, waits for the terminal channel event
+custom protocol. It first submits the optional third fixture, which must be a
+regular file, through the real scan command. The acknowledged scan must fail
+through its terminal channel event, focus the finishing-error callout, and leave
+scan recovery available. It next starts the optional second fixture as a larger
+scan, activates the real Stop control, and requires the cancelled landing notice
+to own focus while another scan remains available. It then submits the ordinary
+completion fixture, waits for the terminal channel event
 and two painted frames, switches metrics, navigates into a directory, performs
 a debounced folder search, and validates bounded focus and overflow invariants
 in both size metrics while rejecting uncaught page errors. It moves chart focus
 with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
 with Enter, returns Home, confirms the discarded scan is no longer addressable,
-and completes a second scan in the same process. With a cancellation preflight,
-the discard check targets completed scan 2 rather than the already-cancelled
-scan 1. Landing and second-result heading focus must both be restored. Its window
-state uses a dedicated filename that is removed after the run. This proves
-programmatic production-WebView, IPC, cancellation, keyboard-event, and
-completed-scan lifecycle behavior; it
-does not exercise physical input, assistive technology, the native folder
-picker, drag-and-drop, or an installed package.
+and completes a second scan in the same process. With both preflights, the
+discard check targets completed scan 3 rather than the earlier failed or
+cancelled scans. Landing and second-result heading focus must both be restored.
+Its window state uses a dedicated filename that is removed after the run. This
+proves programmatic production-WebView, IPC, terminal failure, cancellation,
+keyboard-event, and completed-scan lifecycle behavior; it does not exercise
+physical input, assistive technology, the native folder picker, drag-and-drop,
+or an installed package.
 
 Linux CI and provisioned Linux workstations run the same proof inside isolated
 display and session buses:
 
 ```sh
-just native-scan-smoke-linux /path/to/completion-fixture /path/to/cancellation-fixture
+just native-scan-smoke-linux /path/to/completion-fixture /path/to/cancellation-fixture /path/to/failure-file
 ```
 
 This wrapper requires `xvfb-run` and `dbus-run-session`; it does not weaken the

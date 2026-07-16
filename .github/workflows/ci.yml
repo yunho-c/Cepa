@@ -97,12 +97,14 @@ jobs:
         run: |
           fixture="$RUNNER_TEMP/cepa-native-scan-fixture"
           cancellation_fixture="$RUNNER_TEMP/cepa-native-cancellation-fixture"
+          failure_fixture="$RUNNER_TEMP/cepa-native-failure-fixture"
           just benchmark-fixture "$fixture" 32 32 4096
           just benchmark-fixture "$cancellation_fixture" 100000 1 0
+          printf 'not a directory\n' > "$failure_fixture"
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            just native-scan-smoke-linux "$fixture" "$cancellation_fixture"
+            just native-scan-smoke-linux "$fixture" "$cancellation_fixture" "$failure_fixture"
           else
-            just native-scan-smoke "$fixture" "$cancellation_fixture"
+            just native-scan-smoke "$fixture" "$cancellation_fixture" "$failure_fixture"
           fi
 
       - name: Smoke Linux desktop startup

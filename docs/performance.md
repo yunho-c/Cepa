@@ -1380,6 +1380,32 @@ ID 2. All three then completed the second scan with restored result focus. This
 strengthens lifecycle correctness evidence; it does not change scanner
 performance results.
 
+### 2026-07-16 production terminal-failure recovery
+
+The development `?mock=error` scenario covered the failed terminal event's UI,
+but it did not prove the production command/channel transport after the
+immediate-acknowledgement change. The native harness now accepts a third fixture
+that must be a regular file. Submitting it through the ordinary manual-path form
+starts the real command, receives its scan ID, and then reaches the production
+scanner's non-directory rejection through the failed terminal channel event.
+The harness requires the finishing-error callout to appear and own focus, and it
+requires the manual scan entry point to remain available before proceeding.
+
+One macOS WebKit run and one Linux WebKitGTK run passed the failure preflight,
+the existing cancellation preflight, successful scan, keyboard navigation,
+search, Home, exact stale-ID rejection, and rescan in one process. Both emitted
+no page error and discarded completed scan ID 3, proving that the preceding
+failed and cancelled IDs did not weaken the Home assertion. macOS acknowledged
+and rendered Stop in 50 ms; Linux did so in 64 ms. Linux used Rust 1.97.0 and
+the existing disposable WebKitGTK sysroot and unprivileged helper namespace.
+
+CI now creates the same regular-file fixture and runs this flow on macOS and
+Linux. This is deterministic proof of post-acknowledgement terminal failure and
+recovery for a non-directory root. It is not evidence for every traversal I/O
+failure, permission-denied root, native picker failure, physical input, or
+Windows WebView2. The exact record is preserved in
+[`validation-results/2026-07-16-native-terminal-failure.txt`](validation-results/2026-07-16-native-terminal-failure.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
@@ -1452,8 +1478,10 @@ Raw stable samples and the original invalid scheduler record are preserved in
 Most results are warm-cache, synthetic metadata measurements on one machine;
 the real-tree observations still cover only two shapes on one local APFS
 machine. They do
-not measure cold storage, network volumes, antivirus interference, native IPC
-transport, production platform WebViews, or other operating systems. The RSS
+not measure cold storage, network volumes, antivirus interference, or other
+operating systems. Dedicated smoke sections above cover native IPC and
+production WebViews on macOS and Linux, but those are correctness and warm
+interaction observations rather than traversal-throughput benchmarks. The RSS
 measurements include the benchmark process and allocator, not just
 snapshot-owned bytes. These results are a regression baseline, not a universal
 speed claim.
@@ -1463,8 +1491,8 @@ Before generalizing these results beyond the measured workloads, add:
 - additional representative real directory trees and cold-cache runs;
 - snapshot-owned bytes and process-RSS scaling on representative million-entry
   trees with diverse names and directory shapes;
-- native Tauri IPC transport and production first-render timing on each platform
-  WebView;
+- native Tauri IPC transport and production first-render timing in Windows
+  WebView2;
 - broader Linux filesystem/hardware coverage, cold-cache throughput, and
   scheduler profiling without restricted performance counters;
 - broader portable-versus-native parity, cold-cache throughput, and peak-memory

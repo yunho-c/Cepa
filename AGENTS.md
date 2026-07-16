@@ -184,21 +184,25 @@ The `native_scan_smoke` example reuses the production builder, bundled frontend,
 custom protocol, commands, and startup path while isolating window state under a
 temporary filename. At 620×480 it submits the real manual-path form, scans a
 disposable fixture, waits through painted frames, switches metrics, navigates,
-and searches. With its optional second fixture, it first starts a bounded long
-scan, activates Stop, requires the cancelled notice to own focus, and verifies
-that the landing scan entry points remain available. Preserve its one chart Tab
+and searches. Its optional third fixture is a regular file and runs before the
+other flows: the acknowledged real scan must terminate through the failed
+channel event, show and focus the finishing-error callout, and preserve recovery
+entry points. Its optional second fixture then starts a bounded long scan,
+activates Stop, requires the cancelled notice to own focus, and verifies that
+the landing scan entry points remain available. Preserve its one chart Tab
 stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
 page-error capture, no horizontal overflow, backend disclosure, and state-file
 cleanup. It also exercises chart
 arrow/Home movement, list arrow movement for both the primary and Reveal action
 kinds, and Enter activation of a chart folder. It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
-second scan in the same process with result-heading focus restored. When the
-cancellation preflight is present, that completed scan is ID 2; checking the
-already-cancelled ID 1 is a false positive and does not prove Home released the
-snapshot. Keep the Rust report validator paired with that expected ID. This is
-programmatic WebView/IPC and keyboard-event evidence, not native picker,
-physical input, assistive-technology, drag-and-drop, or installed-package proof.
+second scan in the same process with result-heading focus restored. Derive that
+completed ID from the optional failure and cancellation preflights; with both it
+is ID 3. Checking either earlier ID is a false positive and does not prove Home
+released the snapshot. Keep the Rust report validator paired with that expected
+ID. This is programmatic WebView/IPC, terminal-event, and keyboard-event
+evidence, not native picker, physical input, assistive-technology, drag-and-drop,
+or installed-package proof.
 macOS CI runs the harness directly. Linux CI runs the same production protocol
 under isolated Xvfb and DBus sessions through `native-scan-smoke-linux`; keep
 that gate after the ordinary native build and before packaging. Windows remains
@@ -628,8 +632,8 @@ just web       # run only the Vite frontend
 just native-check # validate Rust core without Tauri desktop libraries
 just smoke-linux-desktop # Linux-only raw executable startup survival
 just window-state-smoke # prove native geometry persistence across two launches
-just native-scan-smoke /path/to/fixture /path/to/cancellation-fixture # production WebView, Stop, and scan IPC
-just native-scan-smoke-linux /path/to/fixture /path/to/cancellation-fixture # same proof under Linux Xvfb/DBus
+just native-scan-smoke /path/to/fixture /path/to/cancellation-fixture /path/to/failure-file # production WebView, terminal failure, Stop, and scan IPC
+just native-scan-smoke-linux /path/to/fixture /path/to/cancellation-fixture /path/to/failure-file # same proof under Linux Xvfb/DBus
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
 just bundle    # produce platform desktop bundles

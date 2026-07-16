@@ -46,13 +46,13 @@ window-state-smoke:
     cargo run --manifest-path src-tauri/Cargo.toml --example window_state_smoke -- verify
 
 # Exercise the production WebView and IPC scan flow at the supported minimum size.
-native-scan-smoke path cancellation_path="":
+native-scan-smoke path cancellation_path="" failure_path="":
     bun --bun run build
-    if [ -n "{{ cancellation_path }}" ]; then cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}" "{{ cancellation_path }}"; else cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}"; fi
+    if [ -n "{{ failure_path }}" ]; then test -n "{{ cancellation_path }}" || { echo "failure_path requires cancellation_path" >&2; exit 2; }; cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}" "{{ cancellation_path }}" "{{ failure_path }}"; elif [ -n "{{ cancellation_path }}" ]; then cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}" "{{ cancellation_path }}"; else cargo run --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol --example native_scan_smoke -- "{{ path }}"; fi
 
 # Run the production WebView scan proof under isolated Linux display/session buses.
-native-scan-smoke-linux path cancellation_path="":
-    dbus-run-session -- xvfb-run -a just native-scan-smoke "{{ path }}" "{{ cancellation_path }}"
+native-scan-smoke-linux path cancellation_path="" failure_path="":
+    dbus-run-session -- xvfb-run -a just native-scan-smoke "{{ path }}" "{{ cancellation_path }}" "{{ failure_path }}"
 
 # Check the Svelte and TypeScript frontend.
 frontend-check:

@@ -240,14 +240,17 @@ fn macos_and_linux_ci_exercise_the_production_webview_scan_flow() {
     assert!(smoke_step.contains("if: runner.os != 'Windows'"));
     assert!(smoke_step.contains("just benchmark-fixture \"$fixture\""));
     assert!(smoke_step.contains("just benchmark-fixture \"$cancellation_fixture\" 100000 1 0"));
+    assert!(smoke_step.contains("printf 'not a directory\\n' > \"$failure_fixture\""));
     assert!(smoke_step.contains("if [[ \"$RUNNER_OS\" == \"Linux\" ]]"));
-    assert!(
-        smoke_step.contains("just native-scan-smoke-linux \"$fixture\" \"$cancellation_fixture\"")
-    );
-    assert!(smoke_step.contains("just native-scan-smoke \"$fixture\" \"$cancellation_fixture\""));
+    assert!(smoke_step.contains(
+        "just native-scan-smoke-linux \"$fixture\" \"$cancellation_fixture\" \"$failure_fixture\""
+    ));
+    assert!(smoke_step.contains(
+        "just native-scan-smoke \"$fixture\" \"$cancellation_fixture\" \"$failure_fixture\""
+    ));
 
     let recipe = justfile
-        .split("native-scan-smoke path cancellation_path=\"\":")
+        .split("native-scan-smoke path cancellation_path=\"\" failure_path=\"\":")
         .nth(1)
         .expect("Justfile must define native-scan-smoke");
     assert!(recipe.contains("bun --bun run build"));
@@ -255,7 +258,7 @@ fn macos_and_linux_ci_exercise_the_production_webview_scan_flow() {
     assert!(recipe.contains("--example native_scan_smoke"));
 
     let linux_recipe = justfile
-        .split("native-scan-smoke-linux path cancellation_path=\"\":")
+        .split("native-scan-smoke-linux path cancellation_path=\"\" failure_path=\"\":")
         .nth(1)
         .expect("Justfile must define native-scan-smoke-linux");
     assert!(linux_recipe.contains("dbus-run-session -- xvfb-run -a"));
