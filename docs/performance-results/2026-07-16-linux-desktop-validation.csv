@@ -1,0 +1,18 @@
+scope,check,result,passed,ignored,detail
+source,git_tree,pass,,,commit 67e2e54; tree 131e441037bf499d8946fc5ff602017cb105933e
+environment,toolchain,pass,,,Ubuntu 22.04; Rust 1.97.0; Bun 1.2.21; disposable apt package sysroot
+frontend,svelte_check,pass,0,0,0 errors and 0 warnings
+frontend,unit_tests,pass,45,0,903 assertions
+native_core,cargo_check_all_targets,pass,,,
+native_core,cargo_clippy_all_targets,pass,,,warnings denied
+native_core,cargo_test_all_targets,pass,71,1,real Btrfs fixture ignored
+desktop,cargo_check_all_targets,pass,,,
+desktop,cargo_clippy_all_targets,pass,,,warnings denied
+desktop,cargo_test_library,pass,89,2,real Btrfs and file-manager-opening tests ignored
+desktop,tauri_config_tests,pass,4,0,
+desktop,example_target_tests,pass,14,0,
+build,vite_production,pass,,,3887 modules transformed
+build,linux_release_executable,pass,,,19583240-byte x86-64 ELF
+build,dynamic_library_closure,pass,,,0 unresolved libraries under disposable runtime
+runtime,headless_startup_survival,pass,,,8 seconds; Xvfb and isolated DBus; sysroot helper path exposed through unprivileged mount namespace
+workflow,smoke_linux_desktop_script,pass,,,3-second success; early-exit failure; invalid-duration failure; local just recipe expansion

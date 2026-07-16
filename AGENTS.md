@@ -512,6 +512,8 @@ Start with these files:
 - `Justfile`: canonical development, checking, building, and bundling commands.
 - `scripts/validate-{linux,macos,windows}-bundles.*`: platform package structure,
   metadata, payload, integrity, and digest validation after bundling.
+- `scripts/smoke-linux-desktop.sh`: bounded raw-executable startup survival under
+  isolated Xvfb and DBus sessions; not physical UI or installed-package proof.
 - `.github/workflows/ci.yml`: native Linux, macOS, and Windows check/build matrix.
 
 Frontend helper and visualization tests live beside their modules as
@@ -530,6 +532,7 @@ just icons     # regenerate derived desktop icons from the canonical vector
 just dev       # run the native Tauri application
 just web       # run only the Vite frontend
 just native-check # validate Rust core without Tauri desktop libraries
+just smoke-linux-desktop # Linux-only raw executable startup survival
 just window-state-smoke # prove native geometry persistence across two launches
 just check     # frontend diagnostics, Rust formatting, checks, and tests
 just build     # build the frontend and native executable without packaging
@@ -589,7 +592,8 @@ both `Justfile` and Tauri's `beforeDevCommand`/`beforeBuildCommand` hooks.
 - Report exactly what was validated and distinguish static checks, mocked or
   fixture-based tests, real local scans, platform-specific validation, and
   end-to-end application proof.
-- For Linux distribution changes, run `just bundle` and
+- For Linux desktop changes, run `just smoke-linux-desktop` after the native
+  build. For distribution changes, also run `just bundle` and
   `just validate-linux-bundles`, then distinguish raw executable launch,
   installed-package launch, AppImage launch, and RPM metadata inspection. A
   headless DBus/Xvfb survival window does not prove physical desktop interaction.

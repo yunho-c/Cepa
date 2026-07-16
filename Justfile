@@ -105,6 +105,10 @@ benchmark-aggregation-cancellation nodes="1000000" iterations="9" after_nodes="5
 build:
     bun --bun run tauri build --no-bundle
 
+# Require a built Linux desktop executable to survive an isolated display/session window.
+smoke-linux-desktop executable="src-tauri/target/release/cepa" survival_seconds="8":
+    bash scripts/smoke-linux-desktop.sh "{{ executable }}" "{{ survival_seconds }}"
+
 # Validate the metadata and installed-file surface of completed Linux bundles.
 validate-linux-bundles bundle_root="src-tauri/target/release/bundle":
     bash scripts/validate-linux-bundles.sh "{{ bundle_root }}"

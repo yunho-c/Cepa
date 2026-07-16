@@ -665,6 +665,41 @@ does not supply Linux desktop development packages. Smoke values are preserved
 in
 [`performance-results/2026-07-13-linux-rust197-smoke.csv`](performance-results/2026-07-13-linux-rust197-smoke.csv).
 
+### 2026-07-16 Rust 1.97 Linux desktop validation
+
+An exact archive of commit `67e2e54` was validated on the same Ubuntu 22.04
+workstation with Rust 1.97.0 and Bun 1.2.21. Its Git tree hash matched the local
+source before validation. Because the host does not permit non-interactive
+system package installation, GTK, WebKitGTK 4.1, AppIndicator, librsvg, and DBus
+development packages from its configured Ubuntu-compatible repositories were
+extracted into a disposable user-local sysroot; the existing checkout and
+system installation were not modified.
+
+Frontend diagnostics and all 45 frontend tests passed. Dependency-light
+formatting, all-target check, warning-denied Clippy, and 71 core tests passed
+with the real-Btrfs fixture ignored. With the desktop feature enabled, all-target
+check and warning-denied Clippy passed, followed by 89 library tests, four Tauri
+configuration tests, and the example-target tests; the real-Btrfs and
+file-manager-opening tests were the two intentional ignores. This closes the
+earlier `dbus-1.pc` compile blocker for the source-identical desktop graph.
+
+The production frontend and optimized x86-64 Linux executable also built. The
+19,583,240-byte ELF had no unresolved dynamic libraries under the disposable
+runtime. It then remained alive for eight seconds under isolated Xvfb and DBus
+sessions. The sysroot-only run used an unprivileged mount namespace to expose
+WebKitGTK's package helper directory at its compiled system path. A portal FUSE
+warning from the host session did not terminate the process. The new
+`smoke-linux-desktop.sh` runner subsequently passed against the same executable
+with a three-second window, and its early-exit and invalid-duration paths failed
+as intended; `just` itself was validated by local recipe expansion because it is
+not installed on that host.
+
+This is native compile, link, test, production-build, and headless startup
+evidence. It is not proof of physical desktop interaction, a real folder picker,
+installed DEB/RPM/AppImage behavior, packaging validation, or broader Linux
+hardware/filesystem coverage. The exact results are preserved in
+[`performance-results/2026-07-16-linux-desktop-validation.csv`](performance-results/2026-07-16-linux-desktop-validation.csv).
+
 The native Windows release harness passed 35 tests. Eleven interleaved runs on
 an 8,001-file NTFS fixture compared otherwise identical binaries before and
 after the extra `FileBasicInfo` query. Median MFT traversal changed from 122.22
