@@ -1,0 +1,101 @@
+Cepa compact empty and search-state validation
+Date: 2026-07-16
+Base commit: 52a082e
+
+Scope
+-----
+
+This candidate removes desktop minimum heights that could place empty-folder or
+search recovery content outside the clipped directory pane at the supported
+620 by 480 window minimum. The production WebView smoke now performs a real
+zero-match backend search and requires both the resulting panel and its Clear
+search control to be fully contained by that pane.
+
+Exact candidate source hashes
+-----------------------------
+
+95e5b0f6041e05e4f6e054a68a7e8c94411164d3b4f8f3d12d51ac163eceb837  src/app.css
+850d267bc0e3abb68f86618d5c35924aad8b70c8aeeb4c5e21b97b94eb505268  src-tauri/examples/native_scan_smoke.rs
+
+Development-WebView inspection
+------------------------------
+
+The deterministic empty-folder, no-match, and search-error scenarios were
+inspected at 620 by 480 and 880 by 620 in light and dark appearance. At the
+minimum size, the empty-folder label, no-match guidance and Clear search action,
+and search-error Try again, Clear search, and collapsed Search details affordance
+were visible without horizontal overflow. The 880 by 620 views retained the
+intended centered spacing. Temporary screenshots were removed after inspection.
+
+Local macOS validation
+----------------------
+
+`just check`
+- Svelte diagnostics: 0 errors, 0 warnings
+- frontend tests: 49 passed
+- Rust library tests: 101 passed, 1 ignored
+- Tauri configuration tests: 6 passed
+- all example test targets passed
+- formatting, all-target check, and warning-denied Clippy passed
+
+`just build`
+- Vite production bundle passed
+- release desktop application built without bundling
+
+Windows GNU cross-target
+- all-target `cargo check` passed
+- all-target warning-denied `cargo clippy` passed
+- native Windows/WebView2 execution was not available for this candidate
+
+The production macOS WebView smoke passed on a disposable real filesystem
+fixture. It reported `macOS native`, `0 matches`, no page errors, no horizontal
+overflow, and true values for both `noMatchPanelContained` and
+`noMatchRecoveryContained`.
+
+Linux Rust 1.97 and production WebKitGTK validation
+--------------------------------------------------
+
+An exact disposable candidate was built on Ubuntu with:
+
+rustc 1.97.0 (2d8144b78 2026-07-07)
+
+The desktop dependency graph came from a disposable user-local sysroot. The
+standing checkout and system installation were not changed.
+
+- formatting passed
+- full desktop all-target `cargo check` passed
+- full desktop all-target warning-denied `cargo clippy` passed
+- Rust library tests: 103 passed, 2 ignored
+- Tauri configuration tests: 6 passed
+- all example test targets passed
+- Vite production bundle passed
+
+The release production WebKitGTK smoke ran under isolated Xvfb and DBus sessions
+with WebKit helpers exposed only inside an unprivileged mount namespace. Its
+report included:
+
+backendLabel: Linux native
+initialRows: 32
+chartTabStops: 1
+listTabStops: 2
+logicalChartTabStops: 1
+searchStatus: 1 match
+noMatchStatus: 0 matches
+noMatchPanelContained: true
+noMatchRecoveryContained: true
+horizontalOverflow: false
+pageErrors: []
+landingFocusRestored: true
+staleScanRejected: true
+rescanCompleted: true
+rescanBackendLabel: Linux native
+ok: true
+
+Evidence boundary
+-----------------
+
+These checks cover deterministic browser rendering, production macOS and Linux
+WebViews, real native scanner and backend search IPC, and programmatic geometry
+assertions. They do not certify physical input, screen readers, magnification,
+font substitution across distributions, installed-package launch, native
+Windows execution, or broad assistive-technology compatibility.

@@ -260,6 +260,11 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["searchedRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["noMatchStatus"]
+            .as_str()
+            .is_some_and(|status| status.starts_with('0'))
+        && report["noMatchPanelContained"].as_bool() == Some(true)
+        && report["noMatchRecoveryContained"].as_bool() == Some(true)
         && report["terminalFailureShown"].as_bool() == Some(true)
         && report["terminalFailureFocusRestored"].as_bool() == Some(true)
         && report["terminalFailureRecoveryAvailable"].as_bool() == Some(true)
@@ -323,6 +328,17 @@ void (async () => {{
       await sleep(10);
     }}
     throw new Error(`Timed out waiting for ${{label}}.`);
+  }};
+  const fullyContained = (element, container) => {{
+    const child = element.getBoundingClientRect();
+    const parent = container.getBoundingClientRect();
+    const tolerance = 0.5;
+    return child.width > 0
+      && child.height > 0
+      && child.left >= parent.left - tolerance
+      && child.right <= parent.right + tolerance
+      && child.top >= parent.top - tolerance
+      && child.bottom <= parent.bottom + tolerance;
   }};
   const report = (payload) => {{
     const json = JSON.stringify(payload);
@@ -496,6 +512,26 @@ void (async () => {{
     const searchMs = performance.now() - searchStartedAt;
     const searchedRows = document.querySelectorAll('.storage-row').length;
 
+    phase('searching-no-match');
+    searchInput.value = '__cepa_native_smoke_no_match__';
+    searchInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    const noMatchStatus = await waitFor(() => {{
+      const status = document.querySelector('#directory-search-status')?.textContent?.trim() || '';
+      return status.startsWith('0 match') ? status : '';
+    }}, 'empty folder search result');
+    const noMatchPanel = await waitFor(
+      () => [...document.querySelectorAll('.search-message')]
+        .find((message) => message.textContent?.includes('No matches in this folder')),
+      'empty folder search message',
+    );
+    await painted();
+    const noMatchRecovery = [...noMatchPanel.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Clear search');
+    const directoryPane = document.querySelector('.directory-pane');
+    const noMatchPanelContained = fullyContained(noMatchPanel, directoryPane);
+    const noMatchRecoveryContained = noMatchRecovery !== undefined
+      && fullyContained(noMatchRecovery, directoryPane);
+
     phase('returning-home');
     document.querySelector('[aria-label="Cepa home"]').click();
     const landingHeading = await waitFor(
@@ -549,6 +585,9 @@ void (async () => {{
       navigationChangedFolder: navigatedHeading !== rootHeading,
       searchStatus,
       searchedRows,
+      noMatchStatus,
+      noMatchPanelContained,
+      noMatchRecoveryContained,
       terminalFailureShown,
       terminalFailureFocusRestored,
       terminalFailureRecoveryAvailable,
@@ -623,6 +662,9 @@ mod tests {
             "navigationChangedFolder": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
+            "noMatchStatus": "0 matches",
+            "noMatchPanelContained": true,
+            "noMatchRecoveryContained": true,
             "terminalFailureShown": true,
             "terminalFailureFocusRestored": true,
             "terminalFailureRecoveryAvailable": true,
@@ -652,6 +694,10 @@ mod tests {
         assert!(!validate_report(&stale_scan_retained, 2));
 
         assert!(!validate_report(&complete, 1));
+
+        let mut no_match_recovery_clipped = complete.clone();
+        no_match_recovery_clipped["noMatchRecoveryContained"] = false.into();
+        assert!(!validate_report(&no_match_recovery_clipped, 2));
 
         let mut terminal_failure_focus_lost = complete.clone();
         terminal_failure_focus_lost["terminalFailureFocusRestored"] = false.into();

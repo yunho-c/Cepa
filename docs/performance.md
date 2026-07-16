@@ -1314,6 +1314,34 @@ keyboard, screen-reader, or broader assistive-technology certification. The
 exact validation record is preserved in
 [`validation-results/2026-07-16-native-keyboard-webviews.txt`](validation-results/2026-07-16-native-keyboard-webviews.txt).
 
+### 2026-07-16 compact empty and search-state containment
+
+Browser inspection at the supported 620×480 minimum exposed a layout contract
+that the existing horizontal-overflow and completed-result assertions did not
+cover. The compact explorer can leave the directory pane about 214 pixels tall,
+while the empty-folder and search-message surfaces still required 300 and 240
+pixels respectively. Because the explorer deliberately clips its two coordinated
+panes, the empty-folder label, no-match guidance and recovery action, or search-
+error actions could be present in the DOM but outside the usable pane.
+
+Those desktop minimum heights were removed so each state can shrink with its
+pane. Search messages use restrained compact padding and an internal scroll
+container for unusually long disclosed error details. The taller minima remain
+only in the below-560-pixel stacked browser preview, where they provide useful
+breathing room without conflicting with a supported native window size.
+
+Development scenarios were inspected at 620×480 and 880×620 in light and dark
+appearance for empty-folder, no-match, and search-error states. The production
+WebView smoke now also performs a real zero-match backend search after its
+matching search, then requires both the no-match panel and its Clear search
+button to be fully contained by the directory pane. The exact build, test, and
+runtime record is preserved in
+[`validation-results/2026-07-16-compact-empty-search-states.txt`](validation-results/2026-07-16-compact-empty-search-states.txt).
+
+This is layout and programmatic production-WebView evidence. It is not physical
+input, screen-reader, magnification, platform-font-substitution, or broad
+assistive-technology certification.
+
 ### 2026-07-16 same-process scan lifecycle smoke
 
 A follow-up candidate based on `960d56b` extends the production harness through

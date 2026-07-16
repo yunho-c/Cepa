@@ -230,8 +230,10 @@ scan, activates the real Stop control, and requires the cancelled landing notice
 to own focus while another scan remains available. It then submits the ordinary
 completion fixture, waits for the terminal channel event
 and two painted frames, switches metrics, navigates into a directory, performs
-a debounced folder search, and validates bounded focus and overflow invariants
-in both size metrics while rejecting uncaught page errors. It moves chart focus
+a debounced matching folder search followed by a zero-match search, and validates
+that the compact message and Clear action stay inside the directory pane. It
+also validates bounded focus and overflow invariants in both size metrics while
+rejecting uncaught page errors. It moves chart focus
 with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
 with Enter, returns Home, confirms the discarded scan is no longer addressable,
 and completes a second scan in the same process. With both preflights, the

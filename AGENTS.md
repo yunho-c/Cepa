@@ -173,6 +173,14 @@ At the configured 620 by 480 minimum, keep the coverage warning, map, and at lea
 two ranked rows visible together without horizontal overflow. Validate both the
 configured minimum and default size when changing result spacing, column bounds,
 or breakpoints.
+Empty-folder, searching, no-match, and search-error panels must shrink with the
+compact directory pane instead of imposing a desktop-height minimum inside the
+clipped explorer. At 620 by 480, keep the empty label and ordinary no-match
+guidance plus its Clear action fully visible without scrolling. Search errors
+may use the pane as an internal scroll container only when their disclosed
+details exceed it; keep Try again, Clear search, and the collapsed Search
+details affordance visible in the ordinary compact state. Browser previews
+below 560 pixels may retain taller stacked-state minima.
 The desktop shell restores stable window geometry with the official Tauri
 window-state plugin. Track and restore only size, on-screen position, and
 maximized state; do not add visibility (which can relaunch the app hidden),
@@ -198,7 +206,9 @@ activates Stop, requires the cancelled notice to own focus, and verifies that
 the landing scan entry points remain available. Preserve its one chart Tab
 stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
 page-error capture, no horizontal overflow, backend disclosure, and state-file
-cleanup. It also exercises chart
+cleanup. After the matching search, it runs a real zero-match search and
+requires both the message panel and Clear action to remain fully inside the
+compact directory pane. It also exercises chart
 arrow/Home movement, list arrow movement for both the primary and Reveal action
 kinds, and Enter activation of a chart folder. It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
