@@ -140,8 +140,10 @@ window-state plugin. Track and restore only size, on-screen position, and
 maximized state; do not add visibility (which can relaunch the app hidden),
 decorations, or fullscreen to `StateFlags`, and never add scan paths or result
 data to this state file. Keep the configured window hidden until restore or
-first-launch centering finishes, then show and focus it so startup never exposes
-the default geometry before moving. The plugin's macOS
+first-launch centering finishes and the main webview reports its initial page
+finished loading, then show and focus it so startup exposes neither default
+geometry nor an unloaded surface. Preserve the two-second fallback so a broken
+page cannot leave Cepa permanently invisible. The plugin's macOS
 startup monitor query can be empty and skip position restoration, so
 `desktop_window/placement.rs` reapplies only an on-screen saved position (or
 centers safely when monitor metadata is unavailable). Keep the two-launch
@@ -455,8 +457,8 @@ Start with these files:
   event mapping, and live item availability.
 - `src-tauri/src/desktop_window.rs`: deliberately bounded window-state
   persistence policy and plugin construction.
-- `src-tauri/examples/window_state_smoke.rs`: two-process native geometry
-  persistence and restoration proof with isolated temporary state.
+- `src-tauri/examples/window_state_smoke.rs`: two-process native initial-page,
+  geometry persistence, and restoration proof with isolated temporary state.
 - `src-tauri/src/scan_roots.rs`: cross-platform local-volume discovery,
   normalization, APFS system/Data collapsing, and compact wire contract.
 - `src-tauri/src/compression.rs`: read-only platform volume-capability and

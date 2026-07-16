@@ -7,10 +7,9 @@ use std::sync::{
 use std::time::Duration;
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-#[path = "../src/desktop_window/placement.rs"]
-mod window_state_placement;
-#[path = "../src/desktop_window/policy.rs"]
-mod window_state_policy;
+#[allow(dead_code)]
+#[path = "../src/desktop_window.rs"]
+mod desktop_window;
 
 const STATE_FILENAME: &str = ".window-state-smoke.json";
 const TARGET_OFFSET_X: i32 = 120;
@@ -18,6 +17,8 @@ const TARGET_OFFSET_Y: i32 = 140;
 const TARGET_WIDTH: u32 = 900;
 const TARGET_HEIGHT: u32 = 650;
 const TOLERANCE: i64 = 2;
+const SMOKE_PAGE: &str =
+    "data:text/html,%3C!doctype%20html%3E%3Ctitle%3ECepa%20window%20state%20smoke%3C/title%3E";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Mode {
@@ -50,10 +51,12 @@ fn main() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_filename(STATE_FILENAME)
-                .with_state_flags(window_state_policy::persisted_state_flags())
+                .with_state_flags(desktop_window::policy::persisted_state_flags())
                 .skip_initial_state("main")
                 .build(),
         )
+        .manage(desktop_window::StartupWindowState::default())
+        .on_page_load(desktop_window::handle_page_load)
         .setup({
             let succeeded = Arc::clone(&succeeded);
             let state_path = Arc::clone(&state_path);
@@ -64,6 +67,7 @@ fn main() {
                         "the main window was not created",
                     )
                 })?;
+                window.navigate(tauri::Url::parse(SMOKE_PAGE)?)?;
                 let path = app.path().app_config_dir()?.join(STATE_FILENAME);
                 *state_path.lock().expect("lock state path") = Some(path.clone());
                 let expected = match mode {
@@ -72,7 +76,7 @@ fn main() {
                         None
                     }
                     Mode::Verify => {
-                        if !window_state_placement::has_saved_state(&path) {
+                        if !desktop_window::placement::has_saved_state(&path) {
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 "the smoke state has no valid main-window geometry",
@@ -83,6 +87,10 @@ fn main() {
                     }
                 };
                 let app_handle = app.handle().clone();
+                let startup = app
+                    .state::<desktop_window::StartupWindowState>()
+                    .inner()
+                    .clone();
                 std::thread::spawn(move || {
                     if let Err(error) = begin_smoke(
                         mode,
@@ -91,6 +99,7 @@ fn main() {
                         expected,
                         Arc::clone(&succeeded),
                         app_handle.clone(),
+                        startup,
                     ) {
                         eprintln!("could not initialize window-state smoke test: {error}");
                         app_handle.exit(1);
@@ -122,6 +131,7 @@ fn begin_smoke(
     expected: Option<SavedWindowState>,
     succeeded: Arc<AtomicBool>,
     app: AppHandle,
+    startup: desktop_window::StartupWindowState,
 ) -> tauri::Result<()> {
     match mode {
         Mode::Seed => {
@@ -134,6 +144,7 @@ fn begin_smoke(
             let target_y = monitor_position.y + TARGET_OFFSET_Y;
             window.set_position(PhysicalPosition::new(target_x, target_y))?;
             window.set_size(PhysicalSize::new(TARGET_WIDTH, TARGET_HEIGHT))?;
+            require_initial_page(&startup)?;
             window.show()?;
             std::thread::sleep(Duration::from_millis(500));
             let position = window.outer_position()?;
@@ -147,11 +158,12 @@ fn begin_smoke(
         }
         Mode::Verify => {
             let expected = expected.expect("verify mode requires saved state");
-            window_state_placement::restore(
+            desktop_window::placement::restore(
                 &window,
                 &state_path,
-                window_state_policy::persisted_state_flags(),
+                desktop_window::policy::persisted_state_flags(),
             )?;
+            require_initial_page(&startup)?;
             window.show()?;
             std::thread::sleep(Duration::from_millis(500));
             let actual_position = window.outer_position();
@@ -186,6 +198,16 @@ fn begin_smoke(
         }
     }
     Ok(())
+}
+
+fn require_initial_page(startup: &desktop_window::StartupWindowState) -> tauri::Result<()> {
+    if startup.wait_for_page_load(desktop_window::INITIAL_PAGE_LOAD_TIMEOUT) {
+        Ok(())
+    } else {
+        Err(tauri::Error::AssetNotFound(
+            "the initial page did not finish loading".into(),
+        ))
+    }
 }
 
 fn read_saved_state(path: &std::path::Path) -> Result<SavedWindowState, std::io::Error> {

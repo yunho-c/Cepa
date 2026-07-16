@@ -1088,6 +1088,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(desktop_window::state_plugin())
+        .manage(desktop_window::StartupWindowState::default())
+        .on_page_load(desktop_window::handle_page_load)
         .setup(desktop_window::initialize)
         .manage(ScanState::default())
         .manage(ScanRootState::default())

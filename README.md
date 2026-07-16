@@ -266,11 +266,14 @@ Cepa exits and restored on the next launch. Only size, on-screen position, and
 maximized state are captured; schema fields for fullscreen, visibility, and
 decorations remain at defaults, while scanned paths and results never enter the
 file. The main window remains hidden until its saved geometry is restored or a
-first-launch position is centered, avoiding a visible startup jump.
+first-launch position is centered and its initial web content finishes loading,
+avoiding both a visible startup jump and an unloaded window. A two-second
+fallback still shows the placed window if content readiness never arrives.
 
 On a provisioned desktop host, `just window-state-smoke` launches two brief
-native sessions, verifies the second window matches the first session's saved
-geometry, and removes its dedicated smoke-test state file.
+native sessions against a self-contained page, verifies content readiness while
+hidden and that the second window matches the first session's saved geometry,
+then removes its dedicated smoke-test state file.
 
 ## App identity
 
