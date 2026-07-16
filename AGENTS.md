@@ -163,7 +163,10 @@ directory navigation is pending, expose the map as busy and each real segment
 as guarded `aria-disabled`, preserve the initiating segment's focus, freeze
 roving keys and pointer previews, and use the same restrained opacity as the
 busy list. Do not make the two halves of the navigator disagree about whether
-the current view is interactive.
+the current view is interactive. The center name-and-size preview is visual-only:
+keep it out of the accessibility tree instead of turning pointer movement into a
+live announcement. Focused segments already expose the same name and size, while
+the named group and its associated instruction own the chart semantics.
 Sunburst render keys use real node identity for interactive segments and a
 stable traversal position for aggregates. Aggregate labels repeat across
 branches, so names and depths are not unique keys; preserve the repeated-label

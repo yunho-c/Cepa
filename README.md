@@ -78,7 +78,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   an older worker cannot become current after a newer token, while retry remains
   available when estimation is still running
 - Single-Tab-stop radial navigation with wrapping arrow keys, Home/End movement,
-  Enter/Space activation, and coordinated breadcrumbs and ranked item lists
+  Enter/Space activation, coordinated breadcrumbs and ranked item lists, and a
+  visual-only center preview that does not duplicate segment announcements
 - Roving directory-list focus that keeps at most the current row's primary and
   Reveal controls in the Tab order, with Up/Down and Home/End movement across
   all retained rows

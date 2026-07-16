@@ -140,4 +140,19 @@ describe("production style sources", () => {
     expect(backButton).toContain("aria-disabled={isResultBusy}");
     expect(backButton).not.toMatch(/^\s*disabled=/m);
   });
+
+  test("keeps the visual chart preview out of live announcements", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const centerStart = component.indexOf('class="chart-center"');
+    const chartCenter = component.slice(centerStart, component.indexOf("</div>", centerStart));
+
+    expect(centerStart).toBeGreaterThan(-1);
+    expect(chartCenter).toContain('aria-hidden="true"');
+    expect(chartCenter).not.toContain("aria-live");
+    expect(component).toContain('role="group"');
+    expect(component).toContain('aria-describedby="sunburst-navigation-help"');
+    expect(component).toContain(
+      'aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}',
+    );
+  });
 });

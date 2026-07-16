@@ -1,0 +1,94 @@
+Cepa visual chart preview semantics validation
+Date: 2026-07-16
+Baseline commit: eebfa09b0c19f3206a29eeb1b53ee0ba7df94c24
+
+Changed source SHA-256
+55f6eb65b26e4b96a13d827434a5b6a06c4a47d5c9e3ff957dd5f8b6d746693f  src/App.svelte
+a753e97f522ffd2b3599919eb74c7b8a53b3ab107565992a8a31195f26af435d  src/lib/style-sources.test.ts
+e12e17e997b3beb2561ab7ae8cb91222d12117d254d50b0a94ac1679ced5d1e9  src-tauri/examples/native_scan_smoke.rs
+cbf08f4748e0d82a2be33785106dd5bacca68abd1b3ff9fa1f1ca06a17f6df3a  AGENTS.md
+3b39900a07bf05eac81005fdf3cd4cd8fbe6e89104fa1966e5e5af9ac2a8ecbf  README.md
+9aeff7cbe7c4cd565949806bbfbadb9ecdd9ced0cdcef88e8c1d83f0813eed25  docs/performance.md
+
+Reproduction before the fix
+- Completed mock scan at 620x480 dark.
+- The visible chart center contained `467 GB / demo`, exposed aria-live=polite,
+  and had no aria-hidden state.
+- The same chart exposed segment labels including `Library, 220 GB`, `Caches,
+  120 GB`, and `Application Support, 85.0 GB`.
+- Focus and pointer preview updates therefore mutated a live region with content
+  already provided by the focused segment itself.
+
+Deterministic browser validation after the fix
+- The chart center exposes aria-hidden=true and no aria-live attribute.
+- The named radial group, its associated keyboard instruction, and each exact
+  segment name/size label remain present.
+- Focusing Library still updates the visible center to `220 GB / Library`; the
+  focused segment retains `Library, 220 GB` as its accessible label.
+- The visual layout and 620x480 geometry remain unchanged.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Fixture:
+- completion: 32 requested directories x 32 files x 4096 logical bytes
+
+Selected report fields:
+  backendLabel=macOS native
+  chartPreviewHidden=true
+  chartTabStops=1
+  chartArrowMoved=true
+  chartHomeMoved=true
+  logicalChartTabStops=1
+  pendingChartNavigationFocusRetained=true
+  pendingShortcutNavigationFocusRetained=true
+  pendingNavigationFocusRetained=true
+  pendingHomeFocusRetained=true
+  landingFocusRestored=true
+  staleScanRejected=true
+  discardedScanId=1
+  rescanCompleted=true
+  horizontalOverflow=false
+  pageErrors=[]
+  processToReportMs=1156.925125
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 61 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict Clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict Clippy passed.
+- The native Windows host did not answer an eight-second SSH probe, so this
+  candidate has no fresh Windows WebView2 runtime evidence.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method and results:
+- Transferred a disposable exact working-tree archive with dependencies, build
+  outputs, VCS metadata, and private local notes excluded.
+- Frontend diagnostics, all 61 tests, and the production Vite build passed.
+- Formatting, dependency-light all-target check, warning-denied Clippy, and 76
+  native-core tests passed; one real-Btrfs fixture was intentionally ignored.
+- The disposable source and build outputs were removed after validation. The
+  standing checkout and system installation were unchanged.
+
+Scope
+This proves the DOM contract, deterministic browser behavior, programmatic
+production-macOS-WebView lifecycle, local Windows cross-target graph, and Linux
+Rust 1.97 native core. It does not certify a particular screen reader, physical
+keyboard input, Windows WebView2, Linux WebKitGTK runtime, or installed packages.

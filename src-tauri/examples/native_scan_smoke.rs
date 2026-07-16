@@ -238,6 +238,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["chartSegments"]
             .as_u64()
             .is_some_and(|count| count > 0 && count <= 512)
+        && report["chartPreviewHidden"].as_bool() == Some(true)
         && report["chartTabStops"].as_u64() == Some(1)
         && report["logicalChartSegments"]
             .as_u64()
@@ -472,6 +473,10 @@ void (async () => {{
     const rootHeading = document.querySelector('.section-heading h2')?.textContent?.trim() || '';
     const initialRows = document.querySelectorAll('.storage-row').length;
     const chartSegments = document.querySelectorAll('[data-chart-node-id]').length;
+    const chartCenter = document.querySelector('.chart-center');
+    const chartPreviewHidden =
+      chartCenter?.getAttribute('aria-hidden') === 'true'
+      && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
@@ -674,6 +679,7 @@ void (async () => {{
       searchMs,
       initialRows,
       chartSegments,
+      chartPreviewHidden,
       chartTabStops,
       logicalChartSegments,
       logicalChartTabStops,
@@ -761,6 +767,7 @@ mod tests {
             "injectionAttempts": 1,
             "initialRows": 4,
             "chartSegments": 8,
+            "chartPreviewHidden": true,
             "chartTabStops": 1,
             "logicalChartSegments": 8,
             "logicalChartTabStops": 1,
@@ -812,6 +819,10 @@ mod tests {
         let mut broken_keyboard = complete.clone();
         broken_keyboard["revealArrowPreserved"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
+
+        let mut chart_preview_announced = complete.clone();
+        chart_preview_announced["chartPreviewHidden"] = false.into();
+        assert!(!validate_report(&chart_preview_announced, 2));
 
         let mut stale_scan_retained = complete.clone();
         stale_scan_retained["staleScanRejected"] = false.into();

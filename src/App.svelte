@@ -1834,7 +1834,7 @@
               <div class="chart-empty"><Folder /></div>
             {/if}
 
-            <div class="chart-center" aria-live="polite">
+            <div class="chart-center" aria-hidden="true">
               <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
               <em>{activeEntry?.name ?? view.displayName}</em>
             </div>

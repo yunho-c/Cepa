@@ -1718,6 +1718,33 @@ This is deterministic browser and programmatic production-WebView evidence. It
 does not certify physical keyboard input, assistive technology, Windows WebView2,
 or Linux WebKitGTK runtime.
 
+### 2026-07-16 visual chart preview semantics
+
+The radial chart's center preview mirrors the currently selected segment's name
+and size for sighted users. It was also a polite live region. Since real chart
+segments already expose that same name and size in their accessible labels, each
+keyboard focus change could produce duplicate speech, while ordinary pointer
+movement could generate unsolicited announcements even though it is not an
+application status change.
+
+The center preview is now `aria-hidden` and no longer a live region. The named
+chart group, one roving segment Tab stop, per-segment labels, and associated
+keyboard instruction remain unchanged. This also removes the default folder
+total/name duplicate from virtual navigation; the same total is already in the
+result heading and every interactive preview remains visible.
+
+At 620 by 480 in dark appearance, focusing Library still changed the visible
+center from `467 GB / demo` to `220 GB / Library`, while the focused segment
+retained the accessible label `Library, 220 GB`; the center exposed
+`aria-hidden=true` and no `aria-live`. The production macOS WebView requires the
+same contract before metric, chart, list, search, navigation, discard, and rescan
+checks proceed. Exact source, commands, cross-target checks, and Linux Rust
+1.97.0 evidence are recorded in
+[`validation-results/2026-07-16-chart-preview-semantics.txt`](validation-results/2026-07-16-chart-preview-semantics.txt).
+This is DOM, deterministic browser, and programmatic production-WebView
+evidence. It does not certify a particular screen reader, physical keyboard,
+Windows WebView2, or Linux WebKitGTK runtime.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple
