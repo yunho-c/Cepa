@@ -1295,6 +1295,25 @@ build using its provisioned WebKitGTK packages and isolated display/session
 buses. Raw runs are preserved in
 [`performance-results/2026-07-16-linux-native-webview.csv`](performance-results/2026-07-16-linux-native-webview.csv).
 
+### 2026-07-16 native keyboard interaction smoke
+
+A follow-up candidate based on `4f1f3b3` strengthened the same production
+WebView harness beyond counting Tab stops. At 620×480 it now moves chart focus
+with ArrowRight and Home, moves primary list focus with ArrowDown, preserves the
+Reveal action kind while moving that focus with ArrowDown, and opens the first
+chart folder with Enter before performing search.
+
+One release run passed in the macOS WebKit view with the `macOS native` backend,
+and one passed in Linux WebKitGTK with `Linux native`. Both retained one chart
+and two list Tab stops, completed every focus and activation assertion, emitted
+no page error, and had no horizontal overflow. The Linux run used the same
+disposable WebKitGTK sysroot and unprivileged mount-namespace method as the
+seven-run observation above, without disabling WebKit's sandbox. These are
+programmatically dispatched production-WebView keyboard events, not physical
+keyboard, screen-reader, or broader assistive-technology certification. The
+exact validation record is preserved in
+[`validation-results/2026-07-16-native-keyboard-webviews.txt`](validation-results/2026-07-16-native-keyboard-webviews.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

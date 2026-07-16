@@ -219,10 +219,11 @@ custom protocol. It submits the ordinary manual-path form, waits for the real
 scan response and two painted frames, switches metrics, navigates into a
 directory, performs a debounced folder search, and validates bounded focus and
 overflow invariants in both size metrics while rejecting uncaught page errors.
-Its window state uses a dedicated filename that is removed after the run. This
-proves programmatic production-WebView and IPC behavior; it does not exercise
-physical input, the native folder picker, drag-and-drop, or an installed
-package.
+It moves chart focus with Arrow/Home, moves both list action kinds with arrows,
+and opens a chart folder with Enter. Its window state uses a dedicated filename
+that is removed after the run. This proves programmatic production-WebView, IPC,
+and keyboard-event behavior; it does not exercise physical input, assistive
+technology, the native folder picker, drag-and-drop, or an installed package.
 
 Linux CI and provisioned Linux workstations run the same proof inside isolated
 display and session buses:

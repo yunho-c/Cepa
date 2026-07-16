@@ -1,0 +1,36 @@
+Cepa native production-WebView keyboard validation
+Date: 2026-07-16
+Candidate baseline: 4f1f3b3
+
+macOS WebKit at 620x480: passed
+- scanner: macOS native
+- chart ArrowRight movement: passed
+- chart Home movement: passed
+- primary-list ArrowDown movement: passed
+- Reveal-list ArrowDown action preservation: passed
+- chart Enter folder activation: passed
+- chart/list Tab stops: 1 / 2
+- uncaught page errors: 0
+- horizontal overflow: false
+
+Linux WebKitGTK at 620x480: passed
+- scanner: Linux native
+- chart ArrowRight movement: passed
+- chart Home movement: passed
+- primary-list ArrowDown movement: passed
+- Reveal-list ArrowDown action preservation: passed
+- chart Enter folder activation: passed
+- chart/list Tab stops: 1 / 2
+- uncaught page errors: 0
+- horizontal overflow: false
+
+The Linux run used Rust 1.97.0, a disposable user-local WebKitGTK 4.1
+development/runtime sysroot, isolated Xvfb and DBus sessions, and an
+unprivileged mount namespace for WebKit helper discovery. The application and
+WebKit sandboxes were not disabled. The standing checkout and system
+installation were unchanged.
+
+This is production bundled-frontend, Tauri IPC, native scanner, and
+programmatically dispatched keyboard-event evidence. It does not exercise a
+physical keyboard, screen reader, native folder picker, drag-and-drop, or an
+installed package.

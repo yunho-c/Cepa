@@ -203,9 +203,13 @@ fn validate_report(report: &Value) -> bool {
             .as_u64()
             .is_some_and(|count| count > 0 && count <= 512)
         && report["logicalChartTabStops"].as_u64() == Some(1)
+        && report["chartArrowMoved"].as_bool() == Some(true)
+        && report["chartHomeMoved"].as_bool() == Some(true)
         && report["listTabStops"]
             .as_u64()
             .is_some_and(|count| count <= 2)
+        && report["listArrowMoved"].as_bool() == Some(true)
+        && report["revealArrowPreserved"].as_bool() == Some(true)
         && report["horizontalOverflow"].as_bool() == Some(false)
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
@@ -239,6 +243,11 @@ void (async () => {{
   const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
   const painted = async () => {{ await frame(); await frame(); }};
+  const press = async (target, key) => {{
+    target.dispatchEvent(new KeyboardEvent('keydown', {{ key, bubbles: true }}));
+    await painted();
+    return document.activeElement;
+  }};
   const waitFor = async (predicate, label, timeout = 30000) => {{
     const deadline = performance.now() + timeout;
     while (performance.now() < deadline) {{
@@ -304,11 +313,30 @@ void (async () => {{
     const logicalChartSegments = document.querySelectorAll('[data-chart-node-id]').length;
     const logicalChartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
 
-    const firstDirectory = [...document.querySelectorAll('.storage-item')]
-      .find((button) => button.querySelector('[data-kind="directory"]'));
+    const chartNodes = [...document.querySelectorAll('[data-chart-node-id]')];
+    if (chartNodes.length < 2) throw new Error('The logical chart needs two keyboard targets.');
+    chartNodes[0].focus();
+    const chartArrowTarget = await press(chartNodes[0], 'ArrowRight');
+    const chartArrowMoved = chartArrowTarget?.dataset.chartNodeId === chartNodes[1].dataset.chartNodeId;
+    const chartHomeTarget = await press(chartArrowTarget, 'Home');
+    const chartHomeMoved = chartHomeTarget?.dataset.chartNodeId === chartNodes[0].dataset.chartNodeId;
+
+    const openButtons = [...document.querySelectorAll('.storage-item')];
+    const revealButtons = [...document.querySelectorAll('.reveal-item')];
+    if (openButtons.length < 2 || revealButtons.length < 2) {{
+      throw new Error('The directory list needs two open and Reveal keyboard targets.');
+    }}
+    openButtons[0].focus();
+    const listArrowTarget = await press(openButtons[0], 'ArrowDown');
+    const listArrowMoved = listArrowTarget?.dataset.listOpenId === openButtons[1].dataset.listOpenId;
+    revealButtons[0].focus();
+    const revealArrowTarget = await press(revealButtons[0], 'ArrowDown');
+    const revealArrowPreserved = revealArrowTarget?.dataset.listRevealId === revealButtons[1].dataset.listRevealId;
+
     const navigationStartedAt = performance.now();
     phase('navigating');
-    firstDirectory.click();
+    chartNodes[0].focus();
+    chartNodes[0].dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
     await waitFor(
       () => document.querySelector('.section-heading h2')?.textContent?.trim() !== rootHeading,
       'directory navigation',
@@ -347,7 +375,11 @@ void (async () => {{
       chartTabStops,
       logicalChartSegments,
       logicalChartTabStops,
+      chartArrowMoved,
+      chartHomeMoved,
       listTabStops,
+      listArrowMoved,
+      revealArrowPreserved,
       horizontalOverflow,
       logicalMetricSelected: logicalMetricSelected(),
       navigationChangedFolder: navigatedHeading !== rootHeading,
@@ -401,7 +433,11 @@ mod tests {
             "chartTabStops": 1,
             "logicalChartSegments": 8,
             "logicalChartTabStops": 1,
+            "chartArrowMoved": true,
+            "chartHomeMoved": true,
             "listTabStops": 2,
+            "listArrowMoved": true,
+            "revealArrowPreserved": true,
             "horizontalOverflow": false,
             "pageErrors": [],
             "logicalMetricSelected": true,
@@ -412,6 +448,10 @@ mod tests {
             "backendLabel": "macOS native",
         });
         assert!(validate_report(&complete));
+
+        let mut broken_keyboard = complete.clone();
+        broken_keyboard["revealArrowPreserved"] = false.into();
+        assert!(!validate_report(&broken_keyboard));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();
