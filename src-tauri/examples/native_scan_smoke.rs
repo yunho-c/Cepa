@@ -254,6 +254,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
         && report["navigationChangedFolder"].as_bool() == Some(true)
+        && report["pendingNavigationFocusRetained"].as_bool() == Some(true)
         && report["searchStatus"]
             .as_str()
             .is_some_and(|status| status.contains("match"))
@@ -501,8 +502,17 @@ void (async () => {{
 
     const navigationStartedAt = performance.now();
     phase('navigating');
-    chartNodes[0].focus();
-    chartNodes[0].dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
+    const chartNavigationNode = chartNodes.find((node) => {{
+      const nodeId = node.dataset.chartNodeId;
+      return [...document.querySelectorAll('.storage-item')].some((button) =>
+        button.dataset.listOpenId === nodeId
+        && button.getAttribute('aria-label')?.endsWith(', open folder'));
+    }});
+    if (!chartNavigationNode) throw new Error('The chart has no directory target.');
+    chartNavigationNode.focus();
+    chartNavigationNode.dispatchEvent(
+      new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}),
+    );
     await waitFor(
       () => document.querySelector('.section-heading h2')?.textContent?.trim() !== rootHeading,
       'directory navigation',
@@ -550,6 +560,32 @@ void (async () => {{
     const noMatchPanelContained = fullyContained(noMatchPanel, directoryPane);
     const noMatchRecoveryContained = noMatchRecovery !== undefined
       && fullyContained(noMatchRecovery, directoryPane);
+
+    phase('testing-pending-navigation-focus');
+    const upButton = document.querySelector('.chart-back');
+    if (!upButton) throw new Error('The navigated chart has no Up action.');
+    upButton.click();
+    await waitFor(
+      () => document.querySelector('.section-heading h2')?.textContent?.trim() === rootHeading,
+      'return to root for pending navigation',
+    );
+    const pendingOpenButton = [...document.querySelectorAll('.storage-item')]
+      .find((button) => button.getAttribute('aria-label')?.endsWith(', open folder'));
+    if (!pendingOpenButton) throw new Error('The root list has no navigation action.');
+    pendingOpenButton.focus();
+    pendingOpenButton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingNavigationFocusRetained =
+      document.activeElement === pendingOpenButton
+      && pendingOpenButton.getAttribute('aria-disabled') === 'true'
+      && !pendingOpenButton.hasAttribute('disabled');
+    await waitFor(
+      () => document.querySelector('.section-heading h2')?.textContent?.trim() !== rootHeading,
+      'list directory navigation',
+    );
+    await painted();
 
     phase('returning-home');
     document.querySelector('[aria-label="Cepa home"]').click();
@@ -602,6 +638,7 @@ void (async () => {{
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       navigationChangedFolder: navigatedHeading !== rootHeading,
+      pendingNavigationFocusRetained,
       searchStatus,
       searchedRows,
       noMatchStatus,
@@ -684,6 +721,7 @@ mod tests {
             "pageErrors": [],
             "logicalMetricSelected": true,
             "navigationChangedFolder": true,
+            "pendingNavigationFocusRetained": true,
             "searchStatus": "10 matches",
             "searchedRows": 10,
             "noMatchStatus": "0 matches",
@@ -740,6 +778,10 @@ mod tests {
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();
         assert!(!validate_report(&cancellation_focus_lost, 2));
+
+        let mut pending_navigation_focus_lost = complete.clone();
+        pending_navigation_focus_lost["pendingNavigationFocusRetained"] = false.into();
+        assert!(!validate_report(&pending_navigation_focus_lost, 2));
 
         let mut scan_heading_focus_lost = complete.clone();
         scan_heading_focus_lost["initialScanHeadingFocused"] = false.into();

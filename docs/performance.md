@@ -1560,6 +1560,48 @@ installed package, or Windows WebView2. Exact source hashes, commands, fixture
 shape, and results are preserved in
 [`validation-results/2026-07-16-scan-entry-focus.txt`](validation-results/2026-07-16-scan-entry-focus.txt).
 
+### 2026-07-16 pending explorer action focus
+
+The next keyboard audit used the existing 1.2-second `stale-actions` delays and
+found that both a list-origin directory open and Reveal moved focus to the
+document body while pending. Their native button `disabled` attributes were
+applied immediately after activation. The eventual success or error recovery
+already restored focus, but the intervening request window had no stable owner.
+
+Pending explorer controls now remain focusable with guarded `aria-disabled`
+state. The list's existing opacity treatment and pointer exclusion remain, while
+breadcrumbs, Up, Reveal, and recovery actions use restrained wait-cursor and
+opacity feedback. Repeat activation is rejected in the action handlers, and
+roving arrow movement is frozen only for the pending action kind. Directory
+navigation now also increments the Reveal generation; both a delayed Reveal
+success and failure are ignored after the view changes.
+
+At 620 by 480 in light appearance, a delayed list navigation retained its
+focused row with `aria-disabled=true`, no native disabled attribute, no body
+focus, and no horizontal overflow; ArrowDown did not move it during the request.
+At 880 by 620 in dark appearance, delayed Reveal preserved the same invariants.
+Navigation- and Reveal-error retries retained their focused `Trying…` action and
+then restored focus to the opened view or original Reveal control. A combined
+trace started Reveal, immediately opened its folder, and observed the Library
+heading focused with no stale Reveal error after both delayed responses settled.
+
+The production WebView smoke now returns to the scan root after search, starts a
+real list-origin directory request, and requires its action to retain focus with
+guarded `aria-disabled` state before native IPC completes. The harness also now
+selects chart and list directory actions by semantics rather than assuming the
+first ranked item is a folder. A 3,001-file APFS fixture with 100 empty
+directories had previously timed out because its nonempty manifest ranked first;
+the exact final harness completed that fixture with `macOS native`, pending focus
+retained, no page errors, and no horizontal overflow.
+
+The full local suite, release desktop build, Windows GNU all-target check and
+strict clippy, and exact-source Linux Rust 1.97.0 dependency-light validation
+passed. This is deterministic browser and programmatic production-WebView
+evidence. It does not certify a screen reader, physical keyboard, actual file-
+manager Reveal timing, installed package, or Windows WebView2. Exact hashes,
+commands, results, and evidence boundaries are preserved in
+[`validation-results/2026-07-16-pending-explorer-focus.txt`](validation-results/2026-07-16-pending-explorer-focus.txt).
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

@@ -1,0 +1,128 @@
+Cepa pending explorer action focus validation
+Date: 2026-07-16
+Baseline commit: 3dccefbc90f24104c2e2a19354d7e796434ae298
+
+Changed source SHA-256
+9c35a2438a1fa9cd69953c50e1d9b59c4acb94768c9787eaf6e3fe09f82a08e0  src/App.svelte
+26374371f0b9d5fa37576ab6d725aa0dc742ab9ce06ac210235428b7cdafc8be  src/app.css
+a5173d9601e315bb1e2c1a2a56bc69f67b441ca1aec962531a1abfeb352a0b55  src/lib/style-sources.test.ts
+cf7c46feb49d48ab70674122a684bd28de645d974440dda8625dad428cdac15f  src-tauri/examples/native_scan_smoke.rs
+
+Reproduction before the fix
+- Started mock=stale-actions and focused the first primary list action.
+- Activating its 1.2-second directory request set native disabled immediately;
+  activeElement became BODY.
+- Repeated the trace from the first Reveal action with the same result.
+
+Deterministic browser validation after the fix
+- Delayed primary navigation at 620x480 light:
+  activeElement remained the initiating row; aria-disabled=true; no native
+  disabled attribute; ArrowDown kept focus; no horizontal overflow.
+- Delayed Reveal at 880x620 dark:
+  activeElement remained the initiating Reveal control; aria-disabled=true; no
+  native disabled attribute; ArrowDown kept focus; no horizontal overflow.
+- navigation-error retry at 620x480 dark:
+  the `Trying…` button retained focus with aria-disabled=true, then the Library
+  view heading received focus after the 600-millisecond successful retry.
+- reveal-error retry at 620x480 light:
+  the `Trying…` button retained focus with aria-disabled=true, then the original
+  Reveal control received focus after the 600-millisecond successful retry.
+- Overlapping stale-actions trace:
+  started Reveal, immediately opened the same folder, waited 1.45 seconds, and
+  observed folder=Library, the view heading focused, BODY not focused, and no
+  stale `Couldn’t show that item` error.
+- No page console errors were observed in the inspected states.
+
+Production macOS WebView and IPC
+Command:
+  just native-scan-smoke /tmp/.../completion
+
+Final fixture:
+- 100 directories with 30 empty files each, plus the generated manifest: 3,001
+  files and 101 directories.
+- The nonempty manifest ranked ahead of zero-byte directories. The harness
+  selected directory actions by their matching list semantics rather than rank.
+- The disposable fixture and isolated window-state file were removed.
+
+Selected report fields:
+  backendLabel=macOS native
+  pendingNavigationFocusRetained=true
+  navigationChangedFolder=true
+  chartArrowMoved=true
+  chartHomeMoved=true
+  listArrowMoved=true
+  revealArrowPreserved=true
+  initialScanHeadingFocused=true
+  rescanHeadingFocused=true
+  rescanResultFocused=true
+  horizontalOverflow=false
+  pageErrors=[]
+  scanToPaintMs=122
+  processToReportMs=1271.75
+
+An earlier run of this empty-file shape reached chart navigation but timed out
+because the harness activated the first-ranked manifest file. After chart target
+selection was made semantic, a second run reached the new pending list check but
+found the same rank assumption there. Neither timeout was counted as passing
+evidence. The final run used semantic folder selection in both places and passed
+the complete lifecycle.
+
+Local validation
+Toolchain: rustc 1.94.0-nightly (e7d44143a 2025-12-24), Cargo
+1.94.0-nightly (3861f60f6 2025-12-19), Bun 1.3.14
+
+Commands:
+  just check
+  just build
+  cargo check --target x86_64-pc-windows-gnu --all-targets
+  cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+  rg -a 'The earlier reveal request completed after the scan changed|STALE_ACTION_DELAY_MS' dist
+
+Results:
+- Svelte diagnostics: 0 errors and 0 warnings.
+- Frontend tests: 56 passed, 0 failed.
+- Local Rust library tests: 101 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- All Rust example tests, formatting, check, strict clippy, and release desktop
+  build passed.
+- Windows GNU all-target check and strict clippy passed.
+- Neither development-only mock string appeared in the production bundle.
+
+Linux exact-source validation
+Toolchain: rustc 1.97.0 (2d8144b78 2026-07-07), Cargo 1.97.0
+(c980f4866 2026-06-30), Bun 1.2.21
+
+Method:
+- Transferred a disposable exact source archive with macOS extended attributes,
+  build outputs, dependencies, and VCS metadata excluded.
+- Verified all four changed source hashes above before validation.
+- Reused the standing checkout's installed frontend dependencies through a
+  temporary symlink; removed the complete disposable source on exit.
+
+Commands:
+  bun --bun run check
+  bun test src/lib/*.test.ts
+  cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+  cargo check --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+  cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets \
+    --no-default-features -- -D warnings
+  cargo test --manifest-path src-tauri/Cargo.toml --all-targets --no-default-features
+  bun --bun run build
+
+Results:
+- Frontend diagnostics and all 56 tests passed.
+- Dependency-light format, all-target check, and strict clippy passed.
+- Linux Rust library tests: 76 passed, 1 ignored.
+- Tauri configuration tests: 6 passed.
+- Every dependency-light example test and the production web build passed.
+- Neither development-only mock string appeared in the production bundle.
+
+Evidence boundaries
+- Browser checks used Chromium and deterministic development mocks.
+- The macOS production run used real WebKit, Tauri IPC, and the native scanner,
+  but programmatic form and keyboard events rather than physical input.
+- The real production smoke does not invoke Reveal because that would open the
+  platform file manager; pending Reveal evidence remains deterministic-browser
+  evidence.
+- No screen reader, installed package, or Windows WebView2 runtime was exercised.
+  The native Windows host was unreachable during this slice.

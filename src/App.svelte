@@ -296,6 +296,10 @@
     event: KeyboardEvent,
     itemId: number,
   ) {
+    if (
+      isResultBusy ||
+      (listFocusAction === "reveal" && revealingNodeId !== null)
+    ) return;
     const targetId = listNavigationTarget(visibleItemIds, itemId, event.key);
     if (targetId === null) return;
 
@@ -1104,7 +1108,7 @@
     else invalidateDirectorySearch();
     isNavigating = true;
     if (!preserveRecovery) clearNavigationError();
-    clearRevealError();
+    invalidateRevealRequest();
     try {
       const nextView = await invoke<DirectoryView>("open_scan_directory", {
         scanId: completedScanId,
@@ -1214,6 +1218,13 @@
     if (!preserveRecovery) clearRevealError();
     try {
       await invoke("reveal_scan_item", { scanId: completedScanId, nodeId });
+      if (
+        !isCurrentCompletedScanRequest(request, {
+          scanId,
+          sequence: revealSequence,
+          complete: status === "complete",
+        })
+      ) return false;
       clearRevealError();
       return true;
     } catch (error) {
@@ -1236,7 +1247,12 @@
 
   async function retryReveal() {
     const nodeId = revealErrorNodeId;
-    if (nodeId === null) return;
+    if (
+      nodeId === null ||
+      revealRetryInFlight ||
+      revealingNodeId !== null ||
+      isResultBusy
+    ) return;
     revealRetryInFlight = true;
     let succeeded = false;
     try {
@@ -1253,17 +1269,21 @@
     )?.focus();
   }
 
+  function invalidateRevealRequest() {
+    revealSequence += 1;
+    revealingNodeId = null;
+    revealRetryInFlight = false;
+    clearRevealError();
+  }
+
   function invalidateCompletedScanRequests() {
     // Backend scan IDs authorize each command; these frontend generations also
     // prevent an older completion from mutating a newer UI lifecycle.
     navigationSequence += 1;
     isNavigating = false;
-    revealSequence += 1;
-    revealingNodeId = null;
     navigationRetryInFlight = false;
-    revealRetryInFlight = false;
     clearNavigationError();
-    clearRevealError();
+    invalidateRevealRequest();
   }
 
   function activateEntry(
@@ -1633,7 +1653,7 @@
             {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
             <button
               type="button"
-              disabled={isResultBusy}
+              aria-disabled={isResultBusy}
               aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
               onclick={() => openDirectory(breadcrumb.id)}
             >{breadcrumb.name}</button>
@@ -1673,7 +1693,7 @@
                 <Button
                   variant="outline"
                   size="xs"
-                  disabled={isResultBusy || navigationRetryInFlight}
+                  aria-disabled={isResultBusy || navigationRetryInFlight}
                   onclick={retryNavigationAction}
                 >{navigationRetryInFlight ? "Trying…" : "Try again"}</Button>
               </div>
@@ -1701,7 +1721,7 @@
               <Button
                 variant="outline"
                 size="xs"
-                disabled={isResultBusy || revealingNodeId !== null || revealRetryInFlight}
+                aria-disabled={isResultBusy || revealingNodeId !== null || revealRetryInFlight}
                 onclick={retryReveal}
               >{revealRetryInFlight ? "Trying…" : "Try again"}</Button>
             </div>
@@ -1727,7 +1747,7 @@
               class="chart-back"
               variant="ghost"
               size="sm"
-              disabled={isResultBusy}
+              aria-disabled={isResultBusy}
               title={`Up (${backShortcutLabel})`}
               onclick={() => openDirectory(parentId)}
             >
@@ -2014,7 +2034,7 @@
                     class="storage-item"
                     tabindex={listFocusId === item.id ? 0 : -1}
                     data-list-open-id={item.id}
-                    disabled={isResultBusy}
+                    aria-disabled={isResultBusy}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
                     onpointermove={() => previewEntry(item)}
                     onfocus={() => handleListFocus(item, "open")}
@@ -2056,7 +2076,7 @@
                       class="reveal-item"
                       tabindex={listFocusId === item.id ? 0 : -1}
                       data-list-reveal-id={item.id}
-                      disabled={isResultBusy || revealingNodeId !== null}
+                      aria-disabled={isResultBusy || revealingNodeId !== null}
                       aria-label={`Reveal ${item.name} in the system file manager`}
                       title="Reveal in file manager"
                       onclick={() => revealItem(item.id)}

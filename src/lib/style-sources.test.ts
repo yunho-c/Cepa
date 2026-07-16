@@ -18,4 +18,27 @@ describe("production style sources", () => {
     expect(stylesheet).toContain(".inspector-heading-copy {");
     expect(stylesheet).not.toContain(".inspector-heading > div {");
   });
+
+  test("keeps pending explorer actions focused with guarded aria-disabled state", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const storageStart = component.indexOf('class="storage-item"');
+    const revealStart = component.indexOf('class="reveal-item"');
+    const storageButton = component.slice(
+      storageStart,
+      component.indexOf("</button>", storageStart),
+    );
+    const revealButton = component.slice(
+      revealStart,
+      component.indexOf("</button>", revealStart),
+    );
+
+    expect(storageStart).toBeGreaterThan(-1);
+    expect(revealStart).toBeGreaterThan(-1);
+    expect(storageButton).toContain("aria-disabled={isResultBusy}");
+    expect(storageButton).not.toMatch(/^\s*disabled=/m);
+    expect(revealButton).toContain(
+      "aria-disabled={isResultBusy || revealingNodeId !== null}",
+    );
+    expect(revealButton).not.toMatch(/^\s*disabled=/m);
+  });
 });

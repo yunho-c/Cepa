@@ -177,6 +177,13 @@ without Reveal falls back to its primary control without forgetting the Reveal
 intent, so moving again can return to Reveal. Preserve the associated screen-
 reader instructions and recover focus ownership when search results or the
 current directory change. Do not make all 500 rows and actions tabbable.
+Pending directory navigation and Reveal must not native-disable the control that
+owns focus. Keep list, breadcrumb, Up, and recovery actions focusable with
+guarded `aria-disabled` state while their request is live; reject repeat
+activation and freeze that action kind's roving-arrow movement until it settles.
+Successful navigation moves focus to the new view heading, while Reveal success
+leaves focus on its original action. Preserve the restrained pending opacity and
+wait cursor without dropping focus to the document body.
 The inspector is an internal scroll container when its contents exceed the
 compact right pane; focused recovery messages must remain visible instead of
 overflowing the explorer at the minimum window height. Keep its identity header
@@ -333,7 +340,9 @@ invalidates both generations before clearing state. Preserve that second
 boundary: a delayed response must not replace a newer directory view, clear a
 newer request's busy state, or focus an error in a fresh result even if a mock
 reuses the same scan ID. `?mock=stale-actions` is the deterministic browser
-regression for these races.
+regression for these races. Starting directory navigation also supersedes an
+older Reveal request: neither its delayed success nor failure may clear or focus
+state in the newly opened folder.
 If navigation, metric switching, or Reveal fails, keep the raw cause in the
 collapsed `Error details`, preserve the current result, and retain only the
 scan-local opaque node/metric intent needed for Try again. A successful retry

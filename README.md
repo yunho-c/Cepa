@@ -231,16 +231,20 @@ scan recovery available. Its primary guidance must stay cause-neutral, its exact
 diagnostic must remain collapsed, and the early terminal event must not surface
 as an unhandled page rejection. It next starts the optional second fixture as a
 larger scan, activates the real Stop control, and requires the cancelled landing
-notice to own focus while another scan remains available. It then submits the ordinary
-completion fixture, waits for the terminal channel event
+notice to own focus while another scan remains available. It then submits the
+ordinary completion fixture, waits for the terminal channel event
 and two painted frames, switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates
 that the compact message and Clear action stay inside the directory pane. It
 also validates bounded focus and overflow invariants in both size metrics while
 rejecting uncaught page errors. It moves chart focus
 with Arrow/Home, moves both list action kinds with arrows, opens a chart folder
-with Enter, returns Home, confirms the discarded scan is no longer addressable,
-and completes a second scan in the same process. With both preflights, the
+with Enter, returns to the root, and requires a real list-origin navigation to
+retain focus with guarded `aria-disabled` state while IPC is pending. Chart and
+list activation choose actual directory items rather than assuming the first
+ranked item is a folder. It then returns Home, confirms the discarded scan is no
+longer addressable, and completes a second scan in the same process. With both
+preflights, the
 discard check targets completed scan 3 rather than the earlier failed or
 cancelled scans. Both active-scan headings, the landing heading, and the second-
 result heading must receive focus at their respective view transitions.
@@ -327,7 +331,8 @@ cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough
 to rescan or return Home first. It deliberately reuses the mock scan ID so the
 request-generation guard—not an incidental ID change—must prevent an old view or
-error from entering the new workflow.
+error from entering the new workflow. It also covers pending action focus and a
+directory navigation superseding an older Reveal response.
 `?mock=picker-error` covers a first-launch picker failure, while
 `?mock=picker-recovery` fails only after a completed scan is visible.
 `?mock=error` covers a terminal scan failure with actionable primary copy and a
