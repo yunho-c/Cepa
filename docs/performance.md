@@ -1368,6 +1368,18 @@ upper bounds for blocked syscalls. Exact assertions and environment boundaries
 are preserved in
 [`validation-results/2026-07-16-native-scan-cancellation.txt`](validation-results/2026-07-16-native-scan-cancellation.txt).
 
+A follow-up audit found that the cancellation preflight advanced the completed
+scan from ID 1 to ID 2, while the lifecycle controller still tried to reopen ID
+1 after Home. That ID was already unavailable because it belonged to the
+cancelled scan, so the assertion could pass without proving that Home released
+the completed snapshot. The harness now derives the expected completed ID,
+reports it, reopens exactly that ID, and requires Rust-side report validation to
+match it. Production macOS WebKit passed with discarded ID 2 after cancellation
+and ID 1 without the preflight; production Linux WebKitGTK passed with discarded
+ID 2. All three then completed the second scan with restored result focus. This
+strengthens lifecycle correctness evidence; it does not change scanner
+performance results.
+
 ### 2026-07-16 macOS real-tree refresh
 
 The current `ace070f` source (tree `a936fd1`) was remeasured on the same Apple

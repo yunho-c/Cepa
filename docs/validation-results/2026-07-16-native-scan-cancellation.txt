@@ -52,6 +52,16 @@ repository validation:
 - example tests: 24 passed
 - warning-denied all-target Clippy: passed
 
+follow-up exact completed-snapshot discard proof:
+- source=candidate based on d1e7ea6
+- the cancellation preflight consumes scan ID 1
+- Home must invalidate completed scan ID 2, not merely observe ID 1 as stale
+- the harness reports its derived completed ID and Rust requires an exact match
+- macOS with cancellation: discarded_scan_id=2, cancellation_ms=49, lifecycle passed
+- macOS without cancellation: discarded_scan_id=1, lifecycle passed
+- Linux with cancellation: discarded_scan_id=2, cancellation_ms=134, lifecycle passed
+- both native backends completed the second scan with restored result-heading focus
+
 Scope: this proves programmatic production-WebView scan cancellation and the
 subsequent same-process lifecycle on one macOS host and one Linux host. It is not
 physical-input, native-picker, installed-package, cold-cache, blocked-syscall,

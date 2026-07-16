@@ -46,6 +46,7 @@ fn main() {
             .map(|path| path.to_string_lossy()),
     )
     .expect("serialize native cancellation smoke fixture path");
+    let completed_scan_id = 1 + u64::from(cancellation_fixture.is_some());
     let succeeded = Arc::new(AtomicBool::new(false));
     let state_path = Arc::new(Mutex::new(None));
 
@@ -79,7 +80,11 @@ fn main() {
                         app_handle.exit(1);
                         return;
                     }
-                    let script = smoke_script(&fixture_json, &cancellation_fixture_json);
+                    let script = smoke_script(
+                        &fixture_json,
+                        &cancellation_fixture_json,
+                        completed_scan_id,
+                    );
                     let deadline = Instant::now() + SMOKE_TIMEOUT;
                     let mut next_injection = Instant::now();
                     let mut injection_attempts = 0_u64;
@@ -118,7 +123,7 @@ fn main() {
                                             serde_json::to_string_pretty(&report)
                                                 .expect("serialize native scan smoke report")
                                         );
-                                        let passed = validate_report(&report);
+                                        let passed = validate_report(&report, completed_scan_id);
                                         succeeded.store(passed, Ordering::Release);
                                         app_handle.exit(i32::from(!passed));
                                     }
@@ -198,7 +203,7 @@ fn decode_report(encoded: &str) -> Result<Value, String> {
     serde_json::from_str(&json).map_err(|error| format!("the report JSON is invalid: {error}"))
 }
 
-fn validate_report(report: &Value) -> bool {
+fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
     let passed = report["ok"].as_bool() == Some(true)
         && report["pageReadyMs"]
             .as_f64()
@@ -244,6 +249,7 @@ fn validate_report(report: &Value) -> bool {
             .as_f64()
             .is_some_and(|value| value >= 0.0)
         && report["landingFocusRestored"].as_bool() == Some(true)
+        && report["discardedScanId"].as_u64() == Some(expected_discarded_scan_id)
         && report["staleScanRejected"].as_bool() == Some(true)
         && report["rescanCompleted"].as_bool() == Some(true)
         && report["rescanResultFocused"].as_bool() == Some(true)
@@ -262,7 +268,11 @@ fn validate_report(report: &Value) -> bool {
     passed
 }
 
-fn smoke_script(fixture_json: &str, cancellation_fixture_json: &str) -> String {
+fn smoke_script(
+    fixture_json: &str,
+    cancellation_fixture_json: &str,
+    completed_scan_id: u64,
+) -> String {
     format!(
         r#"
 if (!window.__CEPA_NATIVE_SCAN_SMOKE_STARTED__) {{
@@ -270,6 +280,7 @@ window.__CEPA_NATIVE_SCAN_SMOKE_STARTED__ = true;
 void (async () => {{
   const fixture = {fixture_json};
   const cancellationFixture = {cancellation_fixture_json};
+  const completedScanId = {completed_scan_id};
   const pageErrors = [];
   window.addEventListener('error', (event) => pageErrors.push(String(event.error || event.message)));
   window.addEventListener('unhandledrejection', (event) => pageErrors.push(String(event.reason)));
@@ -453,9 +464,10 @@ void (async () => {{
     const landingFocusRestored = document.activeElement === landingHeading;
     let staleScanRejected = false;
     try {{
-      // The smoke builder owns a fresh in-memory ScanState, whose first ID is 1.
+      // The smoke builder owns a fresh ScanState. When cancellation ran first,
+      // Home must release scan 2 rather than merely leaving scan 1 stale.
       await window.__TAURI_INTERNALS__.invoke('open_scan_directory', {{
-        scanId: 1,
+        scanId: completedScanId,
         nodeId: 0,
         metric: 'allocated',
       }});
@@ -500,6 +512,7 @@ void (async () => {{
       cancellationRecoveryAvailable,
       cancellationMs,
       landingFocusRestored,
+      discardedScanId: completedScanId,
       staleScanRejected,
       rescanCompleted,
       rescanResultFocused,
@@ -570,6 +583,7 @@ mod tests {
             "cancellationRecoveryAvailable": true,
             "cancellationMs": 50.0,
             "landingFocusRestored": true,
+            "discardedScanId": 2,
             "staleScanRejected": true,
             "rescanCompleted": true,
             "rescanResultFocused": true,
@@ -579,22 +593,24 @@ mod tests {
             "backendLabel": "macOS native",
             "rescanBackendLabel": "macOS native",
         });
-        assert!(validate_report(&complete));
+        assert!(validate_report(&complete, 2));
 
         let mut broken_keyboard = complete.clone();
         broken_keyboard["revealArrowPreserved"] = false.into();
-        assert!(!validate_report(&broken_keyboard));
+        assert!(!validate_report(&broken_keyboard, 2));
 
         let mut stale_scan_retained = complete.clone();
         stale_scan_retained["staleScanRejected"] = false.into();
-        assert!(!validate_report(&stale_scan_retained));
+        assert!(!validate_report(&stale_scan_retained, 2));
+
+        assert!(!validate_report(&complete, 1));
 
         let mut cancellation_focus_lost = complete.clone();
         cancellation_focus_lost["cancellationFocusRestored"] = false.into();
-        assert!(!validate_report(&cancellation_focus_lost));
+        assert!(!validate_report(&cancellation_focus_lost, 2));
 
         let mut overflow = complete;
         overflow["horizontalOverflow"] = true.into();
-        assert!(!validate_report(&overflow));
+        assert!(!validate_report(&overflow, 2));
     }
 }
