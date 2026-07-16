@@ -200,9 +200,22 @@ fn linux_ci_smokes_the_built_desktop_before_packaging() {
     let bundle = workflow
         .find("- name: Build distribution bundles")
         .expect("CI must build distribution bundles");
-    assert!(build < smoke && smoke < bundle);
+    let package_validation = workflow
+        .find("- name: Validate, smoke, and archive Linux distribution bundles")
+        .expect("CI must validate and smoke-test Linux distribution bundles");
+    let macos_validation = workflow
+        .find("- name: Validate and archive macOS distribution bundles")
+        .expect("CI must validate macOS distribution bundles");
+    assert!(build < smoke && smoke < bundle && bundle < package_validation);
 
     let smoke_step = &workflow[smoke..bundle];
     assert!(smoke_step.contains("if: runner.os == 'Linux'"));
     assert!(smoke_step.contains("run: just smoke-linux-desktop"));
+
+    let package_step = &workflow[package_validation..macos_validation];
+    assert!(package_step.contains("just validate-linux-bundles"));
+    assert!(package_step.contains("-name '*.AppImage' -print -quit"));
+    assert!(
+        package_step.contains("APPIMAGE_EXTRACT_AND_RUN=1 just smoke-linux-desktop \"$appimage\"")
+    );
 }

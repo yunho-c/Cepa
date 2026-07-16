@@ -101,10 +101,13 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: just bundle
 
-      - name: Validate and archive Linux distribution bundles
+      - name: Validate, smoke, and archive Linux distribution bundles
         if: runner.os == 'Linux'
         run: |
           just validate-linux-bundles
+          appimage=$(find src-tauri/target/release/bundle/appimage \
+            -maxdepth 1 -type f -name '*.AppImage' -print -quit)
+          APPIMAGE_EXTRACT_AND_RUN=1 just smoke-linux-desktop "$appimage"
           (
             cd src-tauri/target/release/bundle
             tar -czf "$RUNNER_TEMP/cepa-linux-bundles.tar.gz" \

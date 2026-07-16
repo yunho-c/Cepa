@@ -1,0 +1,17 @@
+scope,check,result,detail
+source,git_tree,pass,commit f182585; tree 9a001e01e9956c55f6c7109ee1b95604c16fcf85
+environment,toolchain,pass,Ubuntu 22.04; Rust 1.97.0; Bun 1.2.21; disposable package sysroot
+bundle,deb_structure,pass,Cepa_0.1.0_amd64.deb; 5479574 bytes; package cepa 0.1.0 amd64; executable and desktop entry present
+bundle,rpm_structure,pass,Cepa-0.1.0-1.x86_64.rpm; 5479336 bytes; package cepa 0.1.0 x86_64; executable and desktop entry present
+bundle,appimage_structure,pass,Cepa_0.1.0_amd64.AppImage; 83237368 bytes; executable ELF 64-bit AppImage
+integrity,deb_sha256,pass,20c4378da4b2851fb7da7df7b88613a19c36b6b3c6c37377bf373b5a3f03c80e
+integrity,rpm_sha256,pass,f2744a7319a5e5583e96fffe0159977638c6b8b1484e4b73f5aaab130c6efb02
+integrity,appimage_sha256,pass,937eea66785ae61f7d1aa9cb7f330da8393947c84a211e12a5f95ec9ee933ffc
+payload,deb_extraction,pass,19583240-byte x86-64 ELF; no unresolved libraries under disposable runtime
+payload,rpm_extraction,pass,19583240-byte x86-64 ELF; no unresolved libraries under disposable runtime
+payload,desktop_entry_parity,pass,DEB and RPM desktop entries are byte-identical
+runtime,deb_payload_startup,pass,8 seconds; Xvfb and isolated DBus; disposable WebKitGTK runtime
+runtime,rpm_payload_startup,pass,8 seconds; Xvfb and isolated DBus; disposable WebKitGTK runtime
+runtime,appimage_startup,pass,8 seconds; Xvfb and isolated DBus; APPIMAGE_EXTRACT_AND_RUN=1; no sysroot library path
+harness,deb_uid_boundary,pass,first archive rejected because host UID exceeded ar owner width; rebuilt as 0:0 in unprivileged user namespace
+harness,appimage_runtime_boundary,pass,WebKitGTK 4.1 helper directory exposed at its normal path through an unprivileged overlay during packaging

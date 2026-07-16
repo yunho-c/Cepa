@@ -402,8 +402,10 @@ canonical build.
 The `CI` workflow repeats `just install`, `just check`, `just build`, and
 `just bundle` on native Ubuntu 22.04, macOS, and Windows runners. After the
 Linux native build, it also requires the raw executable to pass
-`just smoke-linux-desktop` before packaging begins. Each job runs its platform
-package validator and retains one exact distributable archive for
+`just smoke-linux-desktop` before packaging begins. Linux then validates all
+three package formats and launches the resulting AppImage under an isolated
+Xvfb and DBus session before archiving it. Each job runs its platform package
+validator and retains one exact distributable archive for
 14 days. Linux and macOS use tar archives so executable modes, application
 contents, and symlinks survive workflow-artifact transport; Windows retains a
 ZIP containing only its MSI and NSIS installers. Local workflow lint and native

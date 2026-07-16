@@ -695,10 +695,26 @@ as intended; `just` itself was validated by local recipe expansion because it is
 not installed on that host.
 
 This is native compile, link, test, production-build, and headless startup
-evidence. It is not proof of physical desktop interaction, a real folder picker,
-installed DEB/RPM/AppImage behavior, packaging validation, or broader Linux
-hardware/filesystem coverage. The exact results are preserved in
+evidence. A source-identical follow-up at commit `f182585` also built and
+structurally validated the DEB, RPM, and AppImage. The DEB and RPM payloads
+extracted to 19,583,240-byte x86-64 executables with no unresolved libraries
+under the disposable runtime; both survived eight-second headless launches.
+The 83,237,368-byte AppImage included the WebKitGTK helper executables and
+survived the same launch window with no sysroot library path. The host account's
+seven-digit UID exceeded the six-character owner field in the first DEB's `ar`
+header, so that package was correctly rejected and rebuilt inside an
+unprivileged user namespace before validation. The host's absent WebKitGTK 4.1
+installation was supplied at its ordinary runtime path through an unprivileged
+overlay while packaging; neither accommodation modified the host.
+
+The follow-up closes structural Linux package validation and portable AppImage
+startup for this source. It is not proof of physical desktop interaction, a
+real folder picker, installed DEB/RPM lifecycle behavior, signatures, or broader
+Linux hardware/filesystem coverage. CI now repeats the AppImage smoke after
+package validation. The exact results are preserved in
 [`performance-results/2026-07-16-linux-desktop-validation.csv`](performance-results/2026-07-16-linux-desktop-validation.csv).
+Package results and digests are preserved separately in
+[`performance-results/2026-07-16-linux-bundle-validation.csv`](performance-results/2026-07-16-linux-bundle-validation.csv).
 
 The native Windows release harness passed 35 tests. Eleven interleaved runs on
 an 8,001-file NTFS fixture compared otherwise identical binaries before and
