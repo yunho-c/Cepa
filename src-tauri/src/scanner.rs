@@ -53,6 +53,7 @@ const MAX_RANKING_CLONE_IDS: usize = MAX_RANKING_CLONE_BYTES / std::mem::size_of
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanProgress {
+    pub phase: ScanPhase,
     pub entries_scanned: u64,
     pub files_scanned: u64,
     pub directories_scanned: u64,
@@ -62,6 +63,13 @@ pub struct ScanProgress {
     pub current_path: String,
     pub elapsed_ms: u64,
     pub largest_items: Vec<ScanItem>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanPhase {
+    Scanning,
+    Finishing,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -861,6 +869,7 @@ where
 
         if let Some(current_path) = current_path {
             on_progress(ScanProgress {
+                phase: ScanPhase::Scanning,
                 entries_scanned: counters.files_scanned + counters.directories_scanned,
                 files_scanned: counters.files_scanned,
                 directories_scanned: counters.directories_scanned,
@@ -919,6 +928,19 @@ where
 {
     let traversal_us = duration_us(traversal_completed_at.duration_since(started_at));
 
+    on_progress(ScanProgress {
+        phase: ScanPhase::Finishing,
+        entries_scanned: counters.files_scanned + counters.directories_scanned,
+        files_scanned: counters.files_scanned,
+        directories_scanned: counters.directories_scanned,
+        logical_bytes: counters.observed_logical_bytes,
+        allocated_bytes: counters.observed_allocated_bytes,
+        skipped_entries: counters.skipped_entries,
+        current_path: root.to_string_lossy().into_owned(),
+        elapsed_ms: duration_ms(traversal_completed_at.duration_since(started_at)),
+        largest_items: partial_ranking.items(&nodes),
+    });
+
     if let Err(error) = aggregate_nodes(&mut nodes, cancel, |_| {}) {
         if error == "Scan cancelled." {
             let _ = release_nodes_off_thread(nodes, || {});
@@ -939,18 +961,6 @@ where
     let directory_count = root_totals.directory_count.saturating_sub(1);
 
     let elapsed_ms = duration_ms(indexing_completed_at.duration_since(started_at));
-
-    on_progress(ScanProgress {
-        entries_scanned: file_count + directory_count,
-        files_scanned: file_count,
-        directories_scanned: directory_count,
-        logical_bytes,
-        allocated_bytes,
-        skipped_entries: counters.skipped_entries,
-        current_path: root.to_string_lossy().into_owned(),
-        elapsed_ms,
-        largest_items: partial_ranking.items(&nodes),
-    });
 
     let snapshot = ScanSnapshot {
         root: 0,
@@ -1871,6 +1881,11 @@ mod tests {
         assert_eq!(result.file_count, 2);
         assert_eq!(result.directory_count, 1);
         let final_progress = progress.last().expect("final progress");
+        assert_eq!(final_progress.phase, ScanPhase::Finishing);
+        assert_eq!(
+            serde_json::to_value(final_progress).expect("serialize finishing progress")["phase"],
+            "finishing"
+        );
         assert_eq!(final_progress.logical_bytes, 48);
         assert_eq!(final_progress.largest_items.len(), 2);
         assert_eq!(final_progress.largest_items[0].name, "child.bin");
@@ -1937,6 +1952,24 @@ mod tests {
                 .expect_err("unknown node IDs must fail"),
             "That item is not part of this scan."
         );
+    }
+
+    #[test]
+    fn finishing_progress_precedes_and_can_cancel_aggregation() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        fs::write(temp.path().join("file.bin"), vec![1_u8; 17]).expect("write fixture file");
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_from_progress = cancel.clone();
+        let error =
+            scan_path_with_backend(temp.path(), cancel, ScanBackend::Jwalk, move |progress| {
+                if progress.phase == ScanPhase::Finishing {
+                    cancel_from_progress.store(true, Ordering::Relaxed);
+                }
+            })
+            .expect_err("finishing progress should arrive before aggregation completes");
+
+        assert_eq!(error, "Scan cancelled.");
     }
 
     #[cfg(unix)]

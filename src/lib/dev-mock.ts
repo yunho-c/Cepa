@@ -22,6 +22,7 @@ type DevScenario =
   | "estimate-cancel-error"
   | "estimate-cancel-late-error"
   | "error"
+  | "finishing"
   | "navigation-error"
   | "reveal-error"
   | "stale-actions"
@@ -69,6 +70,17 @@ export function installDevMock(requestedScenario: string) {
           throw "Permission denied while reading the selected folder.";
         }
         if (scenario === "scanning" || scenario === "cancel-error") {
+          return new Promise<ScanResponse>((_, reject) => {
+            rejectPendingScan = reject;
+          });
+        }
+        if (scenario === "finishing") {
+          await delay(75);
+          emitChannel(channelId, 2, {
+            event: "progress",
+            scanId,
+            progress: mockProgress("finishing"),
+          });
           return new Promise<ScanResponse>((_, reject) => {
             rejectPendingScan = reject;
           });
@@ -243,6 +255,7 @@ function isScenario(value: string): value is DevScenario {
     "estimate-cancel-error",
     "estimate-cancel-late-error",
     "error",
+    "finishing",
     "navigation-error",
     "reveal-error",
     "stale-actions",
@@ -259,15 +272,19 @@ function emitChannel(channelId: number, index: number, message: unknown) {
   internals.runCallback(channelId, { index, message });
 }
 
-function mockProgress(): ScanProgress {
+function mockProgress(phase: ScanProgress["phase"] = "scanning"): ScanProgress {
   return {
+    phase,
     entriesScanned: 18_432,
     filesScanned: 17_906,
     directoriesScanned: 526,
     logicalBytes: 318_901_321_728,
     allocatedBytes: 302_795_292_672,
     skippedEntries: 2,
-    currentPath: `${ROOT}/Library/Application Support/Design Archive`,
+    currentPath:
+      phase === "finishing"
+        ? ROOT
+        : `${ROOT}/Library/Application Support/Design Archive`,
     elapsedMs: 428,
     largestItems: rootView().items
       .filter((item) => item.kind === "file")

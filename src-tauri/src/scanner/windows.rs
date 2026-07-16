@@ -2,7 +2,7 @@ use super::mft::{self, Record};
 use super::{
     EntryKind, FileIdentity, HardLinkOwner, InternalNode, MeasuredMetadata,
     PROGRESS_ENTRY_INTERVAL, PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput,
-    ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
+    ScanPhase, ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use std::collections::HashSet;
@@ -365,6 +365,7 @@ where
 
             if last_progress_at.elapsed() >= PROGRESS_INTERVAL {
                 on_progress(ScanProgress {
+                    phase: ScanPhase::Scanning,
                     entries_scanned: completed_files.saturating_add(directory_count),
                     files_scanned: completed_files,
                     directories_scanned: directory_count,
@@ -828,6 +829,7 @@ fn unavailable_error(error: &io::Error) -> bool {
 
 fn empty_progress(root: &Path, started_at: Instant) -> ScanProgress {
     ScanProgress {
+        phase: ScanPhase::Scanning,
         entries_scanned: 0,
         files_scanned: 0,
         directories_scanned: 0,

@@ -1,7 +1,8 @@
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
-    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
-    finish_scan, linux_file_descriptor_allocated_size_is_estimate, observe_partial_file,
+    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanPhase, ScanProgress,
+    ScanSemantics, finish_scan, linux_file_descriptor_allocated_size_is_estimate,
+    observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
@@ -569,6 +570,7 @@ where
                 |path| path.to_string_lossy().into_owned(),
             );
             on_progress(ScanProgress {
+                phase: ScanPhase::Scanning,
                 entries_scanned: counters.files_scanned + counters.directories_scanned,
                 files_scanned: counters.files_scanned,
                 directories_scanned: counters.directories_scanned,

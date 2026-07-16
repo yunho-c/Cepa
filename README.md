@@ -42,6 +42,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Bounded progress updates over a Tauri channel, with a calm active-scan view
   that keeps space, current location, elapsed time, cancellation, and unavailable
   items visible without exposing backend vocabulary
+- An explicit, cancellable finishing phase while retained directory totals are
+  prepared, instead of leaving a completed traversal looking stalled
 - On-demand directory views backed by the completed in-memory scan snapshot
 - A scan-authorized Home transition that releases the retained snapshot and
   cancels related background work instead of hiding a still-resident result;
@@ -190,6 +192,7 @@ exercise the complete workflow without a native process:
 ```text
 http://localhost:1420/?mock=complete
 http://localhost:1420/?mock=scanning
+http://localhost:1420/?mock=finishing
 http://localhost:1420/?mock=cancel-error
 http://localhost:1420/?mock=discard-error
 http://localhost:1420/?mock=picker-error
@@ -213,6 +216,8 @@ selection through the complete mocked scan.
 chart nodes and records response-to-painted-frame time on the document's
 `data-cepa-scan-render-ms` development attribute. `?mock=cancel-error` keeps a
 scan active after a failed stop request so its recovery state can be exercised.
+`?mock=finishing` holds the scan after traversal so the cancellable result-
+preparation state can be reviewed without a large native fixture.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

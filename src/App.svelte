@@ -192,6 +192,7 @@
   const dropOverlayVisible = $derived(dropActive || isPreparingDroppedFolder);
   const displayProgress = $derived(
     progress ?? {
+      phase: "scanning",
       entriesScanned: 0,
       filesScanned: 0,
       directoriesScanned: 0,
@@ -202,6 +203,9 @@
       elapsedMs: 0,
       largestItems: [],
     },
+  );
+  const isFinishingScan = $derived(
+    status !== "cancelling" && displayProgress.phase === "finishing",
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
   $effect(() => {
@@ -230,7 +234,9 @@
   const scanAnnouncement = $derived(
     status === "cancelling"
       ? `Stopping after ${formatCount(displayProgress.entriesScanned)} entries.`
-      : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
+      : isFinishingScan
+        ? `Finishing the scan after ${formatCount(displayProgress.entriesScanned)} entries.`
+        : `Scanned ${formatCount(displayProgress.entriesScanned)} entries and ${formatBytes(displayProgress.allocatedBytes)}.`,
   );
   const searchActive = $derived(searchQuery.trim().length > 0);
   const visibleItems = $derived(
@@ -1294,7 +1300,11 @@
           <div>
             <span class="scan-kicker">
               <span class="status-dot" aria-hidden="true"></span>
-              {status === "cancelling" ? "Stopping" : "Scanning"}
+              {status === "cancelling"
+                ? "Stopping"
+                : isFinishingScan
+                  ? "Finishing"
+                  : "Scanning"}
             </span>
             <h1 id="scan-progress-title">{scanTargetName}</h1>
           </div>
@@ -1324,11 +1334,16 @@
         {/if}
 
         <div class="scan-total">
-          <span>Found so far</span>
+          <span>{isFinishingScan ? "Space found" : "Found so far"}</span>
           <strong>{formatBytes(displayProgress.allocatedBytes)}</strong>
         </div>
-        <p class="scan-path" title={displayProgress.currentPath}>
-          {displayProgress.currentPath || path}
+        <p
+          class="scan-path"
+          title={isFinishingScan ? undefined : displayProgress.currentPath}
+        >
+          {isFinishingScan
+            ? "Preparing results…"
+            : displayProgress.currentPath || path}
         </p>
 
         <div class="scan-line" aria-hidden="true"><span></span></div>

@@ -1,7 +1,7 @@
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PROGRESS_ENTRY_INTERVAL,
-    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanProgress, ScanSemantics,
-    finish_scan, observe_partial_file,
+    PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanPhase, ScanProgress,
+    ScanSemantics, finish_scan, observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use crossbeam_channel::{self as channel, RecvTimeoutError};
@@ -435,6 +435,7 @@ where
             let current_path =
                 child_path.unwrap_or_else(|| directory_path.join(&nodes[node_id].name));
             on_progress(ScanProgress {
+                phase: ScanPhase::Scanning,
                 entries_scanned: counters.files_scanned + counters.directories_scanned,
                 files_scanned: counters.files_scanned,
                 directories_scanned: counters.directories_scanned,

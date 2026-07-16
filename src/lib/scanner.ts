@@ -1,5 +1,6 @@
 export type EntryKind = "directory" | "file" | "symlink" | "other";
 export type ScanBackend = "jwalk" | "getattrlistbulk" | "mft" | "statx";
+export type ScanPhase = "scanning" | "finishing";
 export type SizeMetric = "allocated" | "logical";
 export type CompressionCapabilityStatus =
   | "inspectOnly"
@@ -98,6 +99,7 @@ export interface PlanValidation {
 }
 
 export interface ScanProgress {
+  phase: ScanPhase;
   entriesScanned: number;
   filesScanned: number;
   directoriesScanned: number;

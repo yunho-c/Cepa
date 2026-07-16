@@ -1008,6 +1008,13 @@ therefore processed exactly 2,048 additional nodes before observing the request.
 The benchmark waits for background reclamation before starting its next run, but
 reports that work separately from foreground response latency.
 
+The shared completion path now emits one bounded `finishing` progress update
+before aggregation begins. That phase keeps cancellation visibly available
+during long retained-arena passes. It replaces the former post-aggregation final
+progress update, so successful completion does not send two adjacent terminal
+payloads before the bounded result response. This is a transport and interaction
+contract, not a claim that aggregation itself became faster.
+
 The first macOS pass exposed that cancellation detection was already bounded,
 but returning still synchronously destroyed the abandoned arena. Moving only
 that cancelled arena's destruction to a named background thread changed the
