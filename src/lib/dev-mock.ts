@@ -24,6 +24,7 @@ type DevScenario =
   | "error"
   | "finishing"
   | "finishing-cancel-error"
+  | "inspection-error"
   | "navigation-error"
   | "reveal-error"
   | "stale-actions"
@@ -177,6 +178,9 @@ export function installDevMock(requestedScenario: string) {
             "This volume supports transparent decmpfs decompression. Cepa can only report the capability; compression changes are not implemented.",
         } satisfies CompressionCapability;
       case "compression_state":
+        if (scenario === "inspection-error") {
+          throw "The file changed before its compression state could be read.";
+        }
         if (Number(args.nodeId) === 4) {
           return {
             state: "notApplicable",
@@ -270,6 +274,7 @@ function isScenario(value: string): value is DevScenario {
     "error",
     "finishing",
     "finishing-cancel-error",
+    "inspection-error",
     "navigation-error",
     "reveal-error",
     "stale-actions",

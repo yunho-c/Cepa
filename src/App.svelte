@@ -662,7 +662,7 @@
           state: "unavailable",
           scope: "none",
           format: null,
-          detail: `The state request failed: ${String(error)}`,
+          detail: `Compression couldn’t be checked: ${String(error)}`,
         };
       }
     } finally {
@@ -1621,7 +1621,7 @@
                     ? "Checking…"
                     : compressionState
                       ? formatCompressionState(compressionState)
-                      : "Unavailable"}
+                      : "Couldn’t be checked"}
                 </strong>
               </div>
               {#if isEstimatingSavings}

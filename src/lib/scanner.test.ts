@@ -68,6 +68,14 @@ describe("scanner presentation helpers", () => {
         detail: "Inherited policy.",
       }),
     ).toBe("Following filesystem policy");
+    expect(
+      formatCompressionState({
+        state: "unavailable",
+        scope: "none",
+        format: null,
+        detail: "Inspection failed.",
+      }),
+    ).toBe("Couldn’t be checked");
   });
 
   test("formats savings as a bounded range rather than a guarantee", () => {

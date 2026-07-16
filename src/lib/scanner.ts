@@ -291,7 +291,7 @@ export function formatCompressionState(state: CompressionState): string {
     case "unsupported":
       return "Unsupported on this filesystem";
     case "unavailable":
-      return "State unavailable";
+      return "Couldn’t be checked";
   }
 }
 
