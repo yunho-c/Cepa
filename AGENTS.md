@@ -168,6 +168,12 @@ development policy separately permits its localhost HMR socket and injected
 styles. Keep production and development policies distinct, preserve Tauri's
 automatic asset hash/nonce injection, and prefer semantic elements or classes
 over weakening the packaged policy for dynamic presentation.
+Tailwind utility detection is likewise intentionally bounded: `src/app.css`
+disables automatic repository-wide discovery and registers only `src/` as a
+source tree. Keep utility-bearing frontend code under that boundary or register
+a narrow additional source explicitly. Do not restore automatic discovery;
+untracked root files and disposable validation artifacts can otherwise change
+the packaged stylesheet and make identical-source builds non-reproducible.
 Distribution metadata is explicit and project-owned: `LICENSE`, `package.json`,
 `src-tauri/Cargo.toml`, and the Tauri bundle configuration agree on the MIT
 license, repository, version, and `Cepa contributors` attribution. Keep the npm

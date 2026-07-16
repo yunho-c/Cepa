@@ -398,6 +398,9 @@ Native recipes clear the machine's configured `sccache` wrapper so it cannot
 block Cargo. Frontend and Tauri recipes also force Bun's runtime for JavaScript
 tools, so an unrelated system Node installation cannot change or block the
 canonical build.
+Tailwind scans only the checked-in `src/` frontend tree. This keeps temporary
+root-level files, package-validation artifacts, and other untracked workspace
+content from silently changing the production stylesheet.
 
 The `CI` workflow repeats `just install`, `just check`, `just build`, and
 `just bundle` on native Ubuntu 22.04, macOS, and Windows runners. After the
