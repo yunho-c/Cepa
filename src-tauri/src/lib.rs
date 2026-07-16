@@ -445,8 +445,14 @@ fn saturating_duration_us(duration: std::time::Duration) -> u64 {
 #[derive(Default)]
 struct ScanState {
     next_id: AtomicU64,
-    active: Mutex<Option<ActiveScan>>,
-    completed: Mutex<Option<CompletedScan>>,
+    lifecycle: Mutex<ScanLifecycle>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Default)]
+struct ScanLifecycle {
+    active: Option<ActiveScan>,
+    completed: Option<CompletedScan>,
 }
 
 #[cfg(feature = "desktop")]
@@ -487,6 +493,20 @@ struct ActiveScan {
 struct CompletedScan {
     id: u64,
     snapshot: Arc<ScanSnapshot>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Debug)]
+struct RejectedScanCompletion {
+    message: String,
+    snapshot: Arc<ScanSnapshot>,
+}
+
+#[cfg(feature = "desktop")]
+impl RejectedScanCompletion {
+    fn into_parts(self) -> (String, Arc<ScanSnapshot>) {
+        (self.message, self.snapshot)
+    }
 }
 
 #[cfg(feature = "desktop")]
@@ -755,20 +775,20 @@ impl SearchState {
 #[cfg(feature = "desktop")]
 impl ScanState {
     fn begin(&self) -> (u64, Arc<AtomicBool>, Option<Arc<ScanSnapshot>>) {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = Arc::new(AtomicBool::new(false));
-        let released_snapshot = self
-            .completed
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take()
-            .map(|completed| completed.snapshot);
-        let mut active = self
-            .active
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        // Allocate IDs while holding the lifecycle lock so concurrent starts
+        // cannot install a lower ID after a higher ID already owns the state.
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let released_snapshot = lifecycle
+            .completed
+            .take()
+            .map(|completed| completed.snapshot);
 
-        if let Some(previous) = active.replace(ActiveScan {
+        if let Some(previous) = lifecycle.active.replace(ActiveScan {
             id,
             cancel: cancel.clone(),
         }) {
@@ -779,11 +799,11 @@ impl ScanState {
     }
 
     fn cancel(&self, id: u64) -> bool {
-        let active = self
-            .active
+        let lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        active.as_ref().is_some_and(|scan| {
+        lifecycle.active.as_ref().is_some_and(|scan| {
             if scan.id == id {
                 scan.cancel.store(true, Ordering::Relaxed);
                 true
@@ -794,38 +814,52 @@ impl ScanState {
     }
 
     fn finish(&self, id: u64) {
-        let mut active = self
-            .active
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if active.as_ref().is_some_and(|scan| scan.id == id) {
-            *active = None;
+        if lifecycle.active.as_ref().is_some_and(|scan| scan.id == id) {
+            lifecycle.active = None;
         }
     }
 
-    fn complete(&self, id: u64, snapshot: ScanSnapshot) -> Result<DirectoryView, String> {
+    fn complete(
+        &self,
+        id: u64,
+        snapshot: ScanSnapshot,
+    ) -> Result<DirectoryView, RejectedScanCompletion> {
+        let snapshot = Arc::new(snapshot);
         let view = snapshot.directory_view(id, 0);
-        self.finish(id);
-        let view = view?;
-        let completed = CompletedScan {
-            id,
-            snapshot: Arc::new(snapshot),
-        };
-        *self
-            .completed
+        let mut lifecycle = self
+            .lifecycle
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(completed);
+            .unwrap_or_else(|error| error.into_inner());
+
+        if lifecycle.active.as_ref().is_none_or(|scan| scan.id != id) {
+            return Err(RejectedScanCompletion {
+                message: "That scan was superseded by a newer request.".to_string(),
+                snapshot,
+            });
+        }
+        lifecycle.active = None;
+
+        let view = view.map_err(|message| RejectedScanCompletion {
+            message,
+            snapshot: Arc::clone(&snapshot),
+        })?;
+        lifecycle.completed = Some(CompletedScan { id, snapshot });
         Ok(view)
     }
 
     fn detach(&self, id: u64) -> Result<Option<Arc<ScanSnapshot>>, String> {
-        let mut completed = self
-            .completed
+        let mut lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        match completed.as_ref() {
+        match lifecycle.completed.as_ref() {
             Some(scan) if scan.id == id => {
-                let snapshot = completed
+                let snapshot = lifecycle
+                    .completed
                     .take()
                     .expect("the matching completed scan is present")
                     .snapshot;
@@ -837,11 +871,12 @@ impl ScanState {
     }
 
     fn snapshot(&self, id: u64) -> Result<Arc<ScanSnapshot>, String> {
-        let completed = self
-            .completed
+        let lifecycle = self
+            .lifecycle
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        completed
+        lifecycle
+            .completed
             .as_ref()
             .filter(|scan| scan.id == id)
             .map(|scan| scan.snapshot.clone())
@@ -979,7 +1014,11 @@ fn scan_directory(
                         view,
                     }),
                 },
-                Err(message) => ScanEvent::Failed { scan_id, message },
+                Err(rejected) => {
+                    let (message, snapshot) = rejected.into_parts();
+                    release_last_arc_on_blocking_pool(snapshot);
+                    ScanEvent::Failed { scan_id, message }
+                }
             },
             Ok(Err(message)) => {
                 scans.finish(scan_id);
@@ -1358,14 +1397,55 @@ mod tests {
 
     #[cfg(feature = "desktop")]
     #[test]
+    fn concurrent_scan_starts_leave_the_highest_id_active() {
+        const START_COUNT: usize = 16;
+
+        let state = Arc::new(ScanState::default());
+        let barrier = Arc::new(std::sync::Barrier::new(START_COUNT));
+        let mut workers = Vec::with_capacity(START_COUNT);
+        for _ in 0..START_COUNT {
+            let state = Arc::clone(&state);
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                let (id, cancel, released) = state.begin();
+                assert!(released.is_none());
+                (id, cancel)
+            }));
+        }
+
+        let mut starts = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("scan starter must finish"))
+            .collect::<Vec<_>>();
+        starts.sort_unstable_by_key(|(id, _)| *id);
+        assert_eq!(starts.len(), START_COUNT);
+        assert_eq!(starts[0].0, 1);
+        assert_eq!(starts[START_COUNT - 1].0, START_COUNT as u64);
+        for (_, cancel) in &starts[..START_COUNT - 1] {
+            assert!(cancel.load(Ordering::Relaxed));
+        }
+
+        let (active_id, active_cancel) = &starts[START_COUNT - 1];
+        assert!(!active_cancel.load(Ordering::Relaxed));
+        assert!(state.cancel(*active_id));
+        assert!(active_cancel.load(Ordering::Relaxed));
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
     fn starting_a_new_scan_detaches_the_previous_snapshot() {
         let temp = tempfile::tempdir().expect("create fixture directory");
         fs::write(temp.path().join("payload.bin"), [1_u8]).expect("write fixture file");
         let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
             .expect("scan fixture");
         let state = ScanState::default();
-        state.complete(7, output.snapshot).expect("retain snapshot");
-        let retained = state.snapshot(7).expect("clone retained snapshot");
+        let (scan_id, _, released) = state.begin();
+        assert!(released.is_none());
+        state
+            .complete(scan_id, output.snapshot)
+            .expect("retain snapshot");
+        let retained = state.snapshot(scan_id).expect("clone retained snapshot");
         let retained_weak = Arc::downgrade(&retained);
         drop(retained);
 
@@ -1374,13 +1454,62 @@ mod tests {
 
         assert_eq!(
             state
-                .root_path(7)
+                .root_path(scan_id)
                 .expect_err("the prior snapshot must be unavailable"),
             "That scan is no longer available."
         );
         assert!(retained_weak.upgrade().is_some());
         drop(released);
         assert!(retained_weak.upgrade().is_none());
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn superseded_scan_cannot_install_its_snapshot() {
+        let first_temp = tempfile::tempdir().expect("create first fixture directory");
+        fs::write(first_temp.path().join("first.bin"), [1_u8]).expect("write first fixture file");
+        let first_output =
+            scanner::scan_path(first_temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+                .expect("scan first fixture");
+
+        let second_temp = tempfile::tempdir().expect("create second fixture directory");
+        fs::write(second_temp.path().join("second.bin"), [2_u8])
+            .expect("write second fixture file");
+        let second_output =
+            scanner::scan_path(second_temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
+                .expect("scan second fixture");
+
+        let state = ScanState::default();
+        let (first_id, first_cancel, _) = state.begin();
+        let (second_id, second_cancel, _) = state.begin();
+        assert!(first_cancel.load(Ordering::Relaxed));
+        assert!(!second_cancel.load(Ordering::Relaxed));
+
+        let rejected = state
+            .complete(first_id, first_output.snapshot)
+            .expect_err("the superseded scan must not install its snapshot");
+        let (message, rejected_snapshot) = rejected.into_parts();
+        assert_eq!(message, "That scan was superseded by a newer request.");
+        let rejected_weak = Arc::downgrade(&rejected_snapshot);
+        drop(rejected_snapshot);
+        assert!(rejected_weak.upgrade().is_none());
+        assert!(state.snapshot(first_id).is_err());
+        assert!(state.snapshot(second_id).is_err());
+
+        let view = state
+            .complete(second_id, second_output.snapshot)
+            .expect("the current scan must install its snapshot");
+        assert_eq!(view.scan_id, second_id);
+        assert_eq!(
+            state
+                .root_path(second_id)
+                .expect("resolve current completed scan"),
+            second_temp
+                .path()
+                .canonicalize()
+                .expect("canonical second fixture root")
+        );
+        assert!(state.snapshot(first_id).is_err());
     }
 
     #[cfg(feature = "desktop")]
@@ -1574,7 +1703,11 @@ mod tests {
         let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
             .expect("scan fixture");
         let state = ScanState::default();
-        let view = state.complete(7, output.snapshot).expect("retain snapshot");
+        let (scan_id, _, _) = state.begin();
+        let stale_scan_id = scan_id + 1;
+        let view = state
+            .complete(scan_id, output.snapshot)
+            .expect("retain snapshot");
         let file_id = view
             .items
             .iter()
@@ -1583,45 +1716,51 @@ mod tests {
             .id;
 
         assert_eq!(
-            state.reveal_path(7, file_id).expect("resolve scanned item"),
+            state
+                .reveal_path(scan_id, file_id)
+                .expect("resolve scanned item"),
             file.canonicalize().expect("canonical fixture path")
         );
         assert_eq!(
             state
-                .reveal_path(8, file_id)
+                .reveal_path(stale_scan_id, file_id)
                 .expect_err("reject stale scan"),
             "That scan is no longer available."
         );
         assert_eq!(
-            state.root_path(7).expect("resolve completed scan root"),
+            state
+                .root_path(scan_id)
+                .expect("resolve completed scan root"),
             temp.path().canonicalize().expect("canonical fixture root")
         );
         assert_eq!(
-            state.root_path(8).expect_err("reject stale scan root"),
+            state
+                .root_path(stale_scan_id)
+                .expect_err("reject stale scan root"),
             "That scan is no longer available."
         );
         assert_eq!(
             state
-                .compression_target(7, file_id)
+                .compression_target(scan_id, file_id)
                 .expect("resolve compression target")
                 .path,
             file.canonicalize().expect("canonical fixture file")
         );
         assert_eq!(
             state
-                .compression_target(8, file_id)
+                .compression_target(stale_scan_id, file_id)
                 .expect_err("reject stale compression target"),
             "That scan is no longer available."
         );
         assert_eq!(
             state
-                .compression_target(7, u64::MAX)
+                .compression_target(scan_id, u64::MAX)
                 .expect_err("reject unknown compression target"),
             "That item is not part of this scan."
         );
         assert_eq!(
             state
-                .reveal_path(7, u64::MAX)
+                .reveal_path(scan_id, u64::MAX)
                 .expect_err("reject unknown item"),
             "That item is not part of this scan."
         );
@@ -1635,8 +1774,12 @@ mod tests {
         let output = scanner::scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
             .expect("scan fixture");
         let scans = ScanState::default();
-        scans.complete(7, output.snapshot).expect("retain snapshot");
-        let retained = scans.snapshot(7).expect("clone retained snapshot");
+        let (scan_id, _, _) = scans.begin();
+        let stale_scan_id = scan_id + 1;
+        scans
+            .complete(scan_id, output.snapshot)
+            .expect("retain snapshot");
+        let retained = scans.snapshot(scan_id).expect("clone retained snapshot");
         let retained_weak = Arc::downgrade(&retained);
         drop(retained);
 
@@ -1648,7 +1791,7 @@ mod tests {
         let plan_generation = plans.generation.load(Ordering::Acquire);
 
         assert_eq!(
-            discard_scan_state(8, &scans, &estimates, &searches, &plans)
+            discard_scan_state(stale_scan_id, &scans, &estimates, &searches, &plans)
                 .expect_err("reject stale discard"),
             "That scan is no longer available."
         );
@@ -1657,7 +1800,7 @@ mod tests {
         assert!(!search_cancel.load(Ordering::Relaxed));
         assert_eq!(plans.generation.load(Ordering::Acquire), plan_generation);
 
-        let released = discard_scan_state(7, &scans, &estimates, &searches, &plans)
+        let released = discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
             .expect("discard current scan")
             .expect("detach the retained snapshot");
         assert!(retained_weak.upgrade().is_some());
@@ -1665,11 +1808,13 @@ mod tests {
         assert!(search_cancel.load(Ordering::Relaxed));
         assert!(plans.generation.load(Ordering::Acquire) > plan_generation);
         assert_eq!(
-            scans.root_path(7).expect_err("snapshot must be released"),
+            scans
+                .root_path(scan_id)
+                .expect_err("snapshot must be released"),
             "That scan is no longer available."
         );
         assert!(
-            discard_scan_state(7, &scans, &estimates, &searches, &plans)
+            discard_scan_state(scan_id, &scans, &estimates, &searches, &plans)
                 .expect("discarding an absent scan is idempotent")
                 .is_none()
         );

@@ -1332,6 +1332,25 @@ WebKitGTK sysroot and unprivileged helper mount without disabling WebKit's
 sandbox. The exact assertions and scope are preserved in
 [`validation-results/2026-07-16-native-scan-lifecycle.txt`](validation-results/2026-07-16-native-scan-lifecycle.txt).
 
+The lifecycle state subsequently gained a stricter concurrency boundary. Scan
+start previously allocated an ID outside the active-state lock, and completion
+separately cleared the active slot before installing the retained snapshot.
+Those operations permitted a nearly finished older worker to install its
+snapshot after a newer request had become active; simultaneous starts could
+also acquire the active lock in a different order from ID allocation.
+
+Active and completed ownership now share one lock. Starts allocate IDs while
+holding it, and completion atomically verifies the active ID, clears it, and
+installs the matching snapshot. A rejected older snapshot is returned to the
+detached scan task and released on the blocking pool, keeping a potentially large
+destructor off the async runtime thread. Deterministic regressions start 16
+workers at one barrier and require the highest ID to remain active, then finish
+an older scan after a newer start and require only the newer snapshot to become
+addressable. These are state-machine and release-ownership checks, not a
+filesystem-throughput or end-to-end concurrent-UI measurement. Exact compiler
+and suite results are preserved in
+[`validation-results/2026-07-16-scan-supersession.txt`](validation-results/2026-07-16-scan-supersession.txt).
+
 ### 2026-07-16 production scan-cancellation transport
 
 Extending the production WebView harness to activate Stop exposed a transport

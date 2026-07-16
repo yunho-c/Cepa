@@ -36,6 +36,12 @@ send fails, do not start traversal. If a completed result cannot be delivered,
 detach and release its retained snapshot off the runtime thread. macOS uses an
 initial `getattrlistbulk` traversal, Linux uses `getdents64` directory batches
 plus `statx` metadata, and Windows uses MFT enumeration for NTFS volume roots.
+Active and completed scan ownership share one lifecycle lock. Allocate scan IDs
+while holding that lock, and let completion install a snapshot only while the
+same ID still owns the active slot. A superseded worker must not clear a newer
+scan or replace its snapshot; release its rejected snapshot away from the
+runtime thread. Preserve the concurrent-start and superseded-completion
+regressions when changing this state machine.
 Each falls back to `jwalk` when its native API is unavailable or unsuitable;
 Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.

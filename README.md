@@ -24,7 +24,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Native directory picker on supported desktop platforms
 - Native single-folder drag and drop with a preflight check that preserves the
   current result until the dropped directory is accepted
-- Responsive cancellation and automatic cancellation of superseded scans
+- Responsive cancellation and automatic cancellation of superseded scans, with
+  atomic lifecycle ownership so an older worker cannot replace a newer scan's
+  retained result
 - Aggregation polls cancellation every 2,048 retained nodes and releases a
   cancelled full scan arena away from the foreground response path
 - Failed stop requests keep the live scan visible and make cancellation retryable

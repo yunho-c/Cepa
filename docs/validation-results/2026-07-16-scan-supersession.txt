@@ -1,0 +1,59 @@
+Cepa scan-supersession lifecycle validation
+Date: 2026-07-16
+Candidate baseline: cebdedd plus the lifecycle working-tree change
+
+Invariant under test
+- scan IDs are allocated while the unified lifecycle lock is held
+- only the currently active scan ID may install a completed snapshot
+- a superseded completion cannot clear or replace the newer active scan
+- a rejected snapshot remains owned by the detached scan task so its final release
+  can run on the blocking pool rather than an async runtime thread
+
+Deterministic Rust regressions: passed
+- 16 scan starts rendezvoused at one barrier
+- IDs 1 through 16 were issued exactly once
+- every cancellation token below ID 16 was set
+- ID 16 remained the sole cancellable active scan
+- an older completed fixture was rejected after a newer scan began
+- the rejected snapshot had no retained owner after release
+- only the newer fixture became addressable through the completed scan ID
+
+Local macOS validation: passed
+- compiler: rustc 1.94.0-nightly (e7d44143a 2025-12-24)
+- `just check`
+  - Svelte diagnostics: 0 errors and 0 warnings
+  - frontend tests: 49 passed
+  - strict all-target Rust Clippy: passed
+  - Rust library tests: 95 passed, 1 file-manager test ignored
+  - configuration and auxiliary target suites: passed
+- `just build`: optimized desktop executable built
+- production WebView/IPC smoke at 620 by 480: passed
+  - backend: macOS native
+  - completed scan ID 1 was discarded and rejected as stale
+  - same-process rescan completed and restored result focus
+  - no page errors or horizontal overflow
+
+Native Linux validation: passed
+- compiler: rustc 1.97.0 (2d8144b78 2026-07-07)
+- exact candidate file hashes matched the local source
+- full desktop all-target `cargo check`: passed
+- full desktop all-target Clippy with `-D warnings`: passed
+- full desktop all-target tests: passed
+  - Rust library tests: 97 passed
+  - real-Btrfs and file-manager tests: 2 ignored as designed
+  - configuration and auxiliary target suites: passed
+- GTK, WebKitGTK 4.1, AppIndicator, librsvg, and DBus development files
+  were extracted into a disposable user-local sysroot; no system packages or
+  standing checkout files were changed
+
+Windows GNU cross-target validation: passed
+- default-feature all-target `cargo check`: passed
+- default-feature all-target Clippy with `-D warnings`: passed
+- this is compile/lint evidence only; no Windows WebView2 process was run
+
+Evidence boundary
+This proves state ownership under deterministic concurrent starts and stale
+completion, ordinary production macOS scan/discard/rescan behavior, and native
+Linux desktop compilation and tests under Rust 1.97. It is not a concurrent UI
+entry-point test, large-snapshot release-latency measurement, Linux production
+WebView run, native Windows runtime test, or filesystem-throughput benchmark.
