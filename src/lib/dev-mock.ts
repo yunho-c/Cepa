@@ -42,6 +42,8 @@ export function installDevMock(requestedScenario: string) {
     : "complete";
   const stressView = scenario === "stress" ? createStressView(scanId, ROOT) : null;
   let pickerOpenCount = 0;
+  let navigationAttemptCount = 0;
+  let revealAttemptCount = 0;
   let searchAttemptCount = 0;
   let rejectPendingScan: ((reason: string) => void) | null = null;
   const cancelledEstimateRequests = new Set<number>();
@@ -118,9 +120,11 @@ export function installDevMock(requestedScenario: string) {
         }
         return null;
       case "open_scan_directory":
-        if (scenario === "navigation-error") {
+        navigationAttemptCount += 1;
+        if (scenario === "navigation-error" && navigationAttemptCount === 1) {
           throw "The mocked snapshot is no longer available.";
         }
+        if (scenario === "navigation-error") await delay(600);
         if (scenario === "stale-actions") await delay(STALE_ACTION_DELAY_MS);
         return metricView(
           stressView
@@ -259,9 +263,11 @@ export function installDevMock(requestedScenario: string) {
           await delay(STALE_ACTION_DELAY_MS);
           throw "The earlier reveal request completed after the scan changed.";
         }
-        if (scenario === "reveal-error") {
+        revealAttemptCount += 1;
+        if (scenario === "reveal-error" && revealAttemptCount === 1) {
           throw "The mocked item disappeared after the scan completed.";
         }
+        if (scenario === "reveal-error") await delay(600);
         return null;
       default:
         throw new Error(`Unhandled development mock command: ${command}`);

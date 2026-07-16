@@ -224,6 +224,11 @@ boundary: a delayed response must not replace a newer directory view, clear a
 newer request's busy state, or focus an error in a fresh result even if a mock
 reuses the same scan ID. `?mock=stale-actions` is the deterministic browser
 regression for these races.
+If navigation, metric switching, or Reveal fails, keep the raw cause in the
+collapsed `Error details`, preserve the current result, and retain only the
+scan-local opaque node/metric intent needed for Try again. A successful retry
+must restore focus to the opened view, selected metric, or original Reveal
+control rather than removing the focused recovery button without a successor.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native
 desktop and store assets. macOS normalizes ICNS output deterministically;
@@ -472,6 +477,8 @@ Start with these files:
   shared native-menu availability and shortcut conflict rules.
 - `src/lib/completed-scan-request.ts`: shared scan-ID and request-generation
   ownership check for delayed completed-scan actions.
+- `src/lib/result-action-recovery.ts`: scan-local navigation retry descriptors
+  and cause-neutral preservation copy for completed-result failures.
 - `src/lib/components/cepa-mark.svelte`: adaptive in-app rendering of the
   canonical radial-C identity.
 - `public/cepa-icon.svg` and `scripts/generate-icons.ts`: canonical app icon and

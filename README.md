@@ -234,6 +234,9 @@ retry action must remain visible.
 evidence, and the Estimate again recovery action after estimation itself fails.
 `?mock=search-error` fails the first folder search and then succeeds, covering
 the disclosed cause, same-query retry, and preserved search-field focus.
+`?mock=navigation-error` and `?mock=reveal-error` likewise fail their first
+completed-scan action and then succeed, covering scan-local retry intent,
+disclosed causes, and stable focus after recovery.
 `?mock=discard-error` keeps a completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough

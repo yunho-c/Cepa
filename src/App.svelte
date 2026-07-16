@@ -27,6 +27,10 @@
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
   import { listNavigationTarget } from "$lib/list-navigation";
   import {
+    navigationRecoveryMessage,
+    type NavigationRecovery,
+  } from "$lib/result-action-recovery";
+  import {
     shouldShowScanRoots,
     type ScanRoot,
     type ScanRootsStatus,
@@ -72,7 +76,6 @@
   import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
 
   type Status = "idle" | "scanning" | "cancelling" | "cancelled" | "complete" | "error";
-
   let path = $state("");
   let status = $state<Status>("idle");
   let scanId = $state<number | null>(null);
@@ -90,7 +93,11 @@
   let scanActionError = $state("");
   let navigationError = $state("");
   let navigationErrorTitle = $state("That folder could not be opened.");
+  let navigationRecovery = $state<NavigationRecovery | null>(null);
+  let navigationRetryInFlight = $state(false);
   let revealError = $state("");
+  let revealErrorNodeId = $state<number | null>(null);
+  let revealRetryInFlight = $state(false);
   let revealingNodeId = $state<number | null>(null);
   let revealSequence = 0;
   let sizeMetric = $state<SizeMetric>("allocated");
@@ -119,6 +126,8 @@
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
   let revealNotice: HTMLDivElement | undefined = $state();
+  let allocatedMetricButton: HTMLButtonElement | undefined = $state();
+  let logicalMetricButton: HTMLButtonElement | undefined = $state();
   let searchOpen = $state(false);
   let searchQuery = $state("");
   let searchResult = $state<DirectorySearchResult | null>(null);
@@ -291,10 +300,26 @@
     droppedPaths = [];
   }
 
-  async function showScanEntryError(title: string, message: string) {
+  function clearNavigationError() {
+    navigationError = "";
+    navigationRecovery = null;
+  }
+
+  function clearRevealError() {
+    revealError = "";
+    revealErrorNodeId = null;
+  }
+
+  async function showScanEntryError(
+    title: string,
+    message: string,
+    recovery: NavigationRecovery | null = null,
+  ) {
     if (status === "complete" && result && view) {
+      clearRevealError();
       navigationErrorTitle = title;
       navigationError = message;
+      navigationRecovery = recovery;
       await tick();
       navigationNotice?.focus();
     } else {
@@ -415,8 +440,8 @@
   async function chooseDirectory() {
     if (isBusy) return;
     errorMessage = "";
-    navigationError = "";
-    revealError = "";
+    clearNavigationError();
+    clearRevealError();
     try {
       const selected = await open({
         directory: true,
@@ -429,7 +454,11 @@
         await startScan();
       }
     } catch (error) {
-      await showScanEntryError("Folder picker didn’t open.", String(error));
+      await showScanEntryError(
+        "Folder picker didn’t open.",
+        String(error),
+        { kind: "chooseDirectory" },
+      );
     }
   }
 
@@ -448,9 +477,9 @@
     scanActionError = "";
     errorHeading = "That scan didn’t start.";
     errorMessage = "";
-    navigationError = "";
+    clearNavigationError();
     navigationErrorTitle = "That folder could not be opened.";
-    revealError = "";
+    clearRevealError();
     revealingNodeId = null;
     sizeMetric = "allocated";
     compressionCapability = null;
@@ -545,8 +574,8 @@
     invalidateCompletedScanRequests();
     const completedScanId = status === "complete" ? scanId : null;
     if (completedScanId !== null) {
-      navigationError = "";
-      revealError = "";
+      clearNavigationError();
+      clearRevealError();
       isDiscardingScan = true;
       try {
         await invoke("discard_scan", { scanId: completedScanId });
@@ -554,6 +583,7 @@
         if (scanId === completedScanId && status === "complete") {
           navigationErrorTitle = "This scan could not be closed.";
           navigationError = String(error);
+          navigationRecovery = { kind: "discardScan" };
           await tick();
           navigationNotice?.focus();
         }
@@ -578,9 +608,9 @@
     clearInspection();
     resetDirectorySearch(true);
     errorMessage = "";
-    navigationError = "";
+    clearNavigationError();
     navigationErrorTitle = "That folder could not be opened.";
-    revealError = "";
+    clearRevealError();
     revealingNodeId = null;
     sizeMetric = "allocated";
     compressionCapability = null;
@@ -982,8 +1012,9 @@
     nodeId: number,
     metric: SizeMetric,
     focusHeading: boolean,
-  ) {
-    if (scanId === null || isResultBusy) return;
+    preserveRecovery = false,
+  ): Promise<boolean> {
+    if (scanId === null || isResultBusy) return false;
     const completedScanId = scanId;
     const request = {
       scanId: completedScanId,
@@ -993,8 +1024,8 @@
     if (focusHeading) resetDirectorySearch(true);
     else invalidateDirectorySearch();
     isNavigating = true;
-    navigationError = "";
-    revealError = "";
+    if (!preserveRecovery) clearNavigationError();
+    clearRevealError();
     try {
       const nextView = await invoke<DirectoryView>("open_scan_directory", {
         scanId: completedScanId,
@@ -1007,7 +1038,8 @@
           sequence: navigationSequence,
           complete: status === "complete",
         })
-      ) return;
+      ) return false;
+      clearNavigationError();
       view = nextView;
       sizeMetric = metric;
       selectedEntry = null;
@@ -1020,6 +1052,7 @@
         await tick();
         viewHeading?.focus();
       }
+      return true;
     } catch (error) {
       if (
         !isCurrentCompletedScanRequest(request, {
@@ -1027,13 +1060,17 @@
           sequence: navigationSequence,
           complete: status === "complete",
         })
-      ) return;
+      ) return false;
       navigationErrorTitle = focusHeading
         ? "That folder could not be opened."
         : "The size metric could not be changed.";
       navigationError = String(error);
+      navigationRecovery = focusHeading
+        ? { kind: "directory", nodeId, metric, focusHeading: true }
+        : { kind: "metric", nodeId, metric, focusHeading: false };
       await tick();
       navigationNotice?.focus();
+      return false;
     } finally {
       if (navigationSequence === request.sequence) isNavigating = false;
     }
@@ -1049,17 +1086,56 @@
     await loadDirectory(view.nodeId, metric, false);
   }
 
-  async function revealItem(nodeId: number) {
-    if (scanId === null || revealingNodeId !== null || isResultBusy) return;
+  async function retryNavigationAction() {
+    const recovery = navigationRecovery;
+    if (!recovery || isResultBusy) return;
+
+    if (recovery.kind === "chooseDirectory") {
+      await chooseDirectory();
+      return;
+    }
+    if (recovery.kind === "discardScan") {
+      await reset();
+      return;
+    }
+
+    navigationRetryInFlight = true;
+    let succeeded = false;
+    try {
+      succeeded = await loadDirectory(
+        recovery.nodeId,
+        recovery.metric,
+        recovery.focusHeading,
+        true,
+      );
+    } finally {
+      navigationRetryInFlight = false;
+    }
+    if (!succeeded || recovery.focusHeading) return;
+    await tick();
+    (recovery.metric === "allocated"
+      ? allocatedMetricButton
+      : logicalMetricButton
+    )?.focus();
+  }
+
+  async function revealItem(
+    nodeId: number,
+    preserveRecovery = false,
+  ): Promise<boolean> {
+    if (scanId === null || revealingNodeId !== null || isResultBusy) return false;
     const completedScanId = scanId;
     const request = {
       scanId: completedScanId,
       sequence: ++revealSequence,
     };
     revealingNodeId = nodeId;
-    revealError = "";
+    clearNavigationError();
+    if (!preserveRecovery) clearRevealError();
     try {
       await invoke("reveal_scan_item", { scanId: completedScanId, nodeId });
+      clearRevealError();
+      return true;
     } catch (error) {
       if (
         !isCurrentCompletedScanRequest(request, {
@@ -1067,13 +1143,34 @@
           sequence: revealSequence,
           complete: status === "complete",
         })
-      ) return;
+      ) return false;
       revealError = String(error);
+      revealErrorNodeId = nodeId;
       await tick();
       revealNotice?.focus();
+      return false;
     } finally {
       if (revealSequence === request.sequence) revealingNodeId = null;
     }
+  }
+
+  async function retryReveal() {
+    const nodeId = revealErrorNodeId;
+    if (nodeId === null) return;
+    revealRetryInFlight = true;
+    let succeeded = false;
+    try {
+      succeeded = await revealItem(nodeId, true);
+    } finally {
+      revealRetryInFlight = false;
+    }
+    if (!succeeded) return;
+    await tick();
+    (
+      itemListElement?.querySelector<HTMLElement>(
+        `[data-list-reveal-id="${nodeId}"]`,
+      ) ?? viewHeading
+    )?.focus();
   }
 
   function invalidateCompletedScanRequests() {
@@ -1083,6 +1180,10 @@
     isNavigating = false;
     revealSequence += 1;
     revealingNodeId = null;
+    navigationRetryInFlight = false;
+    revealRetryInFlight = false;
+    clearNavigationError();
+    clearRevealError();
   }
 
   function activateEntry(
@@ -1438,12 +1539,14 @@
         <div class="metric-switch" role="group" aria-label="Size metric">
           <button
             type="button"
+            bind:this={allocatedMetricButton}
             aria-pressed={sizeMetric === "allocated"}
             aria-disabled={isResultBusy}
             onclick={() => setSizeMetric("allocated")}
           >On disk</button>
           <button
             type="button"
+            bind:this={logicalMetricButton}
             aria-pressed={sizeMetric === "logical"}
             aria-disabled={isResultBusy}
             onclick={() => setSizeMetric("logical")}
@@ -1459,9 +1562,23 @@
           bind:this={navigationNotice}
         >
           <AlertCircle />
-          <div>
+          <div class="result-action-error-copy">
             <strong>{navigationErrorTitle}</strong>
-            <span>{navigationError}</span>
+            <span>{navigationRecoveryMessage(navigationRecovery)}</span>
+            {#if navigationRecovery}
+              <div class="result-action-error-actions">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={isResultBusy || navigationRetryInFlight}
+                  onclick={retryNavigationAction}
+                >{navigationRetryInFlight ? "Trying…" : "Try again"}</Button>
+              </div>
+            {/if}
+            <details class="metadata-disclosure result-action-error-details">
+              <summary>Error details</summary>
+              <p>{navigationError}</p>
+            </details>
           </div>
         </div>
       {/if}
@@ -1474,9 +1591,21 @@
           bind:this={revealNotice}
         >
           <AlertCircle />
-          <div>
-            <strong>That item could not be shown.</strong>
-            <span>{revealError}</span>
+          <div class="result-action-error-copy">
+            <strong>Couldn’t show that item.</strong>
+            <span>The current folder is unchanged. Try again when you’re ready.</span>
+            <div class="result-action-error-actions">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={isResultBusy || revealingNodeId !== null || revealRetryInFlight}
+                onclick={retryReveal}
+              >{revealRetryInFlight ? "Trying…" : "Try again"}</Button>
+            </div>
+            <details class="metadata-disclosure result-action-error-details">
+              <summary>Error details</summary>
+              <p>{revealError}</p>
+            </details>
           </div>
         </div>
       {/if}
