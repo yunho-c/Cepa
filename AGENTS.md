@@ -47,6 +47,8 @@ Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row and the largest files observed so far.
+Keep the scan-progress grid item shrinkable so a long no-wrap current path
+ellipsizes inside the viewport instead of widening the document.
 Keep Stop immediately available and unavailable-item counts visible, but do not
 restore a dashboard card, metric-tile grid, repeated privacy slogan, or backend
 vocabulary to this state. During an ordinary scan at the 620 by 480 minimum,

@@ -518,7 +518,7 @@ body {
   align-items: start;
 }
 
-.scan-progress { width: 100%; }
+.scan-progress { width: 100%; min-width: 0; }
 
 .scan-titlebar {
   display: flex;

@@ -240,4 +240,14 @@ describe("production style sources", () => {
     expect(announcement).toContain("{scanProgressAnnouncement}");
     expect(announcement).not.toContain("{progressPresentation.announcement}");
   });
+
+  test("keeps long scan paths from widening the active scan grid", async () => {
+    const stylesheet = await Bun.file(new URL("../app.css", import.meta.url)).text();
+
+    expect(stylesheet).toContain(".scan-progress { width: 100%; min-width: 0; }");
+    expect(stylesheet).toContain(
+      `.scan-path,
+.result-path { color: var(--muted-foreground); font: 11px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`,
+    );
+  });
 });
