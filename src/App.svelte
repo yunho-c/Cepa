@@ -19,8 +19,9 @@
     ScanSearch,
     X,
   } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import * as Popover from "$lib/components/ui/popover";
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
@@ -146,7 +147,6 @@
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
   let scanDetailsOpen = $state(false);
-  let scanDetailsSummary: HTMLElement | undefined = $state();
   let landingHeading: HTMLHeadingElement | undefined = $state();
   let chooseDirectoryButton: HTMLButtonElement | null = $state(null);
   let scanProgressHeading: HTMLHeadingElement | undefined = $state();
@@ -764,13 +764,6 @@
     compressionCapability = null;
     await tick();
     landingHeading?.focus();
-  }
-
-  async function showScanDetails() {
-    if (isResultBusy) return;
-    scanDetailsOpen = true;
-    await tick();
-    scanDetailsSummary?.focus();
   }
 
   async function loadCompressionCapability(completedScanId: number) {
@@ -1675,17 +1668,51 @@
           </Button>
         </div>
         <div class="result-actions" role="group" aria-label="Analysis actions">
-          <Button
-            class="result-info-action"
-            variant="ghost"
-            size="icon-sm"
-            aria-controls="scan-details"
-            aria-expanded={scanDetailsOpen}
-            aria-disabled={isResultBusy}
-            aria-label="Open scan details"
-            title="Scan details"
-            onclick={showScanDetails}
-          ><Info /></Button>
+          <Popover.Root bind:open={scanDetailsOpen}>
+            <Popover.Trigger
+              class={buttonVariants({
+                variant: "ghost",
+                size: "icon-sm",
+                class: "result-info-action",
+              })}
+              aria-label="Details"
+              title="Details"
+            >
+              <Info />
+            </Popover.Trigger>
+            <Popover.Content
+              align="end"
+              sideOffset={6}
+              class="scan-details-popover w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
+            >
+              <Popover.Header class="scan-details-header">
+                <Popover.Title>Details</Popover.Title>
+              </Popover.Header>
+              <dl class="scan-details-list">
+                <div><dt>Scanner</dt><dd>{formatBackend(result.backend)}</dd></div>
+                <div><dt>Space on disk</dt><dd>{result.allocatedSizeIsEstimate ? "Estimated" : "Exact"}</dd></div>
+                <div><dt>Hard links</dt><dd>{result.hardLinkDeduplicationSupported ? "Counted once" : "Not deduplicated"}</dd></div>
+                <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
+                <div><dt>Items not included</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
+                <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
+                {#if result.duplicateHardLinks > 0}
+                  <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>
+                {/if}
+                {#if compressionCapability}
+                  <div class="compression-detail">
+                    <dt>Filesystem compression</dt>
+                    <dd title={compressionCapability.detail}>
+                      {compressionCapability.status === "inspectOnly"
+                        ? "Available for analysis"
+                        : compressionCapability.status === "unsupported"
+                          ? "Not supported"
+                          : "Couldn’t be checked"}
+                    </dd>
+                  </div>
+                {/if}
+              </dl>
+            </Popover.Content>
+          </Popover.Root>
         </div>
         <div class="result-title">
           <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>
@@ -2176,35 +2203,6 @@
         </div>
       </section>
 
-      <details id="scan-details" class="scan-details" bind:open={scanDetailsOpen}>
-        <summary bind:this={scanDetailsSummary}>
-          <strong>Scan details</strong>
-          <ChevronRight aria-hidden="true" />
-        </summary>
-        <dl>
-          <div><dt>Scanner</dt><dd>{formatBackend(result.backend)}</dd></div>
-          <div><dt>Space on disk</dt><dd>{result.allocatedSizeIsEstimate ? "Estimated" : "Exact"}</dd></div>
-          <div><dt>Hard links</dt><dd>{result.hardLinkDeduplicationSupported ? "Counted once" : "Not deduplicated"}</dd></div>
-          <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
-          <div><dt>Items not included</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
-          <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
-          {#if result.duplicateHardLinks > 0}
-            <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>
-          {/if}
-          {#if compressionCapability}
-            <div class="compression-detail">
-              <dt>Filesystem compression</dt>
-              <dd title={compressionCapability.detail}>
-                {compressionCapability.status === "inspectOnly"
-                  ? "Available for analysis"
-                  : compressionCapability.status === "unsupported"
-                    ? "Not supported"
-                    : "Couldn’t be checked"}
-              </dd>
-            </div>
-          {/if}
-        </dl>
-      </details>
     </main>
   {/if}
 </div>

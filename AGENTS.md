@@ -139,11 +139,10 @@ active scan, move focus to the scan heading so the next Tab reaches Stop.
 Development-only `?mock=root-preparing&roots=preview` holds the volume-validation
 state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Backend, accounting, and
-intentional mount-boundary semantics remain available under the collapsed
-`Scan details` disclosure rather than appearing as status badges or a diagnostic
-footer. Asynchronous technical evidence in that disclosure must remain quiet
-until the user opens it: do not put live regions, status roles, or alert roles
-inside collapsed scan details. A completed scan with unavailable items shows one restrained,
+intentional mount-boundary semantics remain available in the Info action's
+`Details` popover rather than appearing as status badges or a diagnostic
+footer. Asynchronous technical evidence in that popover must remain quiet: do
+not put live regions, status roles, or alert roles inside scan details. A completed scan with unavailable items shows one restrained,
 cause-neutral coverage notice because its totals may be low; do not mislabel all
 such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
@@ -152,9 +151,10 @@ both palettes without introducing a production setting.
 Do not restore a persistent application header on landing, scanning, or result
 views. The landing tile owns app identity, active scans keep Stop beside their
 status, and completed results use a compact two-row masthead: Back and the
-icon-only Scan details action sit above the scan identity and total. The Info
-action opens the existing quiet disclosure and moves focus to its summary; do
-not turn it into a no-op or a competing live region. Returning home must first
+icon-only Details action sit above the scan identity and total. The Info
+action opens an anchored shadcn-svelte Popover containing the quiet technical
+evidence; do not restore a full-width disclosure, turn it into a no-op, or make
+it a competing live region. Returning home must first
 discard the retained scan. While that
 discard is pending, keep Back focused with guarded `aria-disabled` and
 `aria-busy` state, reject repeat activation, and use a wait cursor without
@@ -667,11 +667,11 @@ preserve the aliases and styling conventions in `components.json`.
 Keep implementation vocabulary out of the primary hierarchy. Do not repeat
 completion state, native backend names, syscall names, or accounting guarantees
 in banners, badges, headings, and footers. User-relevant exceptions stay visible;
-routine technical evidence belongs in the existing progressive disclosure.
+routine technical evidence belongs in the existing Details popover.
 Treat unavailable entries as an incomplete-coverage exception, but keep expected
-filesystem-boundary counts in `Scan details` rather than presenting them as an
-error. Loading routine capability or accounting evidence into that collapsed
-disclosure is not an application status change and must not compete with the
+filesystem-boundary counts in `Details` rather than presenting them as an
+error. Loading routine capability or accounting evidence into that popover is
+not an application status change and must not compete with the
 focused result heading, coverage notice, or folder-search status.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.

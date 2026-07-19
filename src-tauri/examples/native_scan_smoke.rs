@@ -393,7 +393,7 @@ void (async () => {{
     }};
   }};
   const submitFixture = (label) => submitPath(fixture, label);
-  const backendLabel = () => [...document.querySelectorAll('.scan-details dl > div')]
+  const backendLabel = () => [...document.querySelectorAll('.scan-details-list > div')]
     .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Scanner')
     ?.querySelector('dd')?.textContent?.trim() || '';
   try {{
@@ -518,17 +518,29 @@ void (async () => {{
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
-    const scanDetails = document.querySelector('.scan-details');
-    const scanDetailsPresent = scanDetails !== null;
+    const scanDetailsTrigger = document.querySelector('.result-info-action');
+    const scanDetailsPresent = scanDetailsTrigger !== null;
+    const scanDetailsClosedInitially =
+      document.querySelector('.scan-details-popover') === null
+      && scanDetailsTrigger?.getAttribute('aria-expanded') === 'false';
+    scanDetailsTrigger.click();
+    const scanDetails = await waitFor(
+      () => document.querySelector('.scan-details-popover'),
+      'scan details popover',
+    );
     await waitFor(
       () => document.querySelector('.compression-detail'),
       'filesystem compression details',
     );
     const scanDetailsQuiet =
-      scanDetails !== null
-      && !scanDetails.open
+      scanDetailsClosedInitially
       && scanDetails.querySelector('[aria-live], [role="status"], [role="alert"]') === null;
     const initialBackendLabel = backendLabel();
+    scanDetailsTrigger.click();
+    await waitFor(
+      () => document.querySelector('.scan-details-popover') === null,
+      'closed scan details popover',
+    );
 
     const logicalButton = [...document.querySelectorAll('.metric-switch button')]
       .find((button) => button.textContent?.trim() === 'Logical');
@@ -728,6 +740,15 @@ void (async () => {{
     const rescanResultFocused = document.activeElement === rescanHeading;
     const rescanRows = document.querySelectorAll('.storage-row').length;
     const rescanChartSegments = document.querySelectorAll('[data-chart-node-id]').length;
+    document.querySelector('.result-info-action').click();
+    await waitFor(
+      () => document.querySelector('.scan-details-popover'),
+      'rescanned scan details popover',
+    );
+    await waitFor(
+      () => document.querySelector('.compression-detail'),
+      'rescanned filesystem compression details',
+    );
     const rescanBackendLabel = backendLabel();
 
     report({{

@@ -124,23 +124,25 @@ describe("production style sources", () => {
     expect(stylesheet).not.toContain(".result-home-action:disabled");
   });
 
-  test("connects the result Info action to the quiet scan details disclosure", async () => {
+  test("connects the result Info action to the quiet scan details popover", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
-    const infoStart = component.indexOf('class="result-info-action"');
-    const infoButton = component.slice(infoStart, component.indexOf("</Button>", infoStart));
-    const detailsStart = component.indexOf('id="scan-details"');
+    const infoStart = component.indexOf("<Popover.Trigger");
+    const infoButton = component.slice(infoStart, component.indexOf("</Popover.Trigger>", infoStart));
+    const detailsStart = component.indexOf("<Popover.Content");
 
     expect(infoStart).toBeGreaterThan(-1);
-    expect(infoButton).toContain('variant="ghost"');
-    expect(infoButton).toContain('aria-controls="scan-details"');
-    expect(infoButton).toContain("aria-expanded={scanDetailsOpen}");
-    expect(infoButton).toContain("aria-disabled={isResultBusy}");
-    expect(infoButton).not.toMatch(/^\s*disabled=/m);
-    expect(component).toContain("scanDetailsOpen = true;");
-    expect(component).toContain("scanDetailsSummary?.focus();");
+    expect(infoButton).toContain('variant: "ghost"');
+    expect(infoButton).toContain('size: "icon-sm"');
+    expect(infoButton).toContain('class: "result-info-action"');
+    expect(infoButton).toContain('aria-label="Details"');
     expect(detailsStart).toBeGreaterThan(-1);
     expect(component).toContain("bind:open={scanDetailsOpen}");
-    expect(component).toContain("bind:this={scanDetailsSummary}");
+    expect(component).toContain('align="end"');
+    expect(component).toContain('class="scan-details-popover');
+    expect(component).toContain("<Popover.Title>Details</Popover.Title>");
+    expect(component).not.toContain("Technical information about this completed scan.");
+    expect(component).not.toContain('class="scan-details"');
+    expect(component).not.toContain("<details id=\"scan-details\"");
   });
 
   test("moves desktop Up focus to its stable pending control", async () => {
@@ -219,12 +221,12 @@ describe("production style sources", () => {
     expect(directoryHeading).toContain("{view.displayName}");
   });
 
-  test("keeps collapsed scan details out of live announcements", async () => {
+  test("keeps scan details popover out of live announcements", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
-    const detailsStart = component.indexOf('class="scan-details"');
+    const detailsStart = component.indexOf('class="scan-details-popover');
     const details = component.slice(
       detailsStart,
-      component.indexOf("</details>", detailsStart),
+      component.indexOf("</Popover.Content>", detailsStart),
     );
 
     expect(detailsStart).toBeGreaterThan(-1);

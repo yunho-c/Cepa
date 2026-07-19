@@ -111,7 +111,7 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   metadata and payloads, and Linux DEB/RPM/AppImage structure
 - Explicit scanning, cancelling, cancelled, error, empty-folder, navigation,
   partial-coverage, and completed states, with routine backend/accounting
-  semantics available under a compact scan-details disclosure
+  semantics available from a compact scan-details popover
 
 Symlinks are reported but never followed. Mounted filesystems are not traversed
 when the portable backend can identify filesystem boundaries. The result view
@@ -180,7 +180,7 @@ writes.
 The Unix snapshot hoists the shared filesystem identity out of each retained
 node; on one 101,011-entry APFS fixture this reduced measured retained payload
 by 5.15% without an observed throughput regression, though process peak RSS did
-not fall. The scan-details disclosure, selection inspector, and bounded estimator
+not fall. The scan-details popover, selection inspector, and bounded estimator
 are likewise read-only and never infer compression state from allocated size.
 The safety and backend contract is specified in
 [`docs/compression.md`](docs/compression.md).
@@ -251,7 +251,7 @@ ordinary completion fixture, waits for the terminal channel event
 and two painted frames, opens and closes a real file inspector, and requires its
 single polite atomic status to remain outside the interactive inspector with no
 nested live region. It waits for real filesystem capability evidence and requires
-the collapsed Scan details disclosure to contain no live, status, or alert owner.
+the Details popover to contain no live, status, or alert owner.
 It then switches metrics, navigates into a directory, performs
 a debounced matching folder search followed by a zero-match search, and validates
 that the compact message and Clear action stay inside the directory pane. It
