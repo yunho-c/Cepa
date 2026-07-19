@@ -13,6 +13,7 @@
     FolderDown,
     FolderOpen,
     FolderSearch,
+    Info,
     Link2,
     Search,
     ScanSearch,
@@ -144,6 +145,8 @@
   let estimateActionNotice: HTMLDivElement | undefined = $state();
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
+  let scanDetailsOpen = $state(false);
+  let scanDetailsSummary: HTMLElement | undefined = $state();
   let landingHeading: HTMLHeadingElement | undefined = $state();
   let chooseDirectoryButton: HTMLButtonElement | null = $state(null);
   let scanProgressHeading: HTMLHeadingElement | undefined = $state();
@@ -577,6 +580,7 @@
     revealingNodeId = null;
     sizeMetric = "allocated";
     compressionCapability = null;
+    scanDetailsOpen = false;
     if (import.meta.env.DEV) {
       delete document.documentElement.dataset.cepaScanRenderMs;
     }
@@ -746,6 +750,7 @@
     progress = null;
     result = null;
     view = null;
+    scanDetailsOpen = false;
     pointerEntry = null;
     focusedEntry = null;
     clearInspection();
@@ -759,6 +764,13 @@
     compressionCapability = null;
     await tick();
     landingHeading?.focus();
+  }
+
+  async function showScanDetails() {
+    if (isResultBusy) return;
+    scanDetailsOpen = true;
+    await tick();
+    scanDetailsSummary?.focus();
   }
 
   async function loadCompressionCapability(completedScanId: number) {
@@ -1647,22 +1659,34 @@
       inert={dropOverlayVisible}
       aria-hidden={dropOverlayVisible ? "true" : undefined}
     >
-      <div class="result-navigation">
-        <Button
-          class="result-home-action"
-          variant="ghost"
-          size="sm"
-          aria-busy={isDiscardingScan}
-          aria-disabled={isBusy}
-          aria-label="Back to Cepa home"
-          onclick={reset}
-        >
-          <ArrowLeft data-icon="inline-start" />
-          Back
-        </Button>
-      </div>
-
       <section class="results-heading">
+        <div class="result-navigation">
+          <Button
+            class="result-home-action"
+            variant="ghost"
+            size="sm"
+            aria-busy={isDiscardingScan}
+            aria-disabled={isBusy}
+            aria-label="Back to Cepa home"
+            onclick={reset}
+          >
+            <ArrowLeft data-icon="inline-start" />
+            Back
+          </Button>
+        </div>
+        <div class="result-actions" role="group" aria-label="Analysis actions">
+          <Button
+            class="result-info-action"
+            variant="ghost"
+            size="icon-sm"
+            aria-controls="scan-details"
+            aria-expanded={scanDetailsOpen}
+            aria-disabled={isResultBusy}
+            aria-label="Open scan details"
+            title="Scan details"
+            onclick={showScanDetails}
+          ><Info /></Button>
+        </div>
         <div class="result-title">
           <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>
           <p class="result-path" title={result.root}>{result.root}</p>
@@ -2152,8 +2176,8 @@
         </div>
       </section>
 
-      <details class="scan-details">
-        <summary>
+      <details id="scan-details" class="scan-details" bind:open={scanDetailsOpen}>
+        <summary bind:this={scanDetailsSummary}>
           <strong>Scan details</strong>
           <ChevronRight aria-hidden="true" />
         </summary>

@@ -151,8 +151,11 @@ live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
 Do not restore a persistent application header on landing, scanning, or result
 views. The landing tile owns app identity, active scans keep Stop beside their
-status, and completed results expose one restrained `Back` action above the
-result heading. Returning home must first discard the retained scan. While that
+status, and completed results use a compact two-row masthead: Back and the
+icon-only Scan details action sit above the scan identity and total. The Info
+action opens the existing quiet disclosure and moves focus to its summary; do
+not turn it into a no-op or a competing live region. Returning home must first
+discard the retained scan. While that
 discard is pending, keep Back focused with guarded `aria-disabled` and
 `aria-busy` state, reject repeat activation, and use a wait cursor without
 fading the control. Success moves focus to the landing heading; failure moves

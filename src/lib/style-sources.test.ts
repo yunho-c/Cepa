@@ -124,6 +124,25 @@ describe("production style sources", () => {
     expect(stylesheet).not.toContain(".result-home-action:disabled");
   });
 
+  test("connects the result Info action to the quiet scan details disclosure", async () => {
+    const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
+    const infoStart = component.indexOf('class="result-info-action"');
+    const infoButton = component.slice(infoStart, component.indexOf("</Button>", infoStart));
+    const detailsStart = component.indexOf('id="scan-details"');
+
+    expect(infoStart).toBeGreaterThan(-1);
+    expect(infoButton).toContain('variant="ghost"');
+    expect(infoButton).toContain('aria-controls="scan-details"');
+    expect(infoButton).toContain("aria-expanded={scanDetailsOpen}");
+    expect(infoButton).toContain("aria-disabled={isResultBusy}");
+    expect(infoButton).not.toMatch(/^\s*disabled=/m);
+    expect(component).toContain("scanDetailsOpen = true;");
+    expect(component).toContain("scanDetailsSummary?.focus();");
+    expect(detailsStart).toBeGreaterThan(-1);
+    expect(component).toContain("bind:open={scanDetailsOpen}");
+    expect(component).toContain("bind:this={scanDetailsSummary}");
+  });
+
   test("moves desktop Up focus to its stable pending control", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const commandStart = component.indexOf("function runDesktopCommand(");
@@ -202,7 +221,7 @@ describe("production style sources", () => {
 
   test("keeps collapsed scan details out of live announcements", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
-    const detailsStart = component.indexOf('<details class="scan-details">');
+    const detailsStart = component.indexOf('class="scan-details"');
     const details = component.slice(
       detailsStart,
       component.indexOf("</details>", detailsStart),
