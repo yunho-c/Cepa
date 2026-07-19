@@ -139,7 +139,7 @@ describe("production style sources", () => {
     expect(component).toContain("bind:open={scanDetailsOpen}");
     expect(component).toContain('align="end"');
     expect(component).toContain('class="scan-details-popover');
-    expect(component).toContain("<Popover.Title>Details</Popover.Title>");
+    expect(component).toContain("<Popover.Title>DETAILS</Popover.Title>");
     expect(component).not.toContain("Technical information about this completed scan.");
     expect(component).not.toContain('class="scan-details"');
     expect(component).not.toContain("<details id=\"scan-details\"");

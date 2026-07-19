@@ -1686,7 +1686,7 @@
               class="scan-details-popover w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
             >
               <Popover.Header class="scan-details-header">
-                <Popover.Title>Details</Popover.Title>
+                <Popover.Title>DETAILS</Popover.Title>
               </Popover.Header>
               <dl class="scan-details-list">
                 <div><dt>Scanner</dt><dd>{formatBackend(result.backend)}</dd></div>
