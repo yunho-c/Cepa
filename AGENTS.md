@@ -263,6 +263,16 @@ stacked prompt.
 The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side throughout the native window's supported width range.
+Keep this primary analysis surface flat within the application window: the
+explorer has no outer border, corner radius, shadow, or shared card background.
+The chart retains its quiet surface, the ranked list retains its brighter card
+surface, and their single internal divider preserves the coordinated two-pane
+structure without making the explorer look like a nested window. At wider
+windows, let the result view reach its responsive outer gutters and let the
+explorer use the available viewport height. Cap only the chart column from 320
+through 520 logical pixels and give every remaining pixel to the ranked list;
+do not restore the former 1,240-pixel result-width or 590-pixel explorer-height
+ceilings.
 From 560 through 720 logical pixels wide, use the compact two-column explorer;
 only browser previews below 560 pixels stack the panes. The narrow layout always
 compacts the result header; wider views do so at 560 logical pixels tall or less.

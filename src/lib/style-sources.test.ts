@@ -176,6 +176,50 @@ describe("production style sources", () => {
     expect(stylesheet).not.toContain(".coverage-notice");
   });
 
+  test("keeps the primary explorer flat and fluid while separating its pane surfaces", async () => {
+    const stylesheet = await Bun.file(new URL("../app.css", import.meta.url)).text();
+    const resultsStart = stylesheet.indexOf(".results-view {");
+    const results = stylesheet.slice(
+      resultsStart,
+      stylesheet.indexOf("}", resultsStart),
+    );
+    const explorerStart = stylesheet.indexOf(".explorer {");
+    const explorer = stylesheet.slice(
+      explorerStart,
+      stylesheet.indexOf("}", explorerStart),
+    );
+    const chartPaneStart = stylesheet.indexOf(".chart-pane {");
+    const chartPane = stylesheet.slice(
+      chartPaneStart,
+      stylesheet.indexOf("}", chartPaneStart),
+    );
+    const directoryPaneStart = stylesheet.indexOf(".directory-pane {");
+    const directoryPane = stylesheet.slice(
+      directoryPaneStart,
+      stylesheet.indexOf("}", directoryPaneStart),
+    );
+
+    expect(resultsStart).toBeGreaterThan(-1);
+    expect(results).toContain("width: 100%");
+    expect(results).toContain("max-width: none");
+    expect(results).not.toContain("max-width: 1240px");
+    expect(explorerStart).toBeGreaterThan(-1);
+    expect(explorer).toContain("height: calc(100vh - 250px)");
+    expect(explorer).toContain("min-height: 370px");
+    expect(explorer).toContain(
+      "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
+    );
+    expect(explorer).not.toContain("590px");
+    expect(explorer).not.toContain("border:");
+    expect(explorer).not.toContain("border-radius:");
+    expect(explorer).not.toContain("box-shadow:");
+    expect(explorer).not.toContain("background:");
+    expect(chartPane).toContain("border-right: 1px solid var(--border)");
+    expect(chartPane).toContain("background: var(--quiet-surface)");
+    expect(directoryPane).toContain("background: var(--card)");
+    expect(stylesheet).not.toContain(".explorer { border-radius:");
+  });
+
   test("moves desktop Up focus to its stable pending control", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const commandStart = component.indexOf("function runDesktopCommand(");
