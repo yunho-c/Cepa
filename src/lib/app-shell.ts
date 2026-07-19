@@ -5,7 +5,3 @@ export type AppStatus =
   | "cancelled"
   | "complete"
   | "error";
-
-export function brandActsAsHome(status: AppStatus): boolean {
-  return status === "complete";
-}

@@ -120,8 +120,7 @@ their recovery controls remain visible. Use
 `shouldShowScanRoots` for both the component and layout state so they cannot
 drift. If a first-launch error or cancellation callout shares that compact
 storage landing view, tighten the hero and callout rhythm enough that focusing
-the recovery message does not scroll the heading beneath the sticky header at
-620 by 480.
+the recovery message does not scroll the heading out of view at 620 by 480.
 Storage-discovery retry must not strand keyboard focus when its button is
 replaced. Move focus to the loading status immediately, then to the first
 recovered volume, the renewed Try again control, or Choose folder when no roots
@@ -148,14 +147,14 @@ such items as permission failures. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
-Keep the header brand static on landing, scanning, cancellation, and scan-error
-states. It becomes the `Cepa home` action only while a completed snapshot exists,
-because returning home must first discard that retained scan. Do not add a no-op
-brand control to the ordinary keyboard order or dim app identity during work.
-While discard is pending, keep Home focused with guarded `aria-disabled` and
-`aria-busy` state, reject repeat activation, and use only a wait cursor rather
-than fading the brand. Success moves focus to the landing heading; failure moves
-focus to the contextual result error and makes Home available again.
+Do not restore a persistent application header on landing, scanning, or result
+views. The landing tile owns app identity, active scans keep Stop beside their
+status, and completed results expose one restrained `Back` action above the
+result heading. Returning home must first discard the retained scan. While that
+discard is pending, keep Back focused with guarded `aria-disabled` and
+`aria-busy` state, reject repeat activation, and use a wait cursor without
+fading the control. Success moves focus to the landing heading; failure moves
+focus to the contextual result error and makes Back available again.
 If a cancellation command fails, the UI keeps the still-live scan visible and
 offers Stop again; do not turn that command failure into a terminal scan error.
 Folder-picker failures are likewise contextual: preserve a completed result and
@@ -170,8 +169,8 @@ completion promise as soon as it is created while still awaiting it normally
 after acknowledgement; otherwise a handled terminal failure can briefly become
 an unhandled WebView rejection.
 The native folder-drop overlay is interaction-exclusive while a drag is active
-or its single dropped folder is being validated. Keep the covered header and
-current main view inert and out of the accessibility tree; keyboard and screen
+or its single dropped folder is being validated. Keep the covered main view
+inert and out of the accessibility tree; keyboard and screen
 reader users must encounter the overlay status rather than hidden controls.
 Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
@@ -371,15 +370,16 @@ by the sweep, while one after it rejects itself. Home already follows the same
 detach-before-sweep order. Preserve both cross-lifecycle race regressions; do not
 authorize these starts from a previously cloned snapshot alone.
 Completed scans can be rerun against the same root without reopening the folder
-picker. At native desktop widths, keep this action visibly labeled `Scan again`
-in the persistent header; browser previews at 400 logical pixels or narrower may
-collapse it to the icon while retaining its accessible name and shortcut title.
+picker through the native application menu and its platform shortcut. Keep the
+result surface focused on analysis: it should not expose persistent `Scan again`
+or `Choose folder` actions. Returning Home is the visible route to selecting a
+different target.
 Returning to the landing view first invokes the scan-authorized
 `discard_scan` command. A matching scan ID releases the retained snapshot,
 cancels active estimate/search work, and invalidates any compression plan; a
 stale ID cannot affect a newer snapshot. If that command fails, keep the result
 visible, focus its contextual error, and allow retry. After success, move focus
-to the landing heading. The initiating Home action must retain focus while the
+to the landing heading. The initiating Back action must retain focus while the
 discard request is live; do not native-disable it and strand focus on the
 document body. Do not clear only the frontend and leave a potentially
 multi-million-node snapshot resident. Detach the state owner under its mutex,

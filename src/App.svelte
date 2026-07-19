@@ -14,14 +14,13 @@
     FolderOpen,
     FolderSearch,
     Link2,
-    RefreshCw,
     Search,
     ScanSearch,
     X,
   } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { brandActsAsHome, type AppStatus } from "$lib/app-shell";
+  import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
@@ -1410,58 +1409,6 @@
 </svelte:head>
 
 <div class="app-shell">
-  <header
-    class="app-header"
-    inert={dropOverlayVisible}
-    aria-hidden={dropOverlayVisible ? "true" : undefined}
-  >
-    {#if brandActsAsHome(status)}
-      <button
-        class="wordmark"
-        type="button"
-        aria-busy={isDiscardingScan}
-        aria-disabled={isBusy}
-        onclick={reset}
-        aria-label="Cepa home"
-      >
-        <CepaMark class="wordmark-mark" />
-        <span>Cepa</span>
-      </button>
-    {:else}
-      <div class="wordmark wordmark-static">
-        <CepaMark class="wordmark-mark" />
-        <span>Cepa</span>
-      </div>
-    {/if}
-
-    {#if status === "complete"}
-      <div class="header-actions">
-        <Button
-          variant="ghost"
-          size="sm"
-          class="scan-again-action"
-          disabled={isBusy}
-          aria-label="Scan again"
-          title={`Scan again (${primaryShortcutLabel}R)`}
-          onclick={() => startScan()}
-        >
-          <RefreshCw data-icon="inline-start" />
-          <span class="scan-again-label">Scan again</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isBusy}
-          title={`Choose folder (${primaryShortcutLabel}O)`}
-          onclick={chooseDirectory}
-        >
-          <FolderOpen data-icon="inline-start" />
-          Choose folder
-        </Button>
-      </div>
-    {/if}
-  </header>
-
   {#if dropOverlayVisible}
     <div
       class="folder-drop-overlay"
@@ -1700,6 +1647,21 @@
       inert={dropOverlayVisible}
       aria-hidden={dropOverlayVisible ? "true" : undefined}
     >
+      <div class="result-navigation">
+        <Button
+          class="result-home-action"
+          variant="ghost"
+          size="sm"
+          aria-busy={isDiscardingScan}
+          aria-disabled={isBusy}
+          aria-label="Back to Cepa home"
+          onclick={reset}
+        >
+          <ArrowLeft data-icon="inline-start" />
+          Back
+        </Button>
+      </div>
+
       <section class="results-heading">
         <div class="result-title">
           <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>

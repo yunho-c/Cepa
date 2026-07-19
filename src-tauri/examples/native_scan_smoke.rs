@@ -688,7 +688,7 @@ void (async () => {{
       document.activeElement === document.querySelector('.section-heading h2');
 
     phase('returning-home');
-    const homeButton = document.querySelector('[aria-label="Cepa home"]');
+    const homeButton = document.querySelector('[aria-label="Back to Cepa home"]');
     homeButton.focus();
     homeButton.click();
     await Promise.resolve();

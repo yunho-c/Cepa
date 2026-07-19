@@ -359,7 +359,7 @@ completed-scan action and then succeed, covering scan-local retry intent,
 disclosed causes, and stable focus after recovery.
 `?mock=root-preparing&roots=preview` holds a selected volume in its validation
 state so its focus, announcement, and progress treatment can be inspected.
-`?mock=discard-error` briefly holds the focused Home action in its guarded
+`?mock=discard-error` briefly holds the focused Back action in its guarded
 pending state, then keeps the completed result visible when its retained snapshot
 cannot be released and verifies the focused, contextual recovery state.
 `?mock=stale-actions` holds directory navigation and Reveal requests long enough
@@ -428,8 +428,8 @@ then removes its dedicated smoke-test state file.
 ## App identity
 
 [`public/cepa-icon.svg`](public/cepa-icon.svg) is the source of truth for the
-favicon and every native desktop or Windows Store icon. The in-app wordmark and
-landing tile reuse the same radial-C geometry through
+favicon and every native desktop or Windows Store icon. The landing tile reuses
+the same radial-C geometry through
 `src/lib/components/cepa-mark.svelte`, with theme tokens supplying the adaptive
 foreground and accent colors.
 
