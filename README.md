@@ -41,8 +41,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Deterministic Unix hard-link deduplication and same-filesystem traversal
   boundaries
 - Permission and traversal-error accounting without aborting the whole scan,
-  with a visible incomplete-coverage notice when unavailable items can lower
-  the reported totals
+  with a visible incomplete-coverage warning action and hover/focus Tooltip when
+  unavailable items can lower the reported totals
 - Bounded progress and terminal scan results over one Tauri channel. The scan
   command acknowledges its ID immediately so Stop is never serialized behind a
   long-lived command response, while the calm active-scan view keeps space,

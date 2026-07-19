@@ -17,11 +17,13 @@
     Link2,
     Search,
     ScanSearch,
+    TriangleAlert,
     X,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import * as Popover from "$lib/components/ui/popover";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
@@ -1413,6 +1415,7 @@
   />
 </svelte:head>
 
+<Tooltip.Provider delayDuration={150}>
 <div class="app-shell">
   {#if dropOverlayVisible}
     <div
@@ -1668,6 +1671,31 @@
           </Button>
         </div>
         <div class="result-actions" role="group" aria-label="Analysis actions">
+          {#if result.skippedEntries > 0}
+            <Tooltip.Root>
+              <Tooltip.Trigger
+                class={buttonVariants({
+                  variant: "ghost",
+                  size: "icon-sm",
+                  class: "coverage-warning-action",
+                })}
+                aria-label={`Some items weren’t included. ${formatUnavailableItems(result.skippedEntries)}, so totals may be lower than the space actually in use.`}
+              >
+                <TriangleAlert />
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                side="bottom"
+                align="end"
+                sideOffset={6}
+                class="coverage-warning-tooltip"
+              >
+                <p>
+                  <strong>Some items weren’t included.</strong>
+                  <span>{formatUnavailableItems(result.skippedEntries)}, so totals may be lower than the space actually in use.</span>
+                </p>
+              </Tooltip.Content>
+            </Tooltip.Root>
+          {/if}
           <Popover.Root bind:open={scanDetailsOpen}>
             <Popover.Trigger
               class={buttonVariants({
@@ -1730,16 +1758,6 @@
         <span>{formatCount(result.directoryCount)} folders</span>
         <span>{formatDuration(result.elapsedMs)}</span>
       </p>
-
-      {#if result.skippedEntries > 0}
-        <div class="coverage-notice" role="status">
-          <AlertCircle aria-hidden="true" />
-          <p>
-            <strong>Some items weren’t included.</strong>
-            <span>{formatUnavailableItems(result.skippedEntries)}, so totals may be lower than the space actually in use.</span>
-          </p>
-        </div>
-      {/if}
 
       <div class="explorer-toolbar">
         <nav class="breadcrumbs" aria-label="Current scan path">
@@ -2206,3 +2224,4 @@
     </main>
   {/if}
 </div>
+</Tooltip.Provider>

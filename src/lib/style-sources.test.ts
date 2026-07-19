@@ -145,6 +145,37 @@ describe("production style sources", () => {
     expect(component).not.toContain("<details id=\"scan-details\"");
   });
 
+  test("moves incomplete coverage into a hover and focus warning action", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+    const warningStart = component.indexOf("<Tooltip.Trigger");
+    const warningTrigger = component.slice(
+      warningStart,
+      component.indexOf("</Tooltip.Trigger>", warningStart),
+    );
+    const tooltipStart = component.indexOf("<Tooltip.Content", warningStart);
+    const tooltip = component.slice(
+      tooltipStart,
+      component.indexOf("</Tooltip.Content>", tooltipStart),
+    );
+
+    expect(component).toContain("<Tooltip.Provider delayDuration={150}>");
+    expect(component).toContain("{#if result.skippedEntries > 0}");
+    expect(warningStart).toBeGreaterThan(-1);
+    expect(warningTrigger).toContain('class: "coverage-warning-action"');
+    expect(warningTrigger).toContain("formatUnavailableItems(result.skippedEntries)");
+    expect(tooltip).toContain("Some items weren’t included.");
+    expect(tooltip).toContain("totals may be lower than the space actually in use.");
+    expect(tooltip).not.toContain("aria-live");
+    expect(tooltip).not.toContain('role="status"');
+    expect(tooltip).not.toContain('role="alert"');
+    expect(component).not.toContain('class="coverage-notice"');
+    expect(stylesheet).toContain('.coverage-warning-action[data-slot="tooltip-trigger"]');
+    expect(stylesheet).not.toContain(".coverage-notice");
+  });
+
   test("moves desktop Up focus to its stable pending control", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const commandStart = component.indexOf("function runDesktopCommand(");

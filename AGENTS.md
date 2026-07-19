@@ -143,8 +143,11 @@ intentional mount-boundary semantics remain available in the Info action's
 `Details` popover rather than appearing as status badges or a diagnostic
 footer. Asynchronous technical evidence in that popover must remain quiet: do
 not put live regions, status roles, or alert roles inside scan details. A completed scan with unavailable items shows one restrained,
-cause-neutral coverage notice because its totals may be low; do not mislabel all
-such items as permission failures. It also has explicit cancellation and
+cause-neutral warning action beside Info because its totals may be low; do not
+mislabel all such items as permission failures. Its Tooltip opens on hover and
+keyboard focus, while the trigger's accessible name carries the full warning
+and unavailable-item count. Do not make the warning hover-only or put live,
+status, or alert semantics inside its Tooltip. It also has explicit cancellation and
 navigation-error states. Appearance follows the operating system and updates
 live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
@@ -263,7 +266,7 @@ and ranked list side by side throughout the native window's supported width rang
 From 560 through 720 logical pixels wide, use the compact two-column explorer;
 only browser previews below 560 pixels stack the panes. The narrow layout always
 compacts the result header; wider views do so at 560 logical pixels tall or less.
-At the configured 620 by 480 minimum, keep the coverage warning, map, and at least
+At the configured 620 by 480 minimum, keep the coverage warning action, map, and at least
 two ranked rows visible together without horizontal overflow. Validate both the
 configured minimum and default size when changing result spacing, column bounds,
 or breakpoints.
@@ -672,7 +675,7 @@ Treat unavailable entries as an incomplete-coverage exception, but keep expected
 filesystem-boundary counts in `Details` rather than presenting them as an
 error. Loading routine capability or accounting evidence into that popover is
 not an application status change and must not compete with the
-focused result heading, coverage notice, or folder-search status.
+focused result heading, coverage warning action, or folder-search status.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 
