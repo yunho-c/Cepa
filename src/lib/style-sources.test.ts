@@ -129,6 +129,25 @@ describe("production style sources", () => {
     const infoStart = component.indexOf("<Popover.Trigger");
     const infoButton = component.slice(infoStart, component.indexOf("</Popover.Trigger>", infoStart));
     const detailsStart = component.indexOf("<Popover.Content");
+    const details = component.slice(
+      detailsStart,
+      component.indexOf("</Popover.Content>", detailsStart),
+    );
+    const toolbarStart = component.indexOf('class="explorer-toolbar"');
+    const toolbar = component.slice(
+      toolbarStart,
+      component.indexOf("</div>", toolbarStart),
+    );
+    const metricStart = component.indexOf("async function setSizeMetric(");
+    const setSizeMetric = component.slice(
+      metricStart,
+      component.indexOf("async function retryNavigationAction(", metricStart),
+    );
+    const retryStart = component.indexOf("async function retryNavigationAction(");
+    const retryNavigation = component.slice(
+      retryStart,
+      component.indexOf("async function revealItem(", retryStart),
+    );
 
     expect(infoStart).toBeGreaterThan(-1);
     expect(infoButton).toContain('variant: "ghost"');
@@ -138,8 +157,20 @@ describe("production style sources", () => {
     expect(detailsStart).toBeGreaterThan(-1);
     expect(component).toContain("bind:open={scanDetailsOpen}");
     expect(component).toContain('align="end"');
+    expect(component).toContain("onOpenAutoFocus={focusSelectedMetricInDetails}");
     expect(component).toContain('class="scan-details-popover');
     expect(component).toContain("<Popover.Title>DETAILS</Popover.Title>");
+    expect(details).toContain("<dt>Size basis</dt>");
+    expect(details).toContain('class="metric-switch" role="group" aria-label="Size basis"');
+    expect(details).toContain("aria-disabled={isResultBusy}");
+    expect(toolbar).not.toContain("metric-switch");
+    expect(setSizeMetric).toContain("const succeeded = await loadDirectory(");
+    expect(setSizeMetric).toContain("if (succeeded) return;");
+    expect(setSizeMetric.indexOf("if (succeeded) return;")).toBeLessThan(
+      setSizeMetric.indexOf("scanDetailsOpen = false;"),
+    );
+    expect(setSizeMetric).toContain("navigationNotice?.focus();");
+    expect(retryNavigation).toContain("scanDetailsOpen = true;");
     expect(component).toContain("<dt>Files</dt><dd>{formatCount(result.fileCount)}</dd>");
     expect(component).toContain("<dt>Folders</dt><dd>{formatCount(result.directoryCount)}</dd>");
     expect(component).toContain("<dt>Scan time</dt><dd>{formatDuration(result.elapsedMs)}</dd>");
@@ -208,7 +239,7 @@ describe("production style sources", () => {
     expect(results).toContain("max-width: none");
     expect(results).not.toContain("max-width: 1240px");
     expect(explorerStart).toBeGreaterThan(-1);
-    expect(explorer).toContain("height: calc(100vh - 206px)");
+    expect(explorer).toContain("height: calc(100vh - 201px)");
     expect(explorer).toContain("min-height: 370px");
     expect(explorer).toContain(
       "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",

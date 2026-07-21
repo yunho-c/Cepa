@@ -1239,9 +1239,23 @@
     await loadDirectory(nodeId, sizeMetric, true);
   }
 
+  function focusSelectedMetricInDetails(event: Event) {
+    event.preventDefault();
+    requestAnimationFrame(() => {
+      (sizeMetric === "allocated"
+        ? allocatedMetricButton
+        : logicalMetricButton
+      )?.focus();
+    });
+  }
+
   async function setSizeMetric(metric: SizeMetric) {
-    if (!view || metric === sizeMetric) return;
-    await loadDirectory(view.nodeId, metric, false);
+    if (!view || metric === sizeMetric || isResultBusy) return;
+    const succeeded = await loadDirectory(view.nodeId, metric, false);
+    if (succeeded) return;
+    scanDetailsOpen = false;
+    await tick();
+    navigationNotice?.focus();
   }
 
   async function retryNavigationAction() {
@@ -1270,6 +1284,7 @@
       navigationRetryInFlight = false;
     }
     if (!succeeded || recovery.focusHeading) return;
+    scanDetailsOpen = true;
     await tick();
     (recovery.metric === "allocated"
       ? allocatedMetricButton
@@ -1711,12 +1726,34 @@
             <Popover.Content
               align="end"
               sideOffset={6}
+              onOpenAutoFocus={focusSelectedMetricInDetails}
               class="scan-details-popover w-80 max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
             >
               <Popover.Header class="scan-details-header">
                 <Popover.Title>DETAILS</Popover.Title>
               </Popover.Header>
               <dl class="scan-details-list">
+                <div class="scan-details-metric">
+                  <dt>Size basis</dt>
+                  <dd>
+                    <div class="metric-switch" role="group" aria-label="Size basis">
+                      <button
+                        type="button"
+                        bind:this={allocatedMetricButton}
+                        aria-pressed={sizeMetric === "allocated"}
+                        aria-disabled={isResultBusy}
+                        onclick={() => setSizeMetric("allocated")}
+                      >On disk</button>
+                      <button
+                        type="button"
+                        bind:this={logicalMetricButton}
+                        aria-pressed={sizeMetric === "logical"}
+                        aria-disabled={isResultBusy}
+                        onclick={() => setSizeMetric("logical")}
+                      >Logical</button>
+                    </div>
+                  </dd>
+                </div>
                 <div><dt>Files</dt><dd>{formatCount(result.fileCount)}</dd></div>
                 <div><dt>Folders</dt><dd>{formatCount(result.directoryCount)}</dd></div>
                 <div><dt>Scan time</dt><dd>{formatDuration(result.elapsedMs)}</dd></div>
@@ -1767,22 +1804,6 @@
             >{breadcrumb.name}</button>
           {/each}
         </nav>
-        <div class="metric-switch" role="group" aria-label="Size metric">
-          <button
-            type="button"
-            bind:this={allocatedMetricButton}
-            aria-pressed={sizeMetric === "allocated"}
-            aria-disabled={isResultBusy}
-            onclick={() => setSizeMetric("allocated")}
-          >On disk</button>
-          <button
-            type="button"
-            bind:this={logicalMetricButton}
-            aria-pressed={sizeMetric === "logical"}
-            aria-disabled={isResultBusy}
-            onclick={() => setSizeMetric("logical")}
-          >Logical</button>
-        </div>
       </div>
 
       {#if navigationError}

@@ -140,12 +140,18 @@ Development-only `?mock=root-preparing&roots=preview` holds the volume-validatio
 state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Do not restore the
 completed result's former logical-size, file-count, folder-count, and elapsed-time
-summary row. Logical size remains available through the metric view; file and
-folder counts plus scan time lead the Info action's collapsed `Details` popover.
-Backend, accounting, and intentional mount-boundary semantics follow there
-rather than appearing as status badges or a diagnostic footer. Asynchronous
-technical evidence in that popover must remain quiet: do
-not put live regions, status roles, or alert roles inside scan details. A completed scan with unavailable items shows one restrained,
+summary row. Logical size remains available through the advanced `Size basis`
+control at the top of the Info action's collapsed `Details` popover; file and
+folder counts plus scan time follow it. Keep `On disk` as the default and do not
+restore the metric control beside the breadcrumbs. While a metric change is
+pending, keep its metric button focused with guarded `aria-disabled` state.
+Success keeps Details open and retains focus on the selected metric; failure
+closes it and focuses the contextual result error. Backend, accounting, and
+intentional mount-boundary semantics follow there rather than appearing as
+status badges or a diagnostic footer. Asynchronous technical evidence in that
+popover must remain quiet: do
+not put live regions, status roles, or alert roles inside scan details. A
+completed scan with unavailable items shows one restrained,
 cause-neutral warning action beside Info because its totals may be low; do not
 mislabel all such items as permission failures. Its Tooltip opens on hover and
 keyboard focus, while the trigger's accessible name carries the full warning
@@ -371,9 +377,10 @@ or ancestry; the saving is material at million-entry scale.
 Completed items can be revealed in the platform file manager through a backend
 command that validates the retained scan and opaque node ID before reconstructing
 the path; do not replace that boundary with a frontend-supplied arbitrary path.
-Directory views can switch between allocated and logical size. The selected
-metric is applied in Rust before bounded list and chart selection, not merely to
-frontend labels, so sparse or compressed entries cannot be truncated incorrectly.
+Directory views can switch between allocated and logical size through the
+advanced `Size basis` control in Details. The selected metric is applied in Rust
+before bounded list and chart selection, not merely to frontend labels, so sparse
+or compressed entries cannot be truncated incorrectly.
 Completed directory views also support debounced, current-folder name search.
 Rust matches every direct child before retaining the metric-ranked top 500, so
 items below the ordinary list cutoff remain discoverable without expanding IPC
@@ -430,8 +437,9 @@ state in the newly opened folder.
 If navigation, metric switching, or Reveal fails, keep the raw cause in the
 collapsed `Error details`, preserve the current result, and retain only the
 scan-local opaque node/metric intent needed for Try again. A successful retry
-must restore focus to the opened view, selected metric, or original Reveal
-control rather than removing the focused recovery button without a successor.
+must restore focus to the opened view, the selected metric inside a reopened
+Details popover, or the original Reveal control rather than removing the focused
+recovery button without a successor.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native
 desktop and store assets. macOS normalizes ICNS output deterministically;

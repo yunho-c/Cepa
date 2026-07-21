@@ -255,6 +255,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["horizontalOverflow"].as_bool() == Some(false)
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
+        && report["metricDetailsStayedOpen"].as_bool() == Some(true)
         && report["navigationChangedFolder"].as_bool() == Some(true)
         && report["navigationHeadingFocusVisible"].as_bool() == Some(true)
         && report["shortcutNavigationHeadingFocusVisible"].as_bool() == Some(true)
@@ -536,12 +537,6 @@ void (async () => {{
       scanDetailsClosedInitially
       && scanDetails.querySelector('[aria-live], [role="status"], [role="alert"]') === null;
     const initialBackendLabel = backendLabel();
-    scanDetailsTrigger.click();
-    await waitFor(
-      () => document.querySelector('.scan-details-popover') === null,
-      'closed scan details popover',
-    );
-
     const logicalButton = [...document.querySelectorAll('.metric-switch button')]
       .find((button) => button.textContent?.trim() === 'Logical');
     const logicalMetricSelected = () => [...document.querySelectorAll('.metric-switch button')]
@@ -550,12 +545,23 @@ void (async () => {{
     const metricStartedAt = performance.now();
     phase('switching-metric');
     logicalButton.click();
-    await waitFor(() => logicalMetricSelected(), 'logical metric', 5000);
-    await painted();
+    await waitFor(
+      () => logicalMetricSelected(),
+      'logical metric',
+      5000,
+    );
+    const metricDetailsStayedOpen =
+      document.querySelector('.scan-details-popover') !== null;
     const metricSwitchMs = performance.now() - metricStartedAt;
     const logicalChartSegments = document.querySelectorAll('[data-chart-node-id]').length;
     const logicalChartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const logicalMetricWasSelected = logicalMetricSelected();
+    scanDetailsTrigger.click();
+    await waitFor(
+      () => document.querySelector('.scan-details-popover') === null,
+      'closed scan details popover after metric verification',
+    );
+    await painted();
 
     const chartNodes = [...document.querySelectorAll('[data-chart-node-id]')];
     if (chartNodes.length < 2) throw new Error('The logical chart needs two keyboard targets.');
@@ -771,6 +777,7 @@ void (async () => {{
       revealArrowPreserved,
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
+      metricDetailsStayedOpen,
       navigationChangedFolder: navigatedHeading !== rootHeading,
       navigationHeadingFocusVisible,
       shortcutNavigationHeadingFocusVisible,
