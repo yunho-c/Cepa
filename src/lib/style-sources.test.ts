@@ -256,6 +256,22 @@ describe("production style sources", () => {
     );
   });
 
+  test("coordinates list-driven selection with sunburst emphasis", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+
+    expect(component).toContain(
+      "data-selected={activeEntry?.id === segment.item.id}",
+    );
+    expect(component).toContain("data-selected={activeEntry?.id === item.id}");
+    expect(stylesheet).toContain(
+      '.sunburst:has(path[data-selected="true"]) path:not([data-selected="true"]) { opacity: 0.36; }',
+    );
+    expect(stylesheet).not.toContain(".sunburst:has(g:hover");
+  });
+
   test("scopes inspector announcements to one atomic status sentence", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const statusStart = component.indexOf('class="sr-only inspector-status"');

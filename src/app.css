@@ -658,8 +658,7 @@ body {
 .sunburst path[data-color="5"] { fill: oklch(0.78 0.11 68); }
 .sunburst path[data-color="6"] { fill: oklch(0.55 0.07 133); }
 .sunburst path[data-color="7"] { fill: oklch(0.32 0.025 62); }
-.sunburst:has(g:hover path[data-selected="true"]) path:not([data-selected="true"]),
-.sunburst:has(g:focus path) path:not([data-selected="true"]) { opacity: 0.36; }
+.sunburst:has(path[data-selected="true"]) path:not([data-selected="true"]) { opacity: 0.36; }
 .sunburst g:focus path,
 .sunburst path[data-selected="true"] { filter: brightness(1.035) saturate(1.08); transform: scale(1.01); }
 .sunburst g:focus path { stroke: var(--foreground); stroke-width: 2; }
