@@ -264,7 +264,8 @@ body {
 .landing-with-storage {
   padding-top: 30px;
   padding-bottom: 40px;
-  place-items: start center;
+  align-items: safe center;
+  justify-items: center;
 }
 .landing-with-storage .landing-copy { width: min(100%, 650px); }
 .landing-with-storage .app-symbol {

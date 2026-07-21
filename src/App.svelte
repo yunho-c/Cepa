@@ -1473,8 +1473,7 @@
           Find what’s taking up space.
         </h1>
         <p class="lede">
-          Choose a disk or folder to see its largest files and subfolders. Everything
-          stays on this device.
+          Choose a disk or folder to see its largest files and subfolders.
         </p>
 
         <ScanRootPicker

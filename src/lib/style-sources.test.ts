@@ -19,6 +19,26 @@ describe("production style sources", () => {
     expect(stylesheet).not.toContain(".inspector-heading > div {");
   });
 
+  test("centers the storage landing content without repeating the privacy line", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+    const storageLandingStart = stylesheet.indexOf(".landing-with-storage {");
+    const storageLanding = stylesheet.slice(
+      storageLandingStart,
+      stylesheet.indexOf("}", storageLandingStart),
+    );
+
+    expect(component).toContain(
+      "Choose a disk or folder to see its largest files and subfolders.",
+    );
+    expect(component).not.toContain("Everything stays on this device.");
+    expect(storageLanding).toContain("align-items: safe center;");
+    expect(storageLanding).toContain("justify-items: center;");
+    expect(storageLanding).not.toContain("place-items: start center;");
+  });
+
   test("keeps pending explorer actions focused with guarded aria-disabled state", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const storageStart = component.indexOf('class="storage-item"');
