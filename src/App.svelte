@@ -1717,6 +1717,9 @@
                 <Popover.Title>DETAILS</Popover.Title>
               </Popover.Header>
               <dl class="scan-details-list">
+                <div><dt>Files</dt><dd>{formatCount(result.fileCount)}</dd></div>
+                <div><dt>Folders</dt><dd>{formatCount(result.directoryCount)}</dd></div>
+                <div><dt>Scan time</dt><dd>{formatDuration(result.elapsedMs)}</dd></div>
                 <div><dt>Scanner</dt><dd>{formatBackend(result.backend)}</dd></div>
                 <div><dt>Space on disk</dt><dd>{result.allocatedSizeIsEstimate ? "Estimated" : "Exact"}</dd></div>
                 <div><dt>Hard links</dt><dd>{result.hardLinkDeduplicationSupported ? "Counted once" : "Not deduplicated"}</dd></div>
@@ -1751,13 +1754,6 @@
           <strong>{formatBytes(result.allocatedBytes)}</strong>
         </div>
       </section>
-
-      <p class="result-summary" aria-label="Scan summary">
-        <span>{formatBytes(result.logicalBytes)} logical</span>
-        <span>{formatCount(result.fileCount)} files</span>
-        <span>{formatCount(result.directoryCount)} folders</span>
-        <span>{formatDuration(result.elapsedMs)}</span>
-      </p>
 
       <div class="explorer-toolbar">
         <nav class="breadcrumbs" aria-label="Current scan path">

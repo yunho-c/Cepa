@@ -138,10 +138,13 @@ activation. When any entry path replaces the landing or result view with an
 active scan, move focus to the scan heading so the next Tab reaches Stop.
 Development-only `?mock=root-preparing&roots=preview` holds the volume-validation
 state; keep it out of production.
-The UI keeps the storage map and ranked items primary. Backend, accounting, and
-intentional mount-boundary semantics remain available in the Info action's
-`Details` popover rather than appearing as status badges or a diagnostic
-footer. Asynchronous technical evidence in that popover must remain quiet: do
+The UI keeps the storage map and ranked items primary. Do not restore the
+completed result's former logical-size, file-count, folder-count, and elapsed-time
+summary row. Logical size remains available through the metric view; file and
+folder counts plus scan time lead the Info action's collapsed `Details` popover.
+Backend, accounting, and intentional mount-boundary semantics follow there
+rather than appearing as status badges or a diagnostic footer. Asynchronous
+technical evidence in that popover must remain quiet: do
 not put live regions, status roles, or alert roles inside scan details. A completed scan with unavailable items shows one restrained,
 cause-neutral warning action beside Info because its totals may be low; do not
 mislabel all such items as permission failures. Its Tooltip opens on hover and

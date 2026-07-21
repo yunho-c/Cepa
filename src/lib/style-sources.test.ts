@@ -140,6 +140,10 @@ describe("production style sources", () => {
     expect(component).toContain('align="end"');
     expect(component).toContain('class="scan-details-popover');
     expect(component).toContain("<Popover.Title>DETAILS</Popover.Title>");
+    expect(component).toContain("<dt>Files</dt><dd>{formatCount(result.fileCount)}</dd>");
+    expect(component).toContain("<dt>Folders</dt><dd>{formatCount(result.directoryCount)}</dd>");
+    expect(component).toContain("<dt>Scan time</dt><dd>{formatDuration(result.elapsedMs)}</dd>");
+    expect(component).not.toContain('class="result-summary"');
     expect(component).not.toContain("Technical information about this completed scan.");
     expect(component).not.toContain('class="scan-details"');
     expect(component).not.toContain("<details id=\"scan-details\"");
@@ -204,7 +208,7 @@ describe("production style sources", () => {
     expect(results).toContain("max-width: none");
     expect(results).not.toContain("max-width: 1240px");
     expect(explorerStart).toBeGreaterThan(-1);
-    expect(explorer).toContain("height: calc(100vh - 250px)");
+    expect(explorer).toContain("height: calc(100vh - 206px)");
     expect(explorer).toContain("min-height: 370px");
     expect(explorer).toContain(
       "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
@@ -218,6 +222,7 @@ describe("production style sources", () => {
     expect(chartPane).toContain("background: var(--quiet-surface)");
     expect(directoryPane).toContain("background: var(--card)");
     expect(stylesheet).not.toContain(".explorer { border-radius:");
+    expect(stylesheet).not.toContain(".result-summary");
   });
 
   test("moves desktop Up focus to its stable pending control", async () => {
