@@ -1665,6 +1665,7 @@
       </section>
     </main>
   {:else if result && view}
+    {@const completedResult = result}
     <main
       class="results-view"
       inert={dropOverlayVisible}
@@ -1783,8 +1784,25 @@
           </Popover.Root>
         </div>
         <div class="result-title">
-          <h1 tabindex="-1" bind:this={resultHeading}>{result.displayName}</h1>
-          <p class="result-path" title={result.root}>{result.root}</p>
+          <Tooltip.Root ignoreNonKeyboardFocus={true}>
+            <Tooltip.Trigger tabindex={-1}>
+              {#snippet child({ props: { type: _type, ...triggerProps } })}
+                <span {...triggerProps} class="result-title-trigger">
+                  <h1
+                    tabindex="-1"
+                    bind:this={resultHeading}
+                    aria-label={`${completedResult.displayName}, ${completedResult.root}`}
+                  >{completedResult.displayName}</h1>
+                </span>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              class="result-path-tooltip"
+            >{completedResult.root}</Tooltip.Content>
+          </Tooltip.Root>
         </div>
         <div class="result-total">
           <span>Space on disk{result.allocatedSizeIsEstimate ? " (estimated)" : ""}</span>

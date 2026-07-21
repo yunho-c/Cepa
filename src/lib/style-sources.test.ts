@@ -239,7 +239,7 @@ describe("production style sources", () => {
     expect(results).toContain("max-width: none");
     expect(results).not.toContain("max-width: 1240px");
     expect(explorerStart).toBeGreaterThan(-1);
-    expect(explorer).toContain("height: calc(100vh - 201px)");
+    expect(explorer).toContain("height: calc(100vh - 192px)");
     expect(explorer).toContain("min-height: 370px");
     expect(explorer).toContain(
       "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
@@ -290,6 +290,33 @@ describe("production style sources", () => {
     expect(component).toContain(
       'aria-label={`${segment.item.name}, ${formatBytes(metricBytes(segment.item, sizeMetric))}`}',
     );
+  });
+
+  test("moves the completed root path into the result title tooltip", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+    const titleStart = component.indexOf('class="result-title"');
+    const title = component.slice(
+      titleStart,
+      component.indexOf('class="result-total"', titleStart),
+    );
+
+    expect(titleStart).toBeGreaterThan(-1);
+    expect(title).toContain("<Tooltip.Root ignoreNonKeyboardFocus={true}>");
+    expect(title).toContain('class="result-title-trigger"');
+    expect(title).toContain(
+      'aria-label={`${completedResult.displayName}, ${completedResult.root}`}',
+    );
+    expect(title).toContain('class="result-path-tooltip"');
+    expect(title).toContain(">{completedResult.root}</Tooltip.Content>");
+    expect(title).not.toContain('class="result-path"');
+    expect(stylesheet).toContain(
+      '.result-path-tooltip[data-slot="tooltip-content"]',
+    );
+    expect(stylesheet).toContain("overflow-wrap: anywhere");
+    expect(stylesheet).not.toContain(".result-path {");
   });
 
   test("coordinates list-driven selection with sunburst emphasis", async () => {
@@ -394,8 +421,7 @@ describe("production style sources", () => {
 
     expect(stylesheet).toContain(".scan-progress { width: 100%; min-width: 0; }");
     expect(stylesheet).toContain(
-      `.scan-path,
-.result-path { color: var(--muted-foreground); font: 11px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`,
+      `.scan-path { color: var(--muted-foreground); font: 11px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`,
     );
   });
 });

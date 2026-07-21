@@ -533,6 +533,7 @@ void (async () => {{
       () => document.querySelector('.compression-detail'),
       'filesystem compression details',
     );
+    await painted();
     const scanDetailsQuiet =
       scanDetailsClosedInitially
       && scanDetails.querySelector('[aria-live], [role="status"], [role="alert"]') === null;
@@ -543,6 +544,8 @@ void (async () => {{
       .find((button) => button.textContent?.trim() === 'Logical')
       ?.getAttribute('aria-pressed') === 'true';
     const metricStartedAt = performance.now();
+    logicalButton.focus();
+    await painted();
     phase('switching-metric');
     logicalButton.click();
     await waitFor(

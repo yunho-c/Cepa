@@ -140,7 +140,12 @@ Development-only `?mock=root-preparing&roots=preview` holds the volume-validatio
 state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Do not restore the
 completed result's former logical-size, file-count, folder-count, and elapsed-time
-summary row. Logical size remains available through the advanced `Size basis`
+summary row. Do not show the authoritative scan root as a persistent subtitle on
+the completed analysis screen. Hovering the visible result name reveals that
+path in a restrained Tooltip, while the result heading's accessible name retains
+both values. Keep the heading as the programmatic completion focus target without
+opening the Tooltip merely because focus was moved there. Logical size remains
+available through the advanced `Size basis`
 control at the top of the Info action's collapsed `Details` popover; file and
 folder counts plus scan time follow it. Keep `On disk` as the default and do not
 restore the metric control beside the breadcrumbs. While a metric change is
