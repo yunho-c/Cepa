@@ -16,7 +16,6 @@
     Info,
     Link2,
     Search,
-    ScanSearch,
     TriangleAlert,
     X,
   } from "@lucide/svelte";
@@ -1641,26 +1640,6 @@
             </div>
           {/if}
         </dl>
-
-        {#if displayProgress.largestItems.length > 0}
-          <section class="partial-results" aria-label="Largest files observed so far">
-            <h2>Largest so far</h2>
-            <ol>
-              {#each displayProgress.largestItems.slice(0, 4) as item (item.id)}
-                <li>
-                  <File aria-hidden="true" />
-                  <strong title={item.name}>{item.name}</strong>
-                  <span>{formatBytes(item.allocatedBytes)}</span>
-                </li>
-              {/each}
-            </ol>
-          </section>
-        {:else}
-          <div class="scan-empty-progress">
-            <ScanSearch aria-hidden="true" />
-            <span>Looking for files…</span>
-          </div>
-        {/if}
       </section>
     </main>
   {:else if result && view}

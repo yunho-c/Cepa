@@ -510,7 +510,7 @@ body {
   margin: 0 auto;
   padding: 58px 32px 80px;
   display: grid;
-  align-items: start;
+  align-items: safe center;
 }
 
 .scan-progress { width: 100%; min-width: 0; }
@@ -549,16 +549,6 @@ body {
 .scan-facts dt { color: var(--muted-foreground); font-size: 11px; }
 .scan-facts dd { order: -1; margin: 0; font-size: 16px; font-weight: 620; font-variant-numeric: tabular-nums; }
 .scan-fact-exception dd { color: var(--coverage-foreground); }
-
-.partial-results { margin-top: 28px; }
-.partial-results h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
-.partial-results ol { margin: 0; padding: 0; list-style: none; }
-.partial-results li { min-height: 42px; padding: 0 2px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.partial-results li svg { width: 14px; color: var(--muted-foreground); }
-.partial-results li strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 520; }
-.partial-results li span { color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
-.scan-empty-progress { min-height: 160px; display: grid; place-items: center; align-content: center; gap: 10px; color: var(--muted-foreground); font-size: 12px; }
-.scan-empty-progress svg { width: 22px; }
 
 .results-view { width: 100%; max-width: none; margin: 0; padding: 18px clamp(24px, 4vw, 52px) 52px; }
 .results-heading {
@@ -944,8 +934,6 @@ body {
   .scan-path { margin-top: 9px; }
   .scan-line { margin: 18px 0 12px; }
   .scan-facts { padding-block: 10px; }
-  .partial-results { margin-top: 16px; }
-  .partial-results h2 { margin-bottom: 4px; }
 
   .landing-with-storage { padding-top: 18px; padding-bottom: 24px; }
   .landing-with-storage .app-symbol { display: none; }

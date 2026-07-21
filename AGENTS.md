@@ -46,16 +46,17 @@ Each falls back to `jwalk` when its native API is unavailable or unsuitable;
 Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
 The active-scan view is deliberately unframed: space found and the current path
-lead, followed by a compact facts row and the largest files observed so far.
+lead, followed by a compact facts row. Do not restore a live largest-files list
+or its empty placeholder; the scan state should stay focused on overall progress.
+Center ordinary scan progress vertically with safe alignment so an oversized
+contextual error can still fall back toward the top instead of clipping.
 Keep the scan-progress grid item shrinkable so a long no-wrap current path
 ellipsizes inside the viewport instead of widening the document.
 Keep Stop immediately available and unavailable-item counts visible, but do not
 restore a dashboard card, metric-tile grid, repeated privacy slogan, or backend
-vocabulary to this state. During an ordinary scan at the 620 by 480 minimum,
-keep the first observed file row visible below the facts instead of ending the
-viewport on an orphaned `Largest so far` heading. Preserve the more spacious
-rhythm above 560 logical pixels tall; contextual failure callouts take priority
-and may make the remaining progress content scroll. At scan start, focus the
+vocabulary to this state. Preserve the more spacious rhythm above 560 logical
+pixels tall; contextual failure callouts take priority and may make the remaining
+progress content scroll. At scan start, focus the
 target heading and associate it with the visible Scanning status. Keep the polite
 atomic progress region empty while the frontend still has only its zero-value
 placeholder; `Scanned 0 entries and 0 B` is not a useful transition announcement.

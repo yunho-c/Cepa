@@ -436,6 +436,23 @@ describe("production style sources", () => {
     expect(announcement).not.toContain("{progressPresentation.announcement}");
   });
 
+  test("keeps the active scan focused on progress instead of partial results", async () => {
+    const [component, stylesheet] = await Promise.all([
+      Bun.file(new URL("../App.svelte", import.meta.url)).text(),
+      Bun.file(new URL("../app.css", import.meta.url)).text(),
+    ]);
+
+    expect(component).not.toContain("Largest so far");
+    expect(component).not.toContain("Largest files observed so far");
+    expect(component).not.toContain("Looking for files…");
+    expect(component).not.toContain("ScanSearch");
+    expect(stylesheet).not.toContain(".partial-results");
+    expect(stylesheet).not.toContain(".scan-empty-progress");
+    expect(stylesheet).toMatch(
+      /\.scan-view \{[^}]*display: grid;\s+align-items: safe center;/,
+    );
+  });
+
   test("keeps long scan paths from widening the active scan grid", async () => {
     const stylesheet = await Bun.file(new URL("../app.css", import.meta.url)).text();
 
