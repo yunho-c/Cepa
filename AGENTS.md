@@ -303,6 +303,15 @@ may use the pane as an internal scroll container only when their disclosed
 details exceed it; keep Try again, Clear search, and the collapsed Search
 details affordance visible in the ordinary compact state. Browser previews
 below 560 pixels may retain taller stacked-state minima.
+The desktop shell uses a 40-pixel integrated title bar. macOS retains native
+traffic lights through Tauri's overlay title bar; Windows and Linux remove
+decorations before startup placement and use accessible webview window controls.
+Keep the drag region separate from buttons, retain double-click maximize, and
+derive view heights from the remaining content height so controls never overlap
+the application. Window controls are inert during the folder-drop overlay.
+Development-only `?titlebar=macos`, `windows`, and `linux` previews are visual
+fixtures, not native window-management proof. Keep platform overrides out of
+production and preserve the native smoke's title-bar clearance assertions.
 The desktop shell restores stable window geometry with the official Tauri
 window-state plugin. Track and restore only size, on-screen position, and
 maximized state; do not add visibility (which can relaunch the app hidden),

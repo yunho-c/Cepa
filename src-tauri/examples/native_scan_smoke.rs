@@ -235,6 +235,8 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["initialRows"]
             .as_u64()
             .is_some_and(|count| count > 0)
+        && report["windowChromePresent"].as_bool() == Some(true)
+        && report["titlebarContentClear"].as_bool() == Some(true)
         && report["inspectorLiveRegionScoped"].as_bool() == Some(true)
         && report["chartSegments"]
             .as_u64()
@@ -492,6 +494,13 @@ void (async () => {{
     const scanToPaintMs = performance.now() - scanStartedAt;
     const rootHeading = document.querySelector('.section-heading h2')?.textContent?.trim() || '';
     const initialRows = document.querySelectorAll('.storage-row').length;
+    const titlebar = document.querySelector('.window-titlebar');
+    const windowChromePresent = titlebar !== null
+      && titlebar.querySelector('[data-tauri-drag-region]') !== null
+      && titlebar.getBoundingClientRect().height === 40;
+    const titlebarContentClear = windowChromePresent
+      && document.querySelector('.results-view').getBoundingClientRect().top
+        >= titlebar.getBoundingClientRect().bottom;
     const inspectorStatus = document.querySelector('.inspector-status');
     const fileDetailsButton = [...document.querySelectorAll('.storage-item')]
       .find((button) => button.getAttribute('aria-label')?.endsWith(', show details'));
@@ -767,6 +776,8 @@ void (async () => {{
       navigationMs,
       searchMs,
       initialRows,
+      windowChromePresent,
+      titlebarContentClear,
       inspectorLiveRegionScoped,
       chartSegments,
       chartPreviewHidden,
@@ -863,6 +874,8 @@ mod tests {
             "processToReportMs": 500.0,
             "injectionAttempts": 1,
             "initialRows": 4,
+            "windowChromePresent": true,
+            "titlebarContentClear": true,
             "inspectorLiveRegionScoped": true,
             "chartSegments": 8,
             "chartPreviewHidden": true,
@@ -877,6 +890,7 @@ mod tests {
             "horizontalOverflow": false,
             "pageErrors": [],
             "logicalMetricSelected": true,
+            "metricDetailsStayedOpen": true,
             "navigationChangedFolder": true,
             "navigationHeadingFocusVisible": true,
             "shortcutNavigationHeadingFocusVisible": true,
@@ -919,6 +933,14 @@ mod tests {
         )
         .expect("parse complete native flow fixture");
         assert!(validate_report(&complete, 2));
+
+        let mut missing_titlebar = complete.clone();
+        missing_titlebar["windowChromePresent"] = false.into();
+        assert!(!validate_report(&missing_titlebar, 2));
+
+        let mut overlapping_titlebar = complete.clone();
+        overlapping_titlebar["titlebarContentClear"] = false.into();
+        assert!(!validate_report(&overlapping_titlebar, 2));
 
         let mut broken_keyboard = complete.clone();
         broken_keyboard["revealArrowPreserved"] = false.into();

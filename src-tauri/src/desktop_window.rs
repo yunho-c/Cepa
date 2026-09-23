@@ -41,6 +41,7 @@ pub fn initialize<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error
             "the main window was not created",
         )
     })?;
+    configure_chrome(&window)?;
     let state_path = app.path().app_config_dir()?.join(app.handle().filename());
     let restore_saved_state = placement::has_saved_state(&state_path);
     let startup = app.state::<StartupWindowState>().inner().clone();
@@ -64,6 +65,13 @@ pub fn initialize<R: Runtime>(app: &mut App<R>) -> Result<(), Box<dyn std::error
         let _ = window.set_focus();
     });
     Ok(())
+}
+
+/// macOS keeps its native traffic lights in the configured overlay title bar.
+/// Other desktops use the webview controls, installed before the hidden window
+/// is placed or shown. Decorations are deliberately not persisted window state.
+pub fn configure_chrome<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
+    window.set_decorations(cfg!(target_os = "macos"))
 }
 
 pub fn handle_page_load<R: Runtime>(webview: &Webview<R>, payload: &PageLoadPayload<'_>) {

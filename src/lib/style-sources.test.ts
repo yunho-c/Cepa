@@ -259,7 +259,8 @@ describe("production style sources", () => {
     expect(results).toContain("max-width: none");
     expect(results).not.toContain("max-width: 1240px");
     expect(explorerStart).toBeGreaterThan(-1);
-    expect(explorer).toContain("height: calc(100vh - 192px)");
+    expect(stylesheet).toContain("--content-height: calc(100vh - var(--titlebar-height))");
+    expect(explorer).toContain("height: calc(var(--content-height) - 192px)");
     expect(explorer).toContain("min-height: 370px");
     expect(explorer).toContain(
       "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",

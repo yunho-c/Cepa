@@ -2,6 +2,9 @@ import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
 import { installSystemAppearance } from "$lib/appearance";
+import { windowPlatform } from "$lib/window-chrome";
+
+if (windowPlatform) document.documentElement.dataset.windowChrome = windowPlatform;
 
 const developmentParameters = import.meta.env.DEV
   ? new URLSearchParams(window.location.search)
