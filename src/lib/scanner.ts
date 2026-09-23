@@ -206,6 +206,7 @@ export interface ScanResult {
   directoryCount: number;
   skippedEntries: number;
   skippedFilesystems: number;
+  skippedCloudEntries: number;
   duplicateHardLinks: number;
   traversalUs: number;
   aggregationUs: number;

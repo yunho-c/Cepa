@@ -458,6 +458,7 @@ dependencies = [
  "libc",
  "lznt1",
  "miniz_oxide",
+ "rayon",
  "regex",
  "rustix",
  "serde",

@@ -521,6 +521,7 @@ mod tests {
             directory_count: 1,
             skipped_entries: 0,
             skipped_filesystems: 0,
+            skipped_cloud_entries: 0,
             duplicate_hard_links: 0,
             traversal_us: 1,
             aggregation_us: 1,
