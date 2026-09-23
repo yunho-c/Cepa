@@ -101,6 +101,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   configured 620 by 480 minimum
 - System-synchronized light and dark appearance, including live operating-system
   changes and theme-aware chart, warning, and native-window surfaces
+- An integrated, draggable title bar with native macOS traffic lights and compact
+  Windows/Linux minimize, maximize/restore, and close controls
 - Cross-platform restoration of the last stable window size, on-screen position,
   and maximized state without restoring hidden or fullscreen state
 - Native application menus with state-aware Open Folder, Scan Again, Search,
@@ -323,11 +325,19 @@ http://localhost:1420/?roots=preview
 http://localhost:1420/?roots=loading
 http://localhost:1420/?roots=error
 http://localhost:1420/?appearance=dark&roots=preview
+http://localhost:1420/?titlebar=macos&roots=preview
+http://localhost:1420/?titlebar=windows&mock=complete
+http://localhost:1420/?titlebar=linux&appearance=dark
 ```
 
 The mock workflows, drop affordance, and storage preview are removed from
 production builds. Combine `?mock=complete&roots=preview` to exercise a volume
 selection through the complete mocked scan.
+The development-only `titlebar` previews reserve the same 40-pixel window-control
+area as the desktop app. macOS preview dots are decorative; Windows/Linux preview
+controls only simulate the maximize/restore icon and never operate the browser
+window. Native builds always use the host platform. Validate native dragging,
+resizing, and window actions separately from these visual previews.
 The `loading` storage preview stays pending. The `error` preview keeps Choose
 folder available and makes Try again transition through the loading status to
 the ready fixture, including the production retry focus handoff. `ready` is an

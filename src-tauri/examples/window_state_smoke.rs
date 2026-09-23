@@ -67,6 +67,7 @@ fn main() {
                         "the main window was not created",
                     )
                 })?;
+                desktop_window::configure_chrome(&window)?;
                 window.navigate(tauri::Url::parse(SMOKE_PAGE)?)?;
                 let path = app.path().app_config_dir()?.join(STATE_FILENAME);
                 *state_path.lock().expect("lock state path") = Some(path.clone());

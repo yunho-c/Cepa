@@ -25,6 +25,7 @@
   import * as Tooltip from "$lib/components/ui/tooltip";
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
+  import WindowTitlebar from "$lib/components/window-titlebar.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
@@ -1430,6 +1431,7 @@
 </svelte:head>
 
 <Tooltip.Provider delayDuration={150}>
+<WindowTitlebar inert={dropOverlayVisible} />
 <div class="app-shell">
   {#if dropOverlayVisible}
     <div
