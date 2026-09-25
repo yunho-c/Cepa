@@ -382,6 +382,10 @@ inside the explorer component and update only its numeric CSS property through
 CSSOM; do not inject a runtime stylesheet or weaken the packaged CSP.
 On ordinary desktop layouts, let the radial map grow with the chart pane up to
 the available window-height allowance; do not restore its former 440-pixel cap.
+Fit its square to the chart pane's actual content width and height, with 32-pixel
+padding (16 in the compact two-column layout). Do not restore viewport-height
+deductions or a fixed compact chart cap. Keep the SVG bounds close to the outer
+ring with room for focus strokes, and keep Up clear of the segments.
 The narrow layout always compacts the result header; wider views do so at 560
 logical pixels tall or less.
 At the configured 620 by 480 minimum, keep the coverage warning action, map, and at least

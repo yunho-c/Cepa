@@ -1,0 +1,44 @@
+Circle sizing validation, 2026-09-25
+
+Follow-up padding adjustment:
+  Increased ordinary padding to 32px and compact padding to 16px.
+  Browser-verified square sizes: 256px at 880 x 620, 179.3125px at 620 x 480.
+  Both fit the pane, show at least two complete list rows, and have no horizontal
+  overflow. Screenshots inspected. Svelte check: 0 errors, 0 warnings.
+  The initial measurements and broader check results below precede this increase.
+
+The map square now fits the chart pane's content box using size-container units.
+Pane padding is 24px, or 12px in the compact two-column layout. The SVG viewBox
+leaves four coordinate units outside the maximum three-ring radius for focus.
+
+Chromium browser checks, development fixtures with macOS titlebar preview:
+  viewport     map square (CSS px)
+  880 x 620    272
+  620 x 480    187.3125
+  720 x 480    217.546875
+  1440 x 900   412.796875
+  1200 x 480   314
+  500 x 700    341 (stacked preview, including the pane's bottom border)
+All fit the content width/height, stay square, have no horizontal document
+overflow, and retain one chart Tab stop. Light/dark screenshots inspected.
+Divider End grows the square from 272 to 463 at 880 x 620; Enter restores 272.
+Chart keyboard activation navigates to a folder. Up remains outside the full
+outer-circle envelope at the minimum, default, wide/short, and wide/tall sizes.
+With a navigation error at 1200 x 480, the square shrinks to 223.59375 in the
+271.6015625px-high pane, matching its actual height minus 48px padding.
+Development runtime emitted Svelte derived_inert warnings during navigation.
+
+just check:
+  Svelte diagnostics: 0 errors, 0 warnings; frontend tests: 92 passed.
+  Rust formatting, check, and Clippy passed.
+  Rust library tests: 120 passed, 2 ignored, 1 failed:
+    compression::tests::reads_uncompressed_and_compressed_decmpfs_file_state
+    Expected Compressed after ditto --hfsCompression; observed NotCompressed.
+  No Rust code changed by this task.
+
+just native-scan-smoke, disposable nested-file fixture:
+  Frontend production build and native release build passed.
+  First run timed out at searching; retry without browser interaction timed
+  out at searching-no-match. Both reached those phases after chart keyboard,
+  divider, metric, and navigation exercises, but neither produced a final
+  passing report. Native end-to-end validation is therefore incomplete.

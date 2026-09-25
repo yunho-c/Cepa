@@ -695,9 +695,10 @@ body {
 .explorer[data-resizing="true"] > .directory-pane { pointer-events: none; }
 :root:has(.explorer[data-resizing="true"]) * { cursor: col-resize !important; user-select: none !important; }
 
-.chart-pane { position: relative; min-width: 0; min-height: 0; padding: 28px 26px 22px; display: flex; flex-direction: column; background: var(--quiet-surface); }
+.chart-pane { container-type: size; position: relative; min-width: 0; min-height: 0; padding: 32px; display: flex; flex-direction: column; background: var(--quiet-surface); }
 .chart-back { position: absolute; top: 16px; left: 16px; z-index: 2; }
-.sunburst-wrap { container-type: inline-size; position: relative; width: min(100%, max(180px, calc(var(--content-height) - 320px))); aspect-ratio: 1; margin: auto; display: grid; place-items: center; }
+/* Fit the pane's actual content box, including divider and recovery-layout changes. */
+.sunburst-wrap { container-type: inline-size; position: relative; flex: none; width: min(100cqw, 100cqh); aspect-ratio: 1; margin: auto; display: grid; place-items: center; }
 .sunburst { width: 100%; height: 100%; overflow: visible; transition: opacity 120ms ease; }
 .sunburst[aria-busy="true"] { opacity: 0.45; }
 .sunburst g { outline: none; cursor: default; }
@@ -718,7 +719,7 @@ body {
 .sunburst path[data-emphasis="dimmed"] { opacity: 0.24; }
 .sunburst path[data-selected="true"] { filter: brightness(1.035); }
 .sunburst g:focus-visible path { stroke: var(--foreground); stroke-width: 2; }
-.chart-center { position: absolute; width: 42%; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+.chart-center { position: absolute; width: 47%; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
 .chart-center strong { max-width: 94%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(16px, 9cqw, 42px); line-height: 1.35; font-weight: 450; letter-spacing: -0.055em; font-variant-numeric: tabular-nums; }
 .chart-center-unit { color: var(--muted-foreground); font-size: 0.45em; letter-spacing: 0; }
 .chart-center em { max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: clamp(8px, 2.5cqw, 11px); font-style: normal; }
@@ -830,7 +831,6 @@ body {
 
 @media (max-width: 1000px) {
   .results-view { --result-gutter: 24px; padding-top: 14px; }
-  .chart-pane { padding: 22px 18px 18px; }
   .directory-pane { padding: 16px 17px 14px; }
 }
 
@@ -848,7 +848,6 @@ body {
   .explorer { flex: none; grid-template-columns: 1fr; }
   .explorer-divider { display: none; }
   .chart-pane { min-height: 420px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .sunburst-wrap { width: min(100%, 390px); }
   .item-list { max-height: 440px; flex: none; }
   .empty-result { min-height: 300px; }
   .search-message { min-height: 240px; }
@@ -866,7 +865,7 @@ body {
   .scan-total { margin-top: 40px; }
   .scan-facts div { min-width: 0; flex: 1; padding-inline: 14px; }
   .results-view { --result-gutter: 16px; padding-top: 18px; }
-  .chart-pane { min-height: 390px; padding: 22px 16px 18px; }
+  .chart-pane { min-height: 390px; }
   .directory-pane { padding: 18px 14px 14px; }
   .section-heading { align-items: center; }
   .section-actions > .directory-count {
@@ -908,10 +907,9 @@ body {
   }
   .chart-pane {
     min-height: 0;
-    padding: 16px 10px 12px;
+    padding: 16px;
     border-bottom: 0;
   }
-  .sunburst-wrap { width: min(100%, 170px); }
   .directory-pane { padding: 12px 10px 10px; }
   .section-heading { min-height: 38px; padding-bottom: 8px; }
   .section-heading h2 { font-size: 15px; }
