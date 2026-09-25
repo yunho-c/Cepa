@@ -180,6 +180,7 @@ export interface DirectoryView {
   logicalBytes: number;
   allocatedBytes: number;
   totalItems: number;
+  suppressedItems: number;
   itemsTruncated: boolean;
   breadcrumbs: Breadcrumb[];
   items: ScanItem[];
