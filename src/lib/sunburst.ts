@@ -1,8 +1,8 @@
 import { metricBytes, type ChartItem, type SizeMetric } from "$lib/scanner";
 
 const CENTER = 170;
-const INNER_RADIUS = 47;
-const RING_WIDTH = 37;
+const INNER_RADIUS = 73;
+const RING_WIDTH = 23;
 const RING_GAP = 3;
 const ANGLE_GAP = 0.012;
 
@@ -11,7 +11,26 @@ export interface SunburstSegment {
   item: ChartItem;
   depth: number;
   pathData: string;
+  branchId: number | null;
+  colorIndex: number | null;
+}
+
+export interface SunburstBranch {
+  id: number;
   colorIndex: number;
+}
+
+/** Use the unfiltered chart tree so search and sub-segment focus keep row colors stable. */
+export function sunburstBranches(items: ChartItem[]): Map<number, SunburstBranch> {
+  const branches = new Map<number, SunburstBranch>();
+  function visit(item: ChartItem, branch: SunburstBranch) {
+    if (item.id !== null) branches.set(item.id, branch);
+    for (const child of item.children) visit(child, branch);
+  }
+  items.forEach((item, index) => {
+    if (item.id !== null) visit(item, { id: item.id, colorIndex: index % 7 });
+  });
+  return branches;
 }
 
 const NAVIGATION_KEYS = new Set([
@@ -35,7 +54,7 @@ export function createSunburst(
     0,
     -Math.PI / 2,
     Math.PI * 1.5,
-    0,
+    null,
     "",
   );
   return segments;
@@ -71,7 +90,7 @@ function appendSegments(
   depth: number,
   startAngle: number,
   endAngle: number,
-  colorSeed: number,
+  parentBranch: SunburstBranch | null,
   keyPrefix: string,
 ) {
   const weights = items.map((item) => itemWeight(item, metric));
@@ -81,6 +100,9 @@ function appendSegments(
   let cursor = startAngle;
   items.forEach((item, index) => {
     const keyPath = keyPrefix ? `${keyPrefix}.${index}` : String(index);
+    const branch = depth === 0
+      ? item.id === null ? null : { id: item.id, colorIndex: index % 7 }
+      : parentBranch;
     const span = ((endAngle - startAngle) * weights[index]) / total;
     const itemStart = cursor;
     const itemEnd = cursor + span;
@@ -98,7 +120,8 @@ function appendSegments(
           itemStart + ANGLE_GAP / 2,
           itemEnd - ANGLE_GAP / 2,
         ),
-        colorIndex: (colorSeed + index) % 8,
+        branchId: branch?.id ?? null,
+        colorIndex: branch?.colorIndex ?? null,
       });
     }
 
@@ -110,7 +133,7 @@ function appendSegments(
         depth + 1,
         itemStart,
         itemEnd,
-        colorSeed + index,
+        branch,
         keyPath,
       );
     }

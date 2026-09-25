@@ -88,7 +88,7 @@
     type DesktopCommandContext,
     type DesktopMenuAvailability,
   } from "$lib/shortcuts";
-  import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
+  import { createSunburst, sunburstBranches, sunburstNavigationTarget } from "$lib/sunburst";
 
   const chartInteractionKeys = new Set([
     "Enter",
@@ -254,6 +254,7 @@
     scanProgressPresentation(displayProgress, status === "cancelling"),
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
+  const chartBranches = $derived(sunburstBranches(view?.chartItems ?? []));
   $effect(() => {
     const interactiveIds = sunburstSegments.flatMap((segment) =>
       segment.item.id === null ? [] : [segment.item.id],
@@ -265,7 +266,11 @@
   // Deliberate pointer movement may temporarily supersede keyboard focus. When
   // the pointer leaves, focus resumes ownership before the clicked inspection.
   const activeEntry = $derived(contextMenuEntry ?? pointerEntry ?? focusedEntry ?? inspectedEntry);
+  const activeBranch = $derived(activeEntry?.id != null ? chartBranches.get(activeEntry.id) : undefined);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
+  const centerBytes = $derived(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes);
+  const centerSize = $derived(formatBytes(centerBytes).split(" "));
+  const resultSize = $derived(formatBytes(result?.allocatedBytes ?? 0).split(" "));
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const canEstimateSavings = $derived(
     inspectedEntry?.kind === "file" &&
@@ -1776,7 +1781,7 @@
         </div>
         <div class="result-total">
           <span>Space on disk{result.allocatedSizeIsEstimate ? " (estimated)" : ""}</span>
-          <strong>{formatBytes(result.allocatedBytes)}</strong>
+          <strong>{resultSize[0]} <small>{resultSize[1]}</small></strong>
         </div>
       </section>
 
@@ -1902,16 +1907,19 @@
                       <path
                         d={segment.pathData}
                         data-depth={segment.depth}
+                        data-branch-id={segment.branchId}
                         data-color={segment.colorIndex}
                         data-selected={activeEntry?.id === segment.item.id}
+                        data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
                       />
                     </g>
                   {:else}
                     <path
                       d={segment.pathData}
                       data-depth={segment.depth}
+                      data-branch-id={segment.branchId}
                       data-color={segment.colorIndex}
-                      data-selected={activeEntry?.id === segment.item.id}
+                      data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
                     />
                   {/if}
                 {/each}
@@ -1921,8 +1929,9 @@
             {/if}
 
             <div class="chart-center" aria-hidden="true">
-              <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
               <em>{activeEntry?.name ?? directoryView.displayName}</em>
+              <strong>{centerSize[0]}</strong>
+              <small>{centerSize[1]}{activeEntry ? ` · ${formatPercent(centerBytes, viewBytes)}` : sizeMetric === "allocated" ? " on disk" : " logical"}</small>
             </div>
           </div>
 
@@ -2147,6 +2156,8 @@
                   class="storage-row"
                   role="listitem"
                   data-selected={activeEntry?.id === item.id}
+                  data-branch-selected={activeBranch?.id === item.id}
+                  data-color={chartBranches.get(item.id)?.colorIndex}
                   data-inspected={inspectedEntry?.id === item.id}
                 >
                   <ItemContextMenu

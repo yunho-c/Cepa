@@ -249,6 +249,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["logicalChartTabStops"].as_u64() == Some(1)
         && report["chartArrowMoved"].as_bool() == Some(true)
         && report["chartHomeMoved"].as_bool() == Some(true)
+        && report["chartBranchCoordinated"].as_bool() == Some(true)
         && report["listTabStops"]
             .as_u64()
             .is_some_and(|count| count == 1)
@@ -536,6 +537,22 @@ void (async () => {{
       && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"]').length;
+    const nestedPath = document.querySelector('.sunburst g path[data-depth="1"]');
+    if (!nestedPath) throw new Error('The completion fixture needs a nested chart segment.');
+    nestedPath.parentElement.focus();
+    await painted();
+    const branchId = nestedPath.getAttribute('data-branch-id');
+    const branchRow = [...document.querySelectorAll('.storage-item')]
+      .find((row) => row.getAttribute('data-list-open-id') === branchId)?.closest('.storage-row');
+    const branchPaths = [...document.querySelectorAll('.sunburst path')]
+      .filter((path) => path.getAttribute('data-branch-id') === branchId);
+    const chartBranchCoordinated = branchId !== null && branchPaths.length > 1
+      && branchRow?.getAttribute('data-branch-selected') === 'true'
+      && branchRow.getAttribute('data-color') === nestedPath.getAttribute('data-color')
+      && branchPaths.every((path) => path.getAttribute('data-branch-selected') === 'true'
+        && path.getAttribute('data-color') === nestedPath.getAttribute('data-color'))
+      && [...document.querySelectorAll('.sunburst path[data-branch-selected="true"]')]
+        .every((path) => path.getAttribute('data-branch-id') === branchId);
     checkingSplitter = true;
     const splitter = document.querySelector('.explorer-divider');
     const chartPane = document.querySelector('.chart-pane');
@@ -835,6 +852,7 @@ void (async () => {{
       logicalChartTabStops,
       chartArrowMoved,
       chartHomeMoved,
+      chartBranchCoordinated,
       listTabStops,
       listArrowMoved,
       contextMenuKeyboardAccessible,
@@ -935,6 +953,7 @@ mod tests {
             "logicalChartTabStops": 1,
             "chartArrowMoved": true,
             "chartHomeMoved": true,
+            "chartBranchCoordinated": true,
             "listTabStops": 1,
             "listArrowMoved": true,
             "contextMenuKeyboardAccessible": true,
@@ -1002,6 +1021,10 @@ mod tests {
         let mut broken_splitter = complete.clone();
         broken_splitter["splitterKeyboardAccessible"] = false.into();
         assert!(!validate_report(&broken_splitter, 2));
+
+        let mut broken_branch = complete.clone();
+        broken_branch["chartBranchCoordinated"] = false.into();
+        assert!(!validate_report(&broken_branch, 2));
 
         let mut blocked_splitter_style = complete.clone();
         blocked_splitter_style["splitterPolicyViolations"] = serde_json::json!(["style-src-attr"]);

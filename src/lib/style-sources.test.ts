@@ -347,8 +347,10 @@ describe("production style sources", () => {
       "data-selected={activeEntry?.id === segment.item.id}",
     );
     expect(component).toContain("data-selected={activeEntry?.id === item.id}");
+    expect(component).toContain("data-branch-selected={activeBranch?.id === item.id}");
+    expect(component).toContain("data-color={chartBranches.get(item.id)?.colorIndex}");
     expect(stylesheet).toContain(
-      '.sunburst:has(path[data-selected="true"]) path:not([data-selected="true"]) { opacity: 0.36; }',
+      '.sunburst:has(path[data-branch-selected="true"]) path:not([data-branch-selected="true"]) { opacity: 0.3; }',
     );
     expect(stylesheet).not.toContain(".sunburst:has(g:hover");
   });

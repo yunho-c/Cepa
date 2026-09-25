@@ -230,6 +230,17 @@ immediately, and a pointer-leave event must not erase an item that still owns
 keyboard focus. Drive chart emphasis, row emphasis, and the row context menu
 from that same selected-entry state; raw CSS `:hover` must not
 reintroduce a visual preview that disagrees with the coordinated map/list state.
+Use the V2 study's cool neutral surfaces and muted branch palette, keeping the
+existing system font family until a separate font comparison is approved.
+Each displayed top-level chart item owns one color, inherited by its descendants
+and corresponding list icon. Resolve colors and branch selection from the
+unfiltered, bounded chart tree so search cannot recolor or disconnect a row.
+Keep top-level aggregates and rows outside that tree neutral; they must not
+imply a known individual chart match. Nested aggregates inherit their containing
+branch but remain non-interactive. Previewing a nested segment emphasizes the
+whole containing branch and its top-level row, while the center still describes
+the exact previewed item. Keep the larger chart opening and flat, visual-only
+name, number, and unit readout; do not restore a raised center disc.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. Their grid must shrink within the directory
@@ -366,7 +377,8 @@ requires both the message panel and Clear action to remain fully inside the
 compact directory pane. It also exercises chart
 arrow/Home movement, list arrow movement, keyboard opening and dismissal of the
 row context menu with focus restoration, divider keyboard resizing and reset
-under the packaged CSP, and Enter activation of a chart folder.
+under the packaged CSP, nested chart-to-row branch highlighting, and Enter
+activation of a chart folder.
 It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
 second scan in the same process with scan-heading and result-heading focus

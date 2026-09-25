@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChartItem } from "./scanner";
-import { createSunburst, sunburstNavigationTarget } from "./sunburst";
+import { createSunburst, sunburstBranches, sunburstNavigationTarget } from "./sunburst";
 
 function item(
   id: number,
@@ -39,6 +39,39 @@ describe("sunburst geometry", () => {
 
   test("returns no segments for an empty view", () => {
     expect(createSunburst([])).toEqual([]);
+  });
+
+  test("keeps all descendants in their root branch color", () => {
+    const items = [item(1, 80, 80, [item(3, 50, 50, [item(5, 50)]), item(4, 30)]), item(2, 20)];
+    const branches = sunburstBranches(items);
+    const segments = createSunburst(items);
+    for (const id of [1, 3, 4, 5]) {
+      expect(branches.get(id)).toEqual({ id: 1, colorIndex: 0 });
+      expect(segments.find(segment => segment.item.id === id)).toMatchObject({ branchId: 1, colorIndex: 0 });
+    }
+    expect(branches.get(2)).toEqual({ id: 2, colorIndex: 1 });
+    expect(segments.find(segment => segment.item.id === 2)).toMatchObject({ branchId: 2, colorIndex: 1 });
+  });
+
+  test("retains branch identity for tiny entries and filtered row subsets", () => {
+    const items = [item(1, 1_000_000), item(2, 1)];
+    const branches = sunburstBranches(items);
+    expect(createSunburst(items).some(segment => segment.item.id === 2)).toBe(false);
+    // A search result uses IDs against the original chart tree, never its new rank.
+    expect([2].map(id => branches.get(id))).toEqual([{ id: 2, colorIndex: 1 }]);
+    expect(branches.get(999)).toBeUndefined();
+  });
+
+  test("keeps root aggregates neutral and nested aggregates in their containing branch", () => {
+    const aggregate: ChartItem = { ...item(9, 25), id: null, kind: "other" };
+    const items = [item(1, 75, 75, [item(2, 50), aggregate]), aggregate];
+    const branches = sunburstBranches(items);
+    const segments = createSunburst(items);
+    expect(branches.size).toBe(2);
+    expect(segments.find(segment => segment.item.id === null && segment.depth === 0))
+      .toMatchObject({ branchId: null, colorIndex: null });
+    expect(segments.find(segment => segment.item.id === null && segment.depth === 1))
+      .toMatchObject({ branchId: 1, colorIndex: 0 });
   });
 
   test("changes geometry with the selected metric", () => {
