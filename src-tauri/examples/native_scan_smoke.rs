@@ -254,6 +254,10 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
             .is_some_and(|count| count == 1)
         && report["listArrowMoved"].as_bool() == Some(true)
         && report["contextMenuKeyboardAccessible"].as_bool() == Some(true)
+        && report["splitterKeyboardAccessible"].as_bool() == Some(true)
+        && report["splitterPolicyViolations"]
+            .as_array()
+            .is_some_and(Vec::is_empty)
         && report["horizontalOverflow"].as_bool() == Some(false)
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
@@ -330,8 +334,13 @@ void (async () => {{
   const failureFixture = {failure_fixture_json};
   const completedScanId = {completed_scan_id};
   const pageErrors = [];
+  const splitterPolicyViolations = [];
+  let checkingSplitter = false;
   window.addEventListener('error', (event) => pageErrors.push(String(event.error || event.message)));
   window.addEventListener('unhandledrejection', (event) => pageErrors.push(String(event.reason)));
+  window.addEventListener('securitypolicyviolation', (event) => {{
+    if (checkingSplitter) splitterPolicyViolations.push(event.effectiveDirective);
+  }});
   const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
   const painted = async () => {{ await frame(); await frame(); }};
@@ -527,6 +536,29 @@ void (async () => {{
       && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"]').length;
+    checkingSplitter = true;
+    const splitter = document.querySelector('.explorer-divider');
+    const chartPane = document.querySelector('.chart-pane');
+    const splitDirectoryPane = document.querySelector('.directory-pane');
+    const chartWidth = () => chartPane.getBoundingClientRect().width;
+    const defaultChartWidth = chartWidth();
+    splitter.focus();
+    await press(splitter, 'ArrowRight');
+    const splitterArrowMoved = chartWidth() > defaultChartWidth + 5;
+    await press(splitter, 'End');
+    const splitterMaximumBounded = chartWidth() <= 1040.5
+      && splitDirectoryPane.getBoundingClientRect().width >= 299.5;
+    await press(splitter, 'Home');
+    const splitterMinimumBounded = chartWidth() >= 195.5 && chartWidth() <= defaultChartWidth;
+    await press(splitter, 'Enter');
+    const splitterKeyboardAccessible = splitterArrowMoved && splitterMaximumBounded
+      && splitterMinimumBounded && Math.abs(chartWidth() - defaultChartWidth) < 1
+      && document.activeElement === splitter
+      && splitter.getAttribute('role') === 'separator'
+      && splitter.getAttribute('aria-orientation') === 'vertical'
+      && splitter.getAttribute('aria-controls') === chartPane.id;
+    await painted();
+    checkingSplitter = false;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
     const scanDetailsTrigger = document.querySelector('.result-info-action');
     const scanDetailsPresent = scanDetailsTrigger !== null;
@@ -806,6 +838,8 @@ void (async () => {{
       listTabStops,
       listArrowMoved,
       contextMenuKeyboardAccessible,
+      splitterKeyboardAccessible,
+      splitterPolicyViolations,
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       metricDetailsStayedOpen,
@@ -904,6 +938,8 @@ mod tests {
             "listTabStops": 1,
             "listArrowMoved": true,
             "contextMenuKeyboardAccessible": true,
+            "splitterKeyboardAccessible": true,
+            "splitterPolicyViolations": [],
             "horizontalOverflow": false,
             "pageErrors": [],
             "logicalMetricSelected": true,
@@ -962,6 +998,14 @@ mod tests {
         let mut broken_keyboard = complete.clone();
         broken_keyboard["contextMenuKeyboardAccessible"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
+
+        let mut broken_splitter = complete.clone();
+        broken_splitter["splitterKeyboardAccessible"] = false.into();
+        assert!(!validate_report(&broken_splitter, 2));
+
+        let mut blocked_splitter_style = complete.clone();
+        blocked_splitter_style["splitterPolicyViolations"] = serde_json::json!(["style-src-attr"]);
+        assert!(!validate_report(&blocked_splitter_style, 2));
 
         let mut broad_inspector_live_region = complete.clone();
         broad_inspector_live_region["inspectorLiveRegionScoped"] = false.into();

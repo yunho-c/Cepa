@@ -289,13 +289,27 @@ The chart retains its quiet surface, the ranked list retains its brighter card
 surface, and their single internal divider preserves the coordinated two-pane
 structure without making the explorer look like a nested window. At wider
 windows, let the result view reach its responsive outer gutters and let the
-explorer use the available viewport height. Cap only the chart column from 320
-through 520 logical pixels and give every remaining pixel to the ranked list;
+explorer use the available viewport height. Default the chart column to 320
+through 520 logical pixels and give the remaining space to the ranked list;
 do not restore the former 1,240-pixel result-width or 590-pixel explorer-height
 ceilings.
 From 560 through 720 logical pixels wide, use the compact two-column explorer;
-only browser previews below 560 pixels stack the panes. The narrow layout always
-compacts the result header; wider views do so at 560 logical pixels tall or less.
+only browser previews below 560 pixels stack the panes. The internal divider is
+draggable and keyboard focusable. Left/Right resize by 10 pixels (40 with Shift),
+Home/End move to its bounds, and Enter or double-click resets the responsive default.
+Keep at least 320 pixels for the list on ordinary desktop layouts, or 300 in the
+compact two-column layout; the chart minimum is 320 or 196 respectively and its
+maximum is 1,040. Clamp the displayed size on window resize without overwriting
+the user's preferred width. Keep that choice during directory navigation;
+returning Home resets it. Do not persist it across launches. Escape, pointer
+cancellation, lost capture, window blur, or a busy-view transition cancels a drag
+and releases capture. Hide the divider in stacked browser previews. Keep sizing
+inside the explorer component and update only its numeric CSS property through
+CSSOM; do not inject a runtime stylesheet or weaken the packaged CSP.
+On ordinary desktop layouts, let the radial map grow with the chart pane up to
+the available window-height allowance; do not restore its former 440-pixel cap.
+The narrow layout always compacts the result header; wider views do so at 560
+logical pixels tall or less.
 At the configured 620 by 480 minimum, keep the coverage warning action, map, and at least
 two ranked rows visible together without horizontal overflow. Validate both the
 configured minimum and default size when changing result spacing, column bounds,
@@ -348,7 +362,8 @@ cleanup. After the matching search, it runs a real zero-match search and
 requires both the message panel and Clear action to remain fully inside the
 compact directory pane. It also exercises chart
 arrow/Home movement, list arrow movement, keyboard opening and dismissal of the
-row context menu with focus restoration, and Enter activation of a chart folder.
+row context menu with focus restoration, divider keyboard resizing and reset
+under the packaged CSP, and Enter activation of a chart folder.
 It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
 second scan in the same process with scan-heading and result-heading focus

@@ -25,6 +25,7 @@
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import WindowTitlebar from "$lib/components/window-titlebar.svelte";
+  import ExplorerSplit from "$lib/components/explorer-split.svelte";
   import ItemContextMenu from "$lib/components/item-context-menu.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
@@ -1634,6 +1635,7 @@
     </main>
   {:else if result && view}
     {@const completedResult = result}
+    {@const directoryView = view}
     <main
       class="results-view"
       inert={dropOverlayVisible}
@@ -1848,16 +1850,12 @@
         </div>
       {/if}
 
-      <section
-        class="explorer"
-        aria-label="Storage map and folder contents"
-        aria-busy={isResultBusy}
-      >
-        <div class="chart-pane">
+      <ExplorerSplit busy={isResultBusy || dropOverlayVisible}>
+        {#snippet chart()}
           <h2 class="sr-only">
-            Storage map for {view.displayName}
+            Storage map for {directoryView.displayName}
           </h2>
-          {#if view.path !== view.root}
+          {#if directoryView.path !== directoryView.root}
             <Button
               class="chart-back"
               variant="ghost"
@@ -1878,7 +1876,7 @@
                 viewBox="0 0 340 340"
                 role="group"
                 aria-busy={isResultBusy}
-                aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
+                aria-label={`Storage map for ${directoryView.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
                 aria-describedby="sunburst-navigation-help"
                 bind:this={sunburstElement}
               >
@@ -1924,7 +1922,7 @@
 
             <div class="chart-center" aria-hidden="true">
               <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
-              <em>{activeEntry?.name ?? view.displayName}</em>
+              <em>{activeEntry?.name ?? directoryView.displayName}</em>
             </div>
           </div>
 
@@ -1932,18 +1930,17 @@
             <p id="sunburst-navigation-help" class="sr-only">
               Use the arrow keys to move between segments. Press Enter or Space to open the selected item.
             </p>
-            <p class="chart-help">Select a segment to explore it</p>
           {/if}
-        </div>
+        {/snippet}
 
-        <div class="directory-pane">
+        {#snippet directory()}
           <p
             class="sr-only inspector-status"
             aria-live="polite"
             aria-atomic="true"
           >{inspectorStatus}</p>
           <div class="section-heading">
-            <h2 tabindex="-1" bind:this={viewHeading}>{view.displayName}</h2>
+            <h2 tabindex="-1" bind:this={viewHeading}>{directoryView.displayName}</h2>
             <div class="section-actions">
               <span
                 id="directory-search-status"
@@ -1957,7 +1954,7 @@
                   <Input
                     type="search"
                     placeholder="Find in this folder"
-                    aria-label={`Find in ${view.displayName}`}
+                    aria-label={`Find in ${directoryView.displayName}`}
                     aria-describedby="directory-search-status"
                     maxlength={128}
                     autocomplete="off"
@@ -2140,7 +2137,7 @@
               class="item-list"
               class:is-navigating={isResultBusy || isSearching}
               role="list"
-              aria-label={`${view.displayName} contents`}
+              aria-label={`${directoryView.displayName} contents`}
               aria-describedby="directory-list-navigation-help"
               aria-busy={isSearching}
               bind:this={itemListElement}
@@ -2199,8 +2196,8 @@
               <strong>This folder is empty</strong>
             </div>
           {/if}
-        </div>
-      </section>
+        {/snippet}
+      </ExplorerSplit>
 
     </main>
   {/if}

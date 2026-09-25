@@ -673,13 +673,23 @@ body {
   height: calc(var(--content-height) - 192px);
   min-height: 370px;
   display: grid;
-  grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr);
+  grid-template-columns: var(--chart-width, clamp(320px, 32vw, 520px)) 1px minmax(0, 1fr);
   overflow: hidden;
 }
 
-.chart-pane { position: relative; min-width: 0; min-height: 0; padding: 28px 26px 22px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--quiet-surface); }
+.explorer-divider { position: relative; z-index: 1; width: 1px; min-width: 1px; background: var(--border); cursor: col-resize; touch-action: none; user-select: none; }
+.explorer-divider::after { content: ""; position: absolute; inset: 0 -4px; }
+.explorer-divider:hover,
+.explorer-divider:focus-visible { background: var(--ring); }
+.explorer-divider:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.explorer-divider[aria-disabled="true"] { cursor: default; }
+.explorer[data-resizing="true"] > .chart-pane,
+.explorer[data-resizing="true"] > .directory-pane { pointer-events: none; }
+:root:has(.explorer[data-resizing="true"]) * { cursor: col-resize !important; user-select: none !important; }
+
+.chart-pane { position: relative; min-width: 0; min-height: 0; padding: 28px 26px 22px; display: flex; flex-direction: column; background: var(--quiet-surface); }
 .chart-back { position: absolute; top: 16px; left: 16px; z-index: 2; }
-.sunburst-wrap { position: relative; width: min(100%, 440px, max(180px, calc(var(--content-height) - 320px))); aspect-ratio: 1; margin: auto; display: grid; place-items: center; }
+.sunburst-wrap { position: relative; width: min(100%, max(180px, calc(var(--content-height) - 320px))); aspect-ratio: 1; margin: auto; display: grid; place-items: center; }
 .sunburst { width: 100%; height: 100%; overflow: visible; transition: opacity 120ms ease; }
 .sunburst[aria-busy="true"] { opacity: 0.45; }
 .sunburst g { outline: none; cursor: default; }
@@ -705,7 +715,6 @@ body {
 .chart-center em { max-width: 72%; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 9px; font-style: normal; }
 .chart-empty { width: 76%; aspect-ratio: 1; border: 1px dashed var(--border); border-radius: 50%; display: grid; place-items: center; color: var(--muted-foreground); }
 .chart-empty svg { width: 24px; }
-.chart-help { margin: 0; text-align: center; color: var(--muted-foreground); font-size: 11px; }
 
 .directory-pane { min-width: 0; min-height: 0; padding: 20px 22px 18px; display: flex; flex-direction: column; background: var(--card); }
 .section-heading { min-height: 44px; padding: 0 2px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
@@ -822,6 +831,7 @@ body {
 
 @media (max-width: 559px) {
   .explorer { height: auto; grid-template-columns: 1fr; }
+  .explorer-divider { display: none; }
   .chart-pane { min-height: 420px; border-right: 0; border-bottom: 1px solid var(--border); }
   .sunburst-wrap { width: min(100%, 390px); }
   .item-list { max-height: 440px; flex: none; }
@@ -890,7 +900,6 @@ body {
   .chart-center { width: 38%; }
   .chart-center strong { font-size: 12px; }
   .chart-center em { font-size: 8px; }
-  .chart-help { display: none; }
 }
 
 @media (min-width: 560px) and (max-width: 720px) {
@@ -900,12 +909,11 @@ body {
   }
   .scan-root-capacity { min-width: 78px; display: grid; }
   .explorer {
-    grid-template-columns: minmax(196px, 0.72fr) minmax(0, 1.28fr);
+    grid-template-columns: var(--chart-width, minmax(196px, 0.72fr)) 1px minmax(0, 1.28fr);
   }
   .chart-pane {
     min-height: 0;
     padding: 16px 10px 12px;
-    border-right: 1px solid var(--border);
     border-bottom: 0;
   }
   .sunburst-wrap { width: min(100%, 170px); }

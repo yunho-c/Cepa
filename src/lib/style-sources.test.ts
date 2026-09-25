@@ -244,7 +244,7 @@ describe("production style sources", () => {
       chartPaneStart,
       stylesheet.indexOf("}", chartPaneStart),
     );
-    const directoryPaneStart = stylesheet.indexOf(".directory-pane {");
+    const directoryPaneStart = stylesheet.indexOf("\n.directory-pane {") + 1;
     const directoryPane = stylesheet.slice(
       directoryPaneStart,
       stylesheet.indexOf("}", directoryPaneStart),
@@ -259,14 +259,15 @@ describe("production style sources", () => {
     expect(explorer).toContain("height: calc(var(--content-height) - 192px)");
     expect(explorer).toContain("min-height: 370px");
     expect(explorer).toContain(
-      "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
+      "grid-template-columns: var(--chart-width, clamp(320px, 32vw, 520px)) 1px minmax(0, 1fr)",
     );
     expect(explorer).not.toContain("590px");
     expect(explorer).not.toContain("border:");
     expect(explorer).not.toContain("border-radius:");
     expect(explorer).not.toContain("box-shadow:");
     expect(explorer).not.toContain("background:");
-    expect(chartPane).toContain("border-right: 1px solid var(--border)");
+    expect(chartPane).not.toContain("border-right:");
+    expect(stylesheet).toContain(".explorer-divider {");
     expect(chartPane).toContain("background: var(--quiet-surface)");
     expect(directoryPane).toContain("background: var(--card)");
     expect(stylesheet).not.toContain(".explorer { border-radius:");
@@ -389,7 +390,7 @@ describe("production style sources", () => {
     expect(chartHeading).not.toContain("viewHeading");
     expect(chartHeading).not.toContain("tabindex");
     expect(directoryHeadingStart).toBeGreaterThan(-1);
-    expect(directoryHeading).toContain("{view.displayName}");
+    expect(directoryHeading).toContain("{directoryView.displayName}");
   });
 
   test("keeps scan details popover out of live announcements", async () => {
