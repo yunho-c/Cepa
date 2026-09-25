@@ -970,11 +970,6 @@
     }
   }
 
-  function itemPercent(bytes: number): number {
-    if (bytes <= 0 || viewBytes <= 0) return 0;
-    return Math.max(0.8, Math.min(100, (bytes / viewBytes) * 100));
-  }
-
   function invalidateDirectorySearch() {
     if (searchTimer !== null) {
       clearTimeout(searchTimer);
@@ -2192,12 +2187,6 @@
                       <span>
                         {describeEntry(item)}
                       </span>
-                      <progress
-                        class="item-bar"
-                        max="100"
-                        value={itemPercent(metricBytes(item, sizeMetric))}
-                        aria-hidden="true"
-                      ></progress>
                     </span>
                     <span class="item-size">
                       <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
