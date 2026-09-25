@@ -787,6 +787,7 @@ body {
 .item-size strong { font-size: 12px; font-weight: 450; font-variant-numeric: tabular-nums; }
 .item-size span { color: var(--muted-foreground); font-size: 9px; }
 .item-context-menu [data-busy="true"] { cursor: wait; }
+.row-details-tooltip[data-slot="tooltip-content"] { max-width: min(288px, calc(100vw - 32px)); white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
 .empty-result { min-height: 0; display: grid; flex: 1; place-items: center; align-content: center; gap: 10px; color: var(--muted-foreground); }
 .empty-result svg { width: 24px; }
 .empty-result strong { color: var(--foreground); font-size: 13px; }

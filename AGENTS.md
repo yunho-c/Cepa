@@ -249,6 +249,14 @@ follow the directory pane's inline size, not the window width; truncate long
 names and descriptions while retaining the size column. File inspection realigns
 a list-origin selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
+Directory file/folder counts belong in a shadcn Tooltip on the existing row
+button, available on hover and keyboard focus even in compact panes. Keep them
+out of the default row copy. The tooltip shows only the file/folder counts, adds no
+Tab stop, and closes while navigation or the row context menu is active.
+Prefer placement below the row and wait one second on each hover, without skipping
+the delay when moving between rows. Keyboard focus still exposes the counts
+immediately. Ordinary files have no redundant File subtext; retain the explanatory
+subtext for symbolic links and other filesystem entries.
 The list's primary controls use roving row focus so a completed view contributes
 one sequential Tab stop rather than one for every retained row. Up/Down and
 Home/End move between rows. Reveal lives in a shadcn-svelte context menu opened

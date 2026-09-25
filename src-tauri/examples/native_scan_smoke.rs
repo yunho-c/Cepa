@@ -255,6 +255,7 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
             .is_some_and(|count| count == 1)
         && report["listArrowMoved"].as_bool() == Some(true)
         && report["contextMenuKeyboardAccessible"].as_bool() == Some(true)
+        && report["rowCountsTooltipAccessible"].as_bool() == Some(true)
         && report["splitterKeyboardAccessible"].as_bool() == Some(true)
         && report["splitterPolicyViolations"]
             .as_array()
@@ -537,6 +538,21 @@ void (async () => {{
       && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
     const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"]').length;
+    const folderTooltipTrigger = document.querySelector('.storage-item[data-tooltip-trigger]');
+    if (!folderTooltipTrigger) throw new Error('The completion fixture needs a folder row.');
+    folderTooltipTrigger.focus();
+    const folderTooltip = await waitFor(
+      () => document.querySelector('.row-details-tooltip'),
+      'keyboard-focused folder counts tooltip',
+    );
+    const rowCountsTooltipAccessible =
+      folderTooltip.id.length > 0
+      && folderTooltip.getAttribute('role') === 'tooltip'
+      && folderTooltipTrigger.getAttribute('aria-describedby') === folderTooltip.id
+      && folderTooltipTrigger.querySelector('.item-copy > span') === null
+      && /files.*folders/.test(folderTooltip.textContent)
+      && folderTooltip.querySelector('[aria-live], [role="status"], [role="alert"]') === null
+      && !folderTooltipTrigger.disabled;
     const nestedPath = document.querySelector('.sunburst g path[data-depth="1"]');
     if (!nestedPath) throw new Error('The completion fixture needs a nested chart segment.');
     nestedPath.parentElement.focus();
@@ -856,6 +872,7 @@ void (async () => {{
       listTabStops,
       listArrowMoved,
       contextMenuKeyboardAccessible,
+      rowCountsTooltipAccessible,
       splitterKeyboardAccessible,
       splitterPolicyViolations,
       horizontalOverflow,
@@ -957,6 +974,7 @@ mod tests {
             "listTabStops": 1,
             "listArrowMoved": true,
             "contextMenuKeyboardAccessible": true,
+            "rowCountsTooltipAccessible": true,
             "splitterKeyboardAccessible": true,
             "splitterPolicyViolations": [],
             "horizontalOverflow": false,
@@ -1017,6 +1035,10 @@ mod tests {
         let mut broken_keyboard = complete.clone();
         broken_keyboard["contextMenuKeyboardAccessible"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
+
+        let mut missing_row_tooltip = complete.clone();
+        missing_row_tooltip["rowCountsTooltipAccessible"] = false.into();
+        assert!(!validate_report(&missing_row_tooltip, 2));
 
         let mut broken_splitter = complete.clone();
         broken_splitter["splitterKeyboardAccessible"] = false.into();

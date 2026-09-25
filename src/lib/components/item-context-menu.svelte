@@ -3,6 +3,7 @@
   import type { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import { onDestroy, type Snippet } from "svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as Tooltip from "$lib/components/ui/tooltip";
 
   const revealLabel = /Mac/i.test(navigator.platform)
     ? "Reveal in Finder"
@@ -12,6 +13,7 @@
 
   let {
     children,
+    tooltip,
     canReveal,
     busy,
     revealing,
@@ -21,6 +23,7 @@
     ...buttonProps
   }: Omit<ContextMenuPrimitive.TriggerProps, "child" | "children" | "disabled"> & {
     children?: Snippet;
+    tooltip?: string;
     canReveal: boolean;
     busy: boolean;
     revealing: boolean;
@@ -30,11 +33,15 @@
 
   let trigger: HTMLElement | null = $state(null);
   let open = $state(false);
+  let tooltipOpen = $state(false);
   let restoreFocus = true;
   let menuGeneration = 0;
 
   $effect(() => {
     if (busy && open) open = false;
+  });
+  $effect(() => {
+    if ((busy || open) && tooltipOpen) tooltipOpen = false;
   });
 
   $effect(() => onmenuopenchange(open));
@@ -97,9 +104,21 @@
     <!-- The primitive defaults to a div; keep the row button focusable and let
          the busy list's pointer-events rule apply to it. -->
     {#snippet child({ props: { disabled: _disabled, style: _style, ...props } })}
-      <button {...props} type="button">
-        {@render children?.()}
-      </button>
+      {#if tooltip}
+        <!-- Guard opening without changing the shared row trigger's focus behavior. -->
+        <Tooltip.Root bind:open={() => tooltipOpen, (value) => tooltipOpen = value && !busy && !open}>
+          <Tooltip.Trigger {...props} type="button">
+            {@render children?.()}
+          </Tooltip.Trigger>
+          <Tooltip.Content class="row-details-tooltip" side="bottom" align="start" sideOffset={6}>
+            {tooltip}
+          </Tooltip.Content>
+        </Tooltip.Root>
+      {:else}
+        <button {...props} type="button">
+          {@render children?.()}
+        </button>
+      {/if}
     {/snippet}
   </ContextMenu.Trigger>
   {#if canReveal}

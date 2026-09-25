@@ -2151,55 +2151,58 @@
               aria-busy={isSearching}
               bind:this={itemListElement}
             >
-              {#each visibleItems as item (item.id)}
-                <div
-                  class="storage-row"
-                  role="listitem"
-                  data-selected={activeEntry?.id === item.id}
-                  data-branch-selected={activeBranch?.id === item.id}
-                  data-color={chartBranches.get(item.id)?.colorIndex}
-                  data-inspected={inspectedEntry?.id === item.id}
-                >
-                  <ItemContextMenu
-                    canReveal={item.kind !== "symlink"}
-                    busy={isResultBusy || isSearching || dropOverlayVisible}
-                    revealing={revealingNodeId !== null}
-                    onreveal={() => revealItem(item.id)}
-                    onmenuopenchange={(open) => handleItemMenuChange(item, open)}
-                    class="storage-item"
-                    tabindex={listFocusId === item.id ? 0 : -1}
-                    data-list-open-id={item.id}
-                    aria-disabled={isResultBusy}
-                    onclick={(event) => activateEntry(item, event.currentTarget)}
-                    onpointermove={() => previewEntry(item)}
-                    onfocus={() => handleListFocus(item)}
-                    onmouseleave={() => clearPointerEntry(item.id)}
-                    onblur={() => clearFocusedEntry(item.id)}
-                    onkeydown={(event) => handleListNavigation(event, item.id)}
-                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
+              <Tooltip.Provider delayDuration={1000} skipDelayDuration={0} disableHoverableContent>
+                {#each visibleItems as item (item.id)}
+                  <div
+                    class="storage-row"
+                    role="listitem"
+                    data-selected={activeEntry?.id === item.id}
+                    data-branch-selected={activeBranch?.id === item.id}
+                    data-color={chartBranches.get(item.id)?.colorIndex}
+                    data-inspected={inspectedEntry?.id === item.id}
                   >
-                    <span class="item-icon" data-kind={item.kind}>
-                      {#if item.kind === "directory"}
-                        <Folder />
-                      {:else if item.kind === "symlink"}
-                        <Link2 />
-                      {:else}
-                        <File />
-                      {/if}
-                    </span>
-                    <span class="item-copy">
-                      <strong title={item.name}>{item.name}</strong>
-                      <span>
-                        {describeEntry(item)}
+                    <ItemContextMenu
+                      tooltip={item.kind === "directory" ? describeEntry(item) : undefined}
+                      canReveal={item.kind !== "symlink"}
+                      busy={isResultBusy || isSearching || dropOverlayVisible}
+                      revealing={revealingNodeId !== null}
+                      onreveal={() => revealItem(item.id)}
+                      onmenuopenchange={(open) => handleItemMenuChange(item, open)}
+                      class="storage-item"
+                      tabindex={listFocusId === item.id ? 0 : -1}
+                      data-list-open-id={item.id}
+                      aria-disabled={isResultBusy}
+                      onclick={(event) => activateEntry(item, event.currentTarget)}
+                      onpointermove={() => previewEntry(item)}
+                      onfocus={() => handleListFocus(item)}
+                      onmouseleave={() => clearPointerEntry(item.id)}
+                      onblur={() => clearFocusedEntry(item.id)}
+                      onkeydown={(event) => handleListNavigation(event, item.id)}
+                      aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
+                    >
+                      <span class="item-icon" data-kind={item.kind}>
+                        {#if item.kind === "directory"}
+                          <Folder />
+                        {:else if item.kind === "symlink"}
+                          <Link2 />
+                        {:else}
+                          <File />
+                        {/if}
                       </span>
-                    </span>
-                    <span class="item-size">
-                      <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
-                      <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
-                    </span>
-                  </ItemContextMenu>
-                </div>
-              {/each}
+                      <span class="item-copy">
+                        <strong title={item.kind === "directory" ? undefined : item.name}>{item.name}</strong>
+                        {#if item.kind === "symlink" || item.kind === "other"}
+                          <span>{describeEntry(item)}</span>
+                        {/if}
+                      </span>
+                      <span class="item-size">
+                        <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
+                        <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
+                      </span>
+                    </ItemContextMenu>
+                  </div>
+                {/each}
+              </Tooltip.Provider>
             </div>
           {:else}
             <div class="empty-result">
