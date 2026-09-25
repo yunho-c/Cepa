@@ -774,7 +774,7 @@ body {
 .storage-row[data-selected="true"],
 .storage-row[data-branch-selected="true"] { background: var(--muted); }
 .storage-row[data-inspected="true"] { box-shadow: inset 2px 0 var(--foreground); }
-.storage-item { width: 100%; min-width: 0; min-height: 61px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--foreground); display: grid; grid-template-columns: 30px minmax(0, 1fr) 88px; align-items: center; gap: 11px; text-align: left; cursor: default; }
+.storage-item { width: 100%; min-width: 0; min-height: 61px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--foreground); display: grid; grid-template-columns: 30px minmax(0, 1fr) 76px; align-items: center; gap: 11px; text-align: left; cursor: default; }
 .storage-item:has(.item-icon[data-kind="directory"]) { cursor: pointer; }
 .storage-item[aria-disabled="true"] { cursor: wait; }
 .storage-item:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
@@ -783,9 +783,10 @@ body {
 .item-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: 2px; }
 .item-copy > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; letter-spacing: -0.01em; }
 .item-copy > span { grid-row: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 10px; }
-.item-size { min-width: 0; display: grid; justify-items: end; gap: 1px; }
-.item-size strong { font-size: 12px; font-weight: 450; font-variant-numeric: tabular-nums; }
-.item-size span { color: var(--muted-foreground); font-size: 9px; }
+.item-size { min-width: 0; display: grid; justify-items: end; gap: 8px; }
+.item-size strong { font-size: 11px; font-weight: 450; font-variant-numeric: tabular-nums; }
+.item-size svg { display: block; width: 60px; height: 3px; fill: var(--branch-color); }
+.item-gauge-track { fill: var(--border); }
 .item-context-menu [data-busy="true"] { cursor: wait; }
 .row-details-tooltip[data-slot="tooltip-content"] { max-width: min(288px, calc(100vw - 32px)); white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
 .empty-result { min-height: 0; display: grid; flex: 1; place-items: center; align-content: center; gap: 10px; color: var(--muted-foreground); }

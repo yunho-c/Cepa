@@ -2197,7 +2197,10 @@
                       </span>
                       <span class="item-size">
                         <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
-                        <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
+                        <svg viewBox="0 0 72 3" aria-hidden="true">
+                          <rect class="item-gauge-track" width="72" height="3" rx="1.5" />
+                          <rect width={viewBytes > 0 ? 72 * Math.min(1, Math.max(0, metricBytes(item, sizeMetric) / viewBytes)) : 0} height="3" rx="1.5" />
+                        </svg>
                       </span>
                     </ItemContextMenu>
                   </div>

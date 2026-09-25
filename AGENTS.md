@@ -257,6 +257,11 @@ Prefer placement below the row and wait one second on each hover, without skippi
 the delay when moving between rows. Keyboard focus still exposes the counts
 immediately. Ordinary files have no redundant File subtext; retain the explanatory
 subtext for symbolic links and other filesystem entries.
+Row sizes use the V2 study's compact number above a 60-pixel branch-colored gauge.
+Size the gauge against the current directory total using the selected size basis,
+including during search; clamp its fill and leave it empty for a zero-byte total.
+Keep the decorative SVG hidden from assistive technology and preserve compact
+pane sizing without horizontal overflow.
 The list's primary controls use roving row focus so a completed view contributes
 one sequential Tab stop rather than one for every retained row. Up/Down and
 Home/End move between rows. Reveal lives in a shadcn-svelte context menu opened

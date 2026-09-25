@@ -350,7 +350,7 @@ describe("production style sources", () => {
     expect(component).toContain("data-branch-selected={activeBranch?.id === item.id}");
     expect(component).toContain("data-color={chartBranches.get(item.id)?.colorIndex}");
     expect(stylesheet).toContain(
-      '.sunburst:has(path[data-branch-selected="true"]) path:not([data-branch-selected="true"]) { opacity: 0.3; }',
+      '.sunburst:has(path[data-branch-selected="true"]) path:not([data-branch-selected="true"]) { opacity: 0.24; }',
     );
     expect(stylesheet).not.toContain(".sunburst:has(g:hover");
   });
