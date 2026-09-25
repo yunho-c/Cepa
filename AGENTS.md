@@ -252,21 +252,62 @@ directory transition rendered a segment or row beneath a stationary cursor.
 This keeps a newly completed view anchored on its current directory until the
 user deliberately explores it. Keyboard focus must continue to preview its item
 immediately, and a pointer-leave event must not erase an item that still owns
-keyboard focus. Drive chart emphasis, row emphasis, and the row Reveal
-affordance from that same selected-entry state; raw CSS `:hover` must not
+keyboard focus. Drive chart emphasis, row emphasis, and the row context menu
+from that same selected-entry state; raw CSS `:hover` must not
 reintroduce a visual preview that disagrees with the coordinated map/list state.
-List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
+Use the V2 study's cool neutral surfaces and muted branch palette, keeping the
+existing system font family until a separate font comparison is approved.
+Each displayed top-level chart item owns one color, inherited by its descendants
+and corresponding list icon. Resolve colors and branch selection from the
+unfiltered, bounded chart tree so search cannot recolor or disconnect a row.
+Keep top-level aggregates and rows outside that tree neutral; they must not
+imply a known individual chart match. Nested aggregates inherit their containing
+branch but remain non-interactive. Previewing a segment keeps that item and its
+descendants at full opacity, the rest of its top-level branch at 50%, and other
+branches at 24%, with the existing 160 ms transition. Apply the same hierarchy
+to keyboard focus. Keep its top-level row highlighted while the center describes
+the exact previewed item. Rows outside the bounded chart tree leave the map
+undimmed. Keep the larger chart opening and flat, visual-only
+name, number, and unit readout; do not restore a raised center disc.
+The chart pane has a shadcn context menu with a Show percentage checkbox for its
+center preview, off by default. Keep this display choice in memory for the app
+session. Right-click anywhere in the pane or use Shift+F10/Menu from a focused
+segment; dismissal restores the initiating chart control without adding a Tab
+stop. Close and block the menu during busy transitions. With percentages off,
+show only the name and inline number/unit; do not add a size-basis caption.
+List rows use `content-visibility: auto` with a 56-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
-through focus, find, and scrolling. File inspection realigns a list-origin
-selection after both the initial and final inspector layouts; chart-origin
+through focus, find, and scrolling. Their grid must shrink within the directory
+pane without horizontal scrolling. Compact row columns and secondary metadata
+follow the directory pane's inline size, not the window width; truncate long
+names and descriptions while retaining the size column. File inspection realigns
+a list-origin selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
-The list's primary and Reveal controls use roving row focus so a completed view
-contributes at most two sequential Tab stops rather than one for every retained
-control. Up/Down and Home/End preserve the action kind while moving; a row
-without Reveal falls back to its primary control without forgetting the Reveal
-intent, so moving again can return to Reveal. Preserve the associated screen-
-reader instructions and recover focus ownership when search results or the
-current directory change. Do not make all 500 rows and actions tabbable.
+Directory file/folder counts belong in a shadcn Tooltip on the existing row
+button, available on hover and keyboard focus even in compact panes. Keep them
+out of the default row copy. The tooltip shows only the file/folder counts, adds no
+Tab stop, and closes while navigation or the row context menu is active.
+Prefer placement below the row and wait one second on each hover, without skipping
+the delay when moving between rows. Keyboard focus still exposes the counts
+immediately. Ordinary files have no redundant File subtext; retain the explanatory
+subtext for symbolic links and other filesystem entries.
+Row sizes use the V2 study's compact number above a 60-pixel branch-colored gauge.
+Size the gauge against the current directory total using the selected size basis,
+including during search; clamp its fill and leave it empty for a zero-byte total.
+Keep the decorative SVG hidden from assistive technology and preserve compact
+pane sizing without horizontal overflow.
+The list's primary controls use roving row focus so a completed view contributes
+one sequential Tab stop rather than one for every retained row. Up/Down and
+Home/End move between rows. Reveal lives in a shadcn-svelte context menu opened
+by right-click, Shift+F10, or the Menu key; symlinks keep their existing exclusion.
+Keep the menu anchored to its selected row, retain the focused menu item with
+guarded `aria-disabled` while Reveal is pending, and reject repeat activation.
+Success closes the menu and restores row focus; failure closes it without taking
+focus from the contextual error. Escape dismisses the menu and restores row
+focus. A menu must close when its view becomes busy or its row disappears.
+Preserve the associated screen-reader instructions and recover focus ownership
+when search results or the current directory change. Do not make all 500 rows
+tabbable or restore a separate per-row Reveal button.
 Pending directory navigation and Reveal must not native-disable the control that
 owns focus. Keep chart segments, list, breadcrumb, Up, and recovery actions
 focusable with guarded `aria-disabled` state while their request is live; reject
@@ -275,7 +316,7 @@ settles. Desktop-shortcut and native-menu Up can begin while focus is elsewhere;
 move focus to the visible Up control before starting that request so it owns the
 pending interval, then move to the destination heading on success.
 Successful navigation moves focus to the visible directory-pane heading, while
-Reveal success leaves focus on its original action. The hidden `Storage map for`
+Reveal success returns focus to its originating row. The hidden `Storage map for`
 heading labels the chart but must never own transition focus; sighted keyboard
 users need a visible destination when the directory changes. Preserve the
 restrained pending opacity and wait cursor without dropping focus to the document
@@ -304,18 +345,34 @@ The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side throughout the native window's supported width range.
 Keep this primary analysis surface flat within the application window: the
-explorer has no outer border, corner radius, shadow, or shared card background.
+explorer has no outer border, shadow, or shared card background. Clip its contents
+to a 16-pixel outer corner radius, rounding the map's left corners and the list's
+right corners while keeping the internal divider straight.
 The chart retains its quiet surface, the ranked list retains its brighter card
 surface, and their single internal divider preserves the coordinated two-pane
 structure without making the explorer look like a nested window. At wider
 windows, let the result view reach its responsive outer gutters and let the
-explorer use the available viewport height. Cap only the chart column from 320
-through 520 logical pixels and give every remaining pixel to the ranked list;
+explorer use the available viewport height. Default the chart column to 320
+through 520 logical pixels and give the remaining space to the ranked list;
 do not restore the former 1,240-pixel result-width or 590-pixel explorer-height
 ceilings.
 From 560 through 720 logical pixels wide, use the compact two-column explorer;
-only browser previews below 560 pixels stack the panes. The narrow layout always
-compacts the result header; wider views do so at 560 logical pixels tall or less.
+only browser previews below 560 pixels stack the panes. The internal divider is
+draggable and keyboard focusable. Left/Right resize by 10 pixels (40 with Shift),
+Home/End move to its bounds, and Enter or double-click resets the responsive default.
+Keep at least 320 pixels for the list on ordinary desktop layouts, or 300 in the
+compact two-column layout; the chart minimum is 320 or 196 respectively and its
+maximum is 1,040. Clamp the displayed size on window resize without overwriting
+the user's preferred width. Keep that choice during directory navigation;
+returning Home resets it. Do not persist it across launches. Escape, pointer
+cancellation, lost capture, window blur, or a busy-view transition cancels a drag
+and releases capture. Hide the divider in stacked browser previews. Keep sizing
+inside the explorer component and update only its numeric CSS property through
+CSSOM; do not inject a runtime stylesheet or weaken the packaged CSP.
+On ordinary desktop layouts, let the radial map grow with the chart pane up to
+the available window-height allowance; do not restore its former 440-pixel cap.
+The narrow layout always compacts the result header; wider views do so at 560
+logical pixels tall or less.
 At the configured 620 by 480 minimum, keep the coverage warning action, map, and at least
 two ranked rows visible together without horizontal overflow. Validate both the
 configured minimum and default size when changing result spacing, column bounds,
@@ -362,13 +419,16 @@ must stay collapsed, and the early terminal event must not register as an
 unhandled page rejection. Its optional second fixture then starts a bounded long
 scan, activates Stop, requires the cancelled notice to own focus, and verifies that
 the landing scan entry points remain available. Preserve its one chart Tab
-stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
+stop, one list Tab stop, bounded initial and logical chart nodes, clean
 page-error capture, no horizontal overflow, backend disclosure, and state-file
 cleanup. After the matching search, it runs a real zero-match search and
 requires both the message panel and Clear action to remain fully inside the
 compact directory pane. It also exercises chart
-arrow/Home movement, list arrow movement for both the primary and Reveal action
-kinds, and Enter activation of a chart folder. It then returns Home, verifies
+arrow/Home movement, list arrow movement, keyboard opening and dismissal of the
+row context menu with focus restoration, divider keyboard resizing and reset
+under the packaged CSP, nested chart-to-row branch highlighting, and Enter
+activation of a chart folder.
+It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
 second scan in the same process with scan-heading and result-heading focus
 restored for both successful scans. Derive that
@@ -478,7 +538,7 @@ If navigation, metric switching, or Reveal fails, keep the raw cause in the
 collapsed `Error details`, preserve the current result, and retain only the
 scan-local opaque node/metric intent needed for Try again. A successful retry
 must restore focus to the opened view, the selected metric inside a reopened
-Details popover, or the original Reveal control rather than removing the focused
+Details popover, or the originating row for Reveal rather than removing the focused
 recovery button without a successor.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native

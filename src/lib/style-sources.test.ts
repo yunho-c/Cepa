@@ -42,24 +42,20 @@ describe("production style sources", () => {
   test("keeps pending explorer actions focused with guarded aria-disabled state", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const storageStart = component.indexOf('class="storage-item"');
-    const revealStart = component.indexOf('class="reveal-item"');
+    const menu = await Bun.file(new URL("./components/item-context-menu.svelte", import.meta.url)).text();
     const storageButton = component.slice(
       storageStart,
-      component.indexOf("</button>", storageStart),
-    );
-    const revealButton = component.slice(
-      revealStart,
-      component.indexOf("</button>", revealStart),
+      component.indexOf("</ItemContextMenu>", storageStart),
     );
 
     expect(storageStart).toBeGreaterThan(-1);
-    expect(revealStart).toBeGreaterThan(-1);
     expect(storageButton).toContain("aria-disabled={isResultBusy}");
     expect(storageButton).not.toMatch(/^\s*disabled=/m);
-    expect(revealButton).toContain(
-      "aria-disabled={isResultBusy || revealingNodeId !== null}",
-    );
-    expect(revealButton).not.toMatch(/^\s*disabled=/m);
+    expect(component).not.toContain('class="reveal-item"');
+    expect(menu).toContain("aria-disabled={busy || revealing}");
+    expect(menu).toContain("if (busy || revealing || !canReveal) return;");
+    expect(menu).toContain("disabled: _disabled");
+    expect(menu).toContain("event.preventDefault();");
   });
 
   test("keeps pending cancellation actions focused with guarded aria-disabled state", async () => {
@@ -248,7 +244,7 @@ describe("production style sources", () => {
       chartPaneStart,
       stylesheet.indexOf("}", chartPaneStart),
     );
-    const directoryPaneStart = stylesheet.indexOf(".directory-pane {");
+    const directoryPaneStart = stylesheet.indexOf("\n.directory-pane {") + 1;
     const directoryPane = stylesheet.slice(
       directoryPaneStart,
       stylesheet.indexOf("}", directoryPaneStart),
@@ -266,17 +262,17 @@ describe("production style sources", () => {
     expect(explorer).toContain("flex: 1");
     expect(explorer).toContain("min-height: 214px");
     expect(explorer).toContain(
-      "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
+      "grid-template-columns: var(--chart-width, clamp(320px, 32vw, 520px)) 1px minmax(0, 1fr)",
     );
     expect(explorer).not.toContain("590px");
     expect(explorer).not.toContain("border:");
-    expect(explorer).not.toContain("border-radius:");
+    expect(explorer).toContain("border-radius: 16px");
     expect(explorer).not.toContain("box-shadow:");
     expect(explorer).not.toContain("background:");
-    expect(chartPane).toContain("border-right: 1px solid var(--border)");
+    expect(chartPane).not.toContain("border-right:");
+    expect(stylesheet).toContain(".explorer-divider {");
     expect(chartPane).toContain("background: var(--quiet-surface)");
     expect(directoryPane).toContain("background: var(--card)");
-    expect(stylesheet).not.toContain(".explorer { border-radius:");
     expect(stylesheet).not.toContain(".result-summary");
   });
 
@@ -353,9 +349,13 @@ describe("production style sources", () => {
       "data-selected={activeEntry?.id === segment.item.id}",
     );
     expect(component).toContain("data-selected={activeEntry?.id === item.id}");
+    expect(component).toContain("data-branch-selected={activeBranch?.id === item.id}");
+    expect(component).toContain("data-color={chartBranches.get(item.id)?.colorIndex}");
     expect(stylesheet).toContain(
-      '.sunburst:has(path[data-selected="true"]) path:not([data-selected="true"]) { opacity: 0.36; }',
+      '.sunburst path[data-emphasis="dimmed"] { opacity: 0.24; }',
     );
+    expect(stylesheet).toContain('.sunburst path[data-emphasis="context"] { opacity: 0.5; }');
+    expect(component).toContain("data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}");
     expect(stylesheet).not.toContain(".sunburst:has(g:hover");
   });
 
@@ -396,7 +396,7 @@ describe("production style sources", () => {
     expect(chartHeading).not.toContain("viewHeading");
     expect(chartHeading).not.toContain("tabindex");
     expect(directoryHeadingStart).toBeGreaterThan(-1);
-    expect(directoryHeading).toContain("{view.displayName}");
+    expect(directoryHeading).toContain("{directoryView.displayName}");
   });
 
   test("keeps scan details popover out of live announcements", async () => {

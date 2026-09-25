@@ -12,7 +12,6 @@
     Folder,
     FolderDown,
     FolderOpen,
-    FolderSearch,
     Info,
     Link2,
     Search,
@@ -26,14 +25,12 @@
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import WindowTitlebar from "$lib/components/window-titlebar.svelte";
+  import ExplorerSplit from "$lib/components/explorer-split.svelte";
+  import ItemContextMenu from "$lib/components/item-context-menu.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
-  import {
-    listNavigationActionTarget,
-    listNavigationTarget,
-    type ListNavigationAction,
-  } from "$lib/list-navigation";
+  import { listNavigationTarget } from "$lib/list-navigation";
   import { inspectorAnnouncement } from "$lib/inspector-announcement";
   import {
     navigationRecoveryMessage,
@@ -91,7 +88,7 @@
     type DesktopCommandContext,
     type DesktopMenuAvailability,
   } from "$lib/shortcuts";
-  import { createSunburst, sunburstNavigationTarget } from "$lib/sunburst";
+  import { createSunburst, sunburstBranches, sunburstEmphasis, sunburstNavigationTarget } from "$lib/sunburst";
 
   const chartInteractionKeys = new Set([
     "Enter",
@@ -156,10 +153,10 @@
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartBackButton: HTMLButtonElement | null = $state(null);
   let chartFocusId: number | null = $state(null);
+  let showChartPercentage = $state(false);
   let itemListElement: HTMLDivElement | undefined = $state();
   let listFocusId: number | null = $state(null);
-  let listFocusAction: ListNavigationAction = "open";
-  let preservingListFocusAction = false;
+  let contextMenuEntry: ScanItem | null = $state(null);
   let stateNotice: HTMLDivElement | undefined = $state();
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
@@ -258,6 +255,7 @@
     scanProgressPresentation(displayProgress, status === "cancelling"),
   );
   const sunburstSegments = $derived(createSunburst(view?.chartItems ?? [], sizeMetric));
+  const chartBranches = $derived(sunburstBranches(view?.chartItems ?? []));
   $effect(() => {
     const interactiveIds = sunburstSegments.flatMap((segment) =>
       segment.item.id === null ? [] : [segment.item.id],
@@ -268,8 +266,12 @@
   });
   // Deliberate pointer movement may temporarily supersede keyboard focus. When
   // the pointer leaves, focus resumes ownership before the clicked inspection.
-  const activeEntry = $derived(pointerEntry ?? focusedEntry ?? inspectedEntry);
+  const activeEntry = $derived(contextMenuEntry ?? pointerEntry ?? focusedEntry ?? inspectedEntry);
+  const activeBranch = $derived(activeEntry?.id != null ? chartBranches.get(activeEntry.id) : undefined);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
+  const centerBytes = $derived(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes);
+  const centerSize = $derived(formatBytes(centerBytes).split(" "));
+  const resultSize = $derived(formatBytes(result?.allocatedBytes ?? 0).split(" "));
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const canEstimateSavings = $derived(
     inspectedEntry?.kind === "file" &&
@@ -334,34 +336,31 @@
     event: KeyboardEvent,
     itemId: number,
   ) {
-    if (
-      isResultBusy ||
-      (listFocusAction === "reveal" && revealingNodeId !== null)
-    ) return;
+    if (isResultBusy || revealingNodeId !== null) return;
     const targetId = listNavigationTarget(visibleItemIds, itemId, event.key);
     if (targetId === null) return;
 
     event.preventDefault();
     listFocusId = targetId;
     await tick();
-    const targetItem = visibleItems.find((item) => item.id === targetId);
-    const targetAction = listNavigationActionTarget(
-      listFocusAction,
-      targetItem !== undefined && targetItem.kind !== "symlink",
-    );
-    const target = itemListElement?.querySelector<HTMLElement>(
-      `[data-list-${targetAction}-id="${targetId}"]`,
-    );
-    preservingListFocusAction = true;
-    target?.focus();
-    preservingListFocusAction = false;
+    itemListElement?.querySelector<HTMLElement>(
+      `[data-list-open-id="${targetId}"]`,
+    )?.focus();
   }
 
-  function handleListFocus(item: ScanItem, action: ListNavigationAction) {
+  function handleListFocus(item: ScanItem) {
     listFocusId = item.id;
     focusedEntry = item;
     pointerEntry = null;
-    if (!preservingListFocusAction) listFocusAction = action;
+  }
+
+  function handleItemMenuChange(item: ScanItem, open: boolean) {
+    if (open) {
+      contextMenuEntry = item;
+      handleListFocus(item);
+    } else if (contextMenuEntry?.id === item.id) {
+      contextMenuEntry = null;
+    }
   }
 
   function clearFocusedEntry(itemId: number | null) {
@@ -970,11 +969,6 @@
     }
   }
 
-  function itemPercent(bytes: number): number {
-    if (bytes <= 0 || viewBytes <= 0) return 0;
-    return Math.max(0.8, Math.min(100, (bytes / viewBytes) * 100));
-  }
-
   function invalidateDirectorySearch() {
     if (searchTimer !== null) {
       clearTimeout(searchTimer);
@@ -1353,7 +1347,7 @@
     await tick();
     (
       itemListElement?.querySelector<HTMLElement>(
-        `[data-list-reveal-id="${nodeId}"]`,
+        `[data-list-open-id="${nodeId}"]`,
       ) ?? viewHeading
     )?.focus();
   }
@@ -1368,6 +1362,7 @@
   function invalidateCompletedScanRequests() {
     // Backend scan IDs authorize each command; these frontend generations also
     // prevent an older completion from mutating a newer UI lifecycle.
+    contextMenuEntry = null;
     navigationSequence += 1;
     isNavigating = false;
     navigationRetryInFlight = false;
@@ -1646,6 +1641,7 @@
     </main>
   {:else if result && view}
     {@const completedResult = result}
+    {@const directoryView = view}
     <main
       class="results-view"
       inert={dropOverlayVisible}
@@ -1789,7 +1785,7 @@
         </div>
         <div class="result-total">
           <span>Space on disk{result.allocatedSizeIsEstimate ? " (estimated)" : ""}</span>
-          <strong>{formatBytes(result.allocatedBytes)}</strong>
+          <strong>{resultSize[0]} <small>{resultSize[1]}</small></strong>
         </div>
       </section>
 
@@ -1863,16 +1859,12 @@
         </div>
       {/if}
 
-      <section
-        class="explorer"
-        aria-label="Storage map and folder contents"
-        aria-busy={isResultBusy}
-      >
-        <div class="chart-pane">
+      <ExplorerSplit busy={isResultBusy || dropOverlayVisible} bind:showPercentage={showChartPercentage}>
+        {#snippet chart()}
           <h2 class="sr-only">
-            Storage map for {view.displayName}
+            Storage map for {directoryView.displayName}
           </h2>
-          {#if view.path !== view.root}
+          {#if directoryView.path !== directoryView.root}
             <Button
               class="chart-back"
               variant="ghost"
@@ -1893,7 +1885,7 @@
                 viewBox="0 0 340 340"
                 role="group"
                 aria-busy={isResultBusy}
-                aria-label={`Storage map for ${view.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
+                aria-label={`Storage map for ${directoryView.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}
                 aria-describedby="sunburst-navigation-help"
                 bind:this={sunburstElement}
               >
@@ -1919,16 +1911,21 @@
                       <path
                         d={segment.pathData}
                         data-depth={segment.depth}
+                        data-branch-id={segment.branchId}
                         data-color={segment.colorIndex}
                         data-selected={activeEntry?.id === segment.item.id}
+                        data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
+                        data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}
                       />
                     </g>
                   {:else}
                     <path
                       d={segment.pathData}
                       data-depth={segment.depth}
+                      data-branch-id={segment.branchId}
                       data-color={segment.colorIndex}
-                      data-selected={activeEntry?.id === segment.item.id}
+                      data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
+                      data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}
                     />
                   {/if}
                 {/each}
@@ -1938,27 +1935,29 @@
             {/if}
 
             <div class="chart-center" aria-hidden="true">
-              <strong>{formatBytes(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes)}</strong>
-              <em>{activeEntry?.name ?? view.displayName}</em>
+              <em>{activeEntry?.name ?? directoryView.displayName}</em>
+              <strong>{centerSize[0]} <span class="chart-center-unit">{centerSize[1]}</span></strong>
+              {#if activeEntry && showChartPercentage}
+                <small>{formatPercent(centerBytes, viewBytes)}</small>
+              {/if}
             </div>
           </div>
 
           {#if sunburstSegments.length > 0}
             <p id="sunburst-navigation-help" class="sr-only">
-              Use the arrow keys to move between segments. Press Enter or Space to open the selected item.
+              Use the arrow keys to move between segments. Press Enter or Space to open the selected item. Press Shift+F10 or the Menu key for chart options.
             </p>
-            <p class="chart-help">Select a segment to explore it</p>
           {/if}
-        </div>
+        {/snippet}
 
-        <div class="directory-pane">
+        {#snippet directory()}
           <p
             class="sr-only inspector-status"
             aria-live="polite"
             aria-atomic="true"
           >{inspectorStatus}</p>
           <div class="section-heading">
-            <h2 tabindex="-1" bind:this={viewHeading}>{view.displayName}</h2>
+            <h2 tabindex="-1" bind:this={viewHeading}>{directoryView.displayName}</h2>
             <div class="section-actions">
               <span
                 id="directory-search-status"
@@ -1972,7 +1971,7 @@
                   <Input
                     type="search"
                     placeholder="Find in this folder"
-                    aria-label={`Find in ${view.displayName}`}
+                    aria-label={`Find in ${directoryView.displayName}`}
                     aria-describedby="directory-search-status"
                     maxlength={128}
                     autocomplete="off"
@@ -2149,95 +2148,81 @@
             </div>
           {:else if visibleItems.length > 0}
             <p id="directory-list-navigation-help" class="sr-only">
-              Use the Up and Down Arrow keys to move between items. Home and End jump to the first and last item. Press Enter to open a folder or show file details. When available, Tab once for the Reveal action.
+              Use the Up and Down Arrow keys to move between items. Home and End jump to the first and last item. Press Enter to open a folder or show file details. For files and folders, press Shift+F10 or the Menu key for actions.
             </p>
             <div
               class="item-list"
               class:is-navigating={isResultBusy || isSearching}
               role="list"
-              aria-label={`${view.displayName} contents`}
+              aria-label={`${directoryView.displayName} contents`}
               aria-describedby="directory-list-navigation-help"
               aria-busy={isSearching}
               bind:this={itemListElement}
             >
-              {#each visibleItems as item (item.id)}
-                <div
-                  class="storage-row"
-                  role="listitem"
-                  data-selected={activeEntry?.id === item.id}
-                  data-inspected={inspectedEntry?.id === item.id}
-                >
-                  <button
-                    type="button"
-                    class="storage-item"
-                    tabindex={listFocusId === item.id ? 0 : -1}
-                    data-list-open-id={item.id}
-                    aria-disabled={isResultBusy}
-                    onclick={(event) => activateEntry(item, event.currentTarget)}
-                    onpointermove={() => previewEntry(item)}
-                    onfocus={() => handleListFocus(item, "open")}
-                    onmouseleave={() => clearPointerEntry(item.id)}
-                    onblur={() => clearFocusedEntry(item.id)}
-                    onkeydown={(event) => handleListNavigation(event, item.id)}
-                    aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
+              <Tooltip.Provider delayDuration={1000} skipDelayDuration={0} disableHoverableContent>
+                {#each visibleItems as item (item.id)}
+                  <div
+                    class="storage-row"
+                    role="listitem"
+                    data-selected={activeEntry?.id === item.id}
+                    data-branch-selected={activeBranch?.id === item.id}
+                    data-color={chartBranches.get(item.id)?.colorIndex}
+                    data-inspected={inspectedEntry?.id === item.id}
                   >
-                    <span class="item-icon" data-kind={item.kind}>
-                      {#if item.kind === "directory"}
-                        <Folder />
-                      {:else if item.kind === "symlink"}
-                        <Link2 />
-                      {:else}
-                        <File />
-                      {/if}
-                    </span>
-                    <span class="item-copy">
-                      <strong title={item.name}>{item.name}</strong>
-                      <span>
-                        {describeEntry(item)}
-                      </span>
-                      <progress
-                        class="item-bar"
-                        max="100"
-                        value={itemPercent(metricBytes(item, sizeMetric))}
-                        aria-hidden="true"
-                      ></progress>
-                    </span>
-                    <span class="item-size">
-                      <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
-                      <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
-                    </span>
-                    {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
-                  </button>
-                  {#if item.kind !== "symlink"}
-                    <button
-                      type="button"
-                      class="reveal-item"
+                    <ItemContextMenu
+                      tooltip={item.kind === "directory" ? describeEntry(item) : undefined}
+                      canReveal={item.kind !== "symlink"}
+                      busy={isResultBusy || isSearching || dropOverlayVisible}
+                      revealing={revealingNodeId !== null}
+                      onreveal={() => revealItem(item.id)}
+                      onmenuopenchange={(open) => handleItemMenuChange(item, open)}
+                      class="storage-item"
                       tabindex={listFocusId === item.id ? 0 : -1}
-                      data-list-reveal-id={item.id}
-                      aria-disabled={isResultBusy || revealingNodeId !== null}
-                      aria-label={`Reveal ${item.name} in the system file manager`}
-                      title="Reveal in file manager"
-                      onclick={() => revealItem(item.id)}
+                      data-list-open-id={item.id}
+                      aria-disabled={isResultBusy}
+                      onclick={(event) => activateEntry(item, event.currentTarget)}
                       onpointermove={() => previewEntry(item)}
-                      onfocus={() => handleListFocus(item, "reveal")}
+                      onfocus={() => handleListFocus(item)}
                       onmouseleave={() => clearPointerEntry(item.id)}
                       onblur={() => clearFocusedEntry(item.id)}
                       onkeydown={(event) => handleListNavigation(event, item.id)}
+                      aria-label={`${item.name}, ${formatBytes(metricBytes(item, sizeMetric))}${item.kind === "directory" ? ", open folder" : ", show details"}`}
                     >
-                      <FolderSearch />
-                    </button>
-                  {/if}
-                </div>
-              {/each}
+                      <span class="item-icon" data-kind={item.kind}>
+                        {#if item.kind === "directory"}
+                          <Folder />
+                        {:else if item.kind === "symlink"}
+                          <Link2 />
+                        {:else}
+                          <File />
+                        {/if}
+                      </span>
+                      <span class="item-copy">
+                        <strong title={item.kind === "directory" ? undefined : item.name}>{item.name}</strong>
+                        {#if item.kind === "symlink" || item.kind === "other"}
+                          <span>{describeEntry(item)}</span>
+                        {/if}
+                      </span>
+                      <span class="item-size">
+                        <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
+                        <svg viewBox="0 0 72 3" aria-hidden="true">
+                          <rect class="item-gauge-track" width="72" height="3" rx="1.5" />
+                          <rect width={viewBytes > 0 ? 72 * Math.min(1, Math.max(0, metricBytes(item, sizeMetric) / viewBytes)) : 0} height="3" rx="1.5" />
+                        </svg>
+                      </span>
+                    </ItemContextMenu>
+                  </div>
+                {/each}
+              </Tooltip.Provider>
             </div>
           {:else}
             <div class="empty-result">
               <Folder />
-              <strong>{view.suppressedItems > 0 ? "No items to show" : "This folder is empty"}</strong>
+              <strong>{directoryView.suppressedItems > 0 ? "No items to show" : "This folder is empty"}</strong>
             </div>
           {/if}
-        </div>
-      </section>
+        {/snippet}
+      </ExplorerSplit>
 
     </main>
   {/if}

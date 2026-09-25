@@ -249,11 +249,17 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["logicalChartTabStops"].as_u64() == Some(1)
         && report["chartArrowMoved"].as_bool() == Some(true)
         && report["chartHomeMoved"].as_bool() == Some(true)
+        && report["chartBranchCoordinated"].as_bool() == Some(true)
         && report["listTabStops"]
             .as_u64()
-            .is_some_and(|count| count <= 2)
+            .is_some_and(|count| count == 1)
         && report["listArrowMoved"].as_bool() == Some(true)
-        && report["revealArrowPreserved"].as_bool() == Some(true)
+        && report["contextMenuKeyboardAccessible"].as_bool() == Some(true)
+        && report["rowCountsTooltipAccessible"].as_bool() == Some(true)
+        && report["splitterKeyboardAccessible"].as_bool() == Some(true)
+        && report["splitterPolicyViolations"]
+            .as_array()
+            .is_some_and(Vec::is_empty)
         && report["horizontalOverflow"].as_bool() == Some(false)
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
@@ -330,8 +336,13 @@ void (async () => {{
   const failureFixture = {failure_fixture_json};
   const completedScanId = {completed_scan_id};
   const pageErrors = [];
+  const splitterPolicyViolations = [];
+  let checkingSplitter = false;
   window.addEventListener('error', (event) => pageErrors.push(String(event.error || event.message)));
   window.addEventListener('unhandledrejection', (event) => pageErrors.push(String(event.reason)));
+  window.addEventListener('securitypolicyviolation', (event) => {{
+    if (checkingSplitter) splitterPolicyViolations.push(event.effectiveDirective);
+  }});
   const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
   const painted = async () => {{ await frame(); await frame(); }};
@@ -526,7 +537,67 @@ void (async () => {{
       chartCenter?.getAttribute('aria-hidden') === 'true'
       && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
-    const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
+    const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"]').length;
+    const folderTooltipTrigger = document.querySelector('.storage-item[data-tooltip-trigger]');
+    if (!folderTooltipTrigger) throw new Error('The completion fixture needs a folder row.');
+    folderTooltipTrigger.focus();
+    const folderTooltip = await waitFor(
+      () => document.querySelector('.row-details-tooltip'),
+      'keyboard-focused folder counts tooltip',
+    );
+    const rowCountsTooltipAccessible =
+      folderTooltip.id.length > 0
+      && folderTooltip.getAttribute('role') === 'tooltip'
+      && folderTooltipTrigger.getAttribute('aria-describedby') === folderTooltip.id
+      && folderTooltipTrigger.querySelector('.item-copy > span') === null
+      && /files.*folders/.test(folderTooltip.textContent)
+      && folderTooltip.querySelector('[aria-live], [role="status"], [role="alert"]') === null
+      && !folderTooltipTrigger.disabled;
+    const nestedPath = document.querySelector('.sunburst g path[data-depth="1"]');
+    if (!nestedPath) throw new Error('The completion fixture needs a nested chart segment.');
+    nestedPath.parentElement.focus();
+    await painted();
+    const branchId = nestedPath.getAttribute('data-branch-id');
+    const branchRow = [...document.querySelectorAll('.storage-item')]
+      .find((row) => row.getAttribute('data-list-open-id') === branchId)?.closest('.storage-row');
+    const branchPaths = [...document.querySelectorAll('.sunburst path')]
+      .filter((path) => path.getAttribute('data-branch-id') === branchId);
+    const chartBranchCoordinated = branchId !== null && branchPaths.length > 1
+      && branchRow?.getAttribute('data-branch-selected') === 'true'
+      && branchRow.getAttribute('data-color') === nestedPath.getAttribute('data-color')
+      && branchPaths.every((path) => path.getAttribute('data-branch-selected') === 'true'
+        && path.getAttribute('data-color') === nestedPath.getAttribute('data-color'))
+      && nestedPath.getAttribute('data-emphasis') === 'full'
+      && branchPaths.find((path) => path.getAttribute('data-depth') === '0')
+        ?.getAttribute('data-emphasis') === 'context'
+      && [...document.querySelectorAll('.sunburst path')]
+        .filter((path) => path.getAttribute('data-branch-id') !== branchId)
+        .every((path) => path.getAttribute('data-emphasis') === 'dimmed')
+      && [...document.querySelectorAll('.sunburst path[data-branch-selected="true"]')]
+        .every((path) => path.getAttribute('data-branch-id') === branchId);
+    checkingSplitter = true;
+    const splitter = document.querySelector('.explorer-divider');
+    const chartPane = document.querySelector('.chart-pane');
+    const splitDirectoryPane = document.querySelector('.directory-pane');
+    const chartWidth = () => chartPane.getBoundingClientRect().width;
+    const defaultChartWidth = chartWidth();
+    splitter.focus();
+    await press(splitter, 'ArrowRight');
+    const splitterArrowMoved = chartWidth() > defaultChartWidth + 5;
+    await press(splitter, 'End');
+    const splitterMaximumBounded = chartWidth() <= 1040.5
+      && splitDirectoryPane.getBoundingClientRect().width >= 299.5;
+    await press(splitter, 'Home');
+    const splitterMinimumBounded = chartWidth() >= 195.5 && chartWidth() <= defaultChartWidth;
+    await press(splitter, 'Enter');
+    const splitterKeyboardAccessible = splitterArrowMoved && splitterMaximumBounded
+      && splitterMinimumBounded && Math.abs(chartWidth() - defaultChartWidth) < 1
+      && document.activeElement === splitter
+      && splitter.getAttribute('role') === 'separator'
+      && splitter.getAttribute('aria-orientation') === 'vertical'
+      && splitter.getAttribute('aria-controls') === chartPane.id;
+    await painted();
+    checkingSplitter = false;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
     const scanDetailsTrigger = document.querySelector('.result-info-action');
     const scanDetailsPresent = scanDetailsTrigger !== null;
@@ -584,16 +655,33 @@ void (async () => {{
     const chartHomeMoved = chartHomeTarget?.dataset.chartNodeId === chartNodes[0].dataset.chartNodeId;
 
     const openButtons = [...document.querySelectorAll('.storage-item')];
-    const revealButtons = [...document.querySelectorAll('.reveal-item')];
-    if (openButtons.length < 2 || revealButtons.length < 2) {{
-      throw new Error('The directory list needs two open and Reveal keyboard targets.');
+    if (openButtons.length < 2) {{
+      throw new Error('The directory list needs two keyboard targets.');
     }}
     openButtons[0].focus();
     const listArrowTarget = await press(openButtons[0], 'ArrowDown');
     const listArrowMoved = listArrowTarget?.dataset.listOpenId === openButtons[1].dataset.listOpenId;
-    revealButtons[0].focus();
-    const revealArrowTarget = await press(revealButtons[0], 'ArrowDown');
-    const revealArrowPreserved = revealArrowTarget?.dataset.listRevealId === revealButtons[1].dataset.listRevealId;
+    const menuTrigger = openButtons.find((button) => button.getAttribute('aria-haspopup') === 'menu');
+    if (!menuTrigger) throw new Error('The directory list needs a context menu target.');
+    menuTrigger.focus();
+    await press(menuTrigger, 'ContextMenu');
+    const rowMenu = await waitFor(() => document.querySelector('.item-context-menu'), 'row context menu');
+    const revealAction = rowMenu.querySelector('[role="menuitem"]');
+    await press(rowMenu, 'ArrowDown');
+    const revealMenuFocused = document.activeElement === revealAction;
+    await press(revealAction, 'Escape');
+    await waitFor(() => document.querySelector('.item-context-menu') === null, 'closed row context menu');
+    await waitFor(() => document.activeElement === menuTrigger, 'context menu return focus');
+    const expectedRevealLabel = /Mac/i.test(navigator.platform)
+      ? 'Reveal in Finder'
+      : /Win/i.test(navigator.platform)
+        ? 'Show in File Explorer'
+        : 'Show in file manager';
+    const contextMenuKeyboardAccessible =
+      revealMenuFocused
+      && revealAction.textContent?.trim() === expectedRevealLabel
+      && document.activeElement === menuTrigger
+      && document.querySelector('.reveal-item') === null;
 
     const navigationStartedAt = performance.now();
     phase('navigating');
@@ -786,9 +874,13 @@ void (async () => {{
       logicalChartTabStops,
       chartArrowMoved,
       chartHomeMoved,
+      chartBranchCoordinated,
       listTabStops,
       listArrowMoved,
-      revealArrowPreserved,
+      contextMenuKeyboardAccessible,
+      rowCountsTooltipAccessible,
+      splitterKeyboardAccessible,
+      splitterPolicyViolations,
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       metricDetailsStayedOpen,
@@ -884,9 +976,13 @@ mod tests {
             "logicalChartTabStops": 1,
             "chartArrowMoved": true,
             "chartHomeMoved": true,
-            "listTabStops": 2,
+            "chartBranchCoordinated": true,
+            "listTabStops": 1,
             "listArrowMoved": true,
-            "revealArrowPreserved": true,
+            "contextMenuKeyboardAccessible": true,
+            "rowCountsTooltipAccessible": true,
+            "splitterKeyboardAccessible": true,
+            "splitterPolicyViolations": [],
             "horizontalOverflow": false,
             "pageErrors": [],
             "logicalMetricSelected": true,
@@ -943,8 +1039,24 @@ mod tests {
         assert!(!validate_report(&overlapping_titlebar, 2));
 
         let mut broken_keyboard = complete.clone();
-        broken_keyboard["revealArrowPreserved"] = false.into();
+        broken_keyboard["contextMenuKeyboardAccessible"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
+
+        let mut missing_row_tooltip = complete.clone();
+        missing_row_tooltip["rowCountsTooltipAccessible"] = false.into();
+        assert!(!validate_report(&missing_row_tooltip, 2));
+
+        let mut broken_splitter = complete.clone();
+        broken_splitter["splitterKeyboardAccessible"] = false.into();
+        assert!(!validate_report(&broken_splitter, 2));
+
+        let mut broken_branch = complete.clone();
+        broken_branch["chartBranchCoordinated"] = false.into();
+        assert!(!validate_report(&broken_branch, 2));
+
+        let mut blocked_splitter_style = complete.clone();
+        blocked_splitter_style["splitterPolicyViolations"] = serde_json::json!(["style-src-attr"]);
+        assert!(!validate_report(&blocked_splitter_style, 2));
 
         let mut broad_inspector_live_region = complete.clone();
         broad_inspector_live_region["inspectorLiveRegionScoped"] = false.into();
