@@ -99,8 +99,8 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - A coordinated map-and-list explorer that remains side by side in the default
   880 by 620 window and throughout the supported desktop range down to the
   configured 620 by 480 minimum
-- System-synchronized light and dark appearance, including live operating-system
-  changes and theme-aware chart, warning, and native-window surfaces
+- System-synchronized light and dark appearance, with a sun/moon toggle beside Info
+  for a session-only override and theme-aware chart, warning, and window surfaces
 - An integrated, draggable title bar with native macOS traffic lights and compact
   Windows/Linux minimize, maximize/restore, and close controls
 - Cross-platform restoration of the last stable window size, on-screen position,
@@ -385,9 +385,11 @@ The two estimate-cancel scenarios cover an immediate failed stop request and a
 late failure delivered after the estimate has already completed.
 The drop preview is visual only; use `just dev` and drag a real folder from the
 platform file manager to validate the native window event. During frontend
-development, `?appearance=dark` or `?appearance=light` fixes the preview
-appearance without adding a production preference; production follows the
-operating system and updates live.
+development, `?appearance=dark` or `?appearance=light` sets the initial preview
+appearance independently of the system. The analysis header's sun/moon toggle
+sits immediately to the right of Info. The app follows the operating system
+until that toggle is used; a manual
+choice stays through navigation and scans, then resets to the system on relaunch.
 
 On Linux, the ignored Btrfs metadata fixture can be run against any writable
 directory on a mounted Btrfs filesystem. It creates and removes one isolated

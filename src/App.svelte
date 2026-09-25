@@ -14,7 +14,9 @@
     FolderOpen,
     Info,
     Link2,
+    Moon,
     Search,
+    Sun,
     TriangleAlert,
     X,
   } from "@lucide/svelte";
@@ -23,6 +25,7 @@
   import * as Popover from "$lib/components/ui/popover";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import type { AppStatus } from "$lib/app-shell";
+  import type { AppearanceController } from "$lib/appearance";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import WindowTitlebar from "$lib/components/window-titlebar.svelte";
   import ExplorerSplit from "$lib/components/explorer-split.svelte";
@@ -89,6 +92,9 @@
     type DesktopMenuAvailability,
   } from "$lib/shortcuts";
   import { createSunburst, sunburstBranches, sunburstEmphasis, sunburstNavigationTarget } from "$lib/sunburst";
+
+  let { appearance }: { appearance: AppearanceController } = $props();
+  const appearanceLabel = $derived($appearance ? "Switch to light mode" : "Switch to dark mode");
 
   const chartInteractionKeys = new Set([
     "Enter",
@@ -1803,6 +1809,16 @@
               </dl>
             </Popover.Content>
           </Popover.Root>
+          <Button
+            class="appearance-toggle"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={appearanceLabel}
+            title={appearanceLabel}
+            onclick={() => { if (!dropOverlayVisible) appearance.toggle(); }}
+          >
+            {#if $appearance}<Sun aria-hidden="true" />{:else}<Moon aria-hidden="true" />{/if}
+          </Button>
         </div>
       </section>
 
