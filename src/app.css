@@ -716,6 +716,7 @@ body {
 .sunburst g:focus-visible path { stroke: var(--foreground); stroke-width: 2; }
 .chart-center { position: absolute; width: 42%; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
 .chart-center strong { max-width: 94%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(16px, 9cqw, 42px); line-height: 1.35; font-weight: 450; letter-spacing: -0.055em; font-variant-numeric: tabular-nums; }
+.chart-center-unit { color: var(--muted-foreground); font-size: 0.45em; letter-spacing: 0; }
 .chart-center em { max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: clamp(8px, 2.5cqw, 11px); font-style: normal; }
 .chart-center small { max-width: 94%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: clamp(8px, 2.5cqw, 11px); }
 .chart-empty { width: 76%; aspect-ratio: 1; border: 1px dashed var(--border); border-radius: 50%; display: grid; place-items: center; color: var(--muted-foreground); }

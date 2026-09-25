@@ -1930,8 +1930,8 @@
 
             <div class="chart-center" aria-hidden="true">
               <em>{activeEntry?.name ?? directoryView.displayName}</em>
-              <strong>{centerSize[0]}</strong>
-              <small>{centerSize[1]}{activeEntry ? ` · ${formatPercent(centerBytes, viewBytes)}` : sizeMetric === "allocated" ? " on disk" : " logical"}</small>
+              <strong>{centerSize[0]} <span class="chart-center-unit">{centerSize[1]}</span></strong>
+              <small>{activeEntry ? formatPercent(centerBytes, viewBytes) : sizeMetric === "allocated" ? "on disk" : "logical"}</small>
             </div>
           </div>
 
