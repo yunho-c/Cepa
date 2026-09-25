@@ -232,8 +232,11 @@ from that same selected-entry state; raw CSS `:hover` must not
 reintroduce a visual preview that disagrees with the coordinated map/list state.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
-through focus, find, and scrolling. File inspection realigns a list-origin
-selection after both the initial and final inspector layouts; chart-origin
+through focus, find, and scrolling. Their grid must shrink within the directory
+pane without horizontal scrolling. Compact row columns and secondary metadata
+follow the directory pane's inline size, not the window width; truncate long
+names and descriptions while retaining the size column. File inspection realigns
+a list-origin selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
 The list's primary controls use roving row focus so a completed view contributes
 one sequential Tab stop rather than one for every retained row. Up/Down and
