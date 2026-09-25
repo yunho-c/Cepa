@@ -107,6 +107,75 @@ rather than silently claiming complete path accounting.
 - Sockets, devices, and other special entries are listed as `other` and
   contribute no bytes.
 
+## Cloud-backed storage on macOS
+
+Scanning never intentionally downloads cloud content. Both `getattrlistbulk`
+and the macOS `jwalk` fallback install Darwin's thread-local
+`IOPOL_MATERIALIZE_DATALESS_FILES_OFF` policy before root resolution and on every
+worker. A failure to install protection fails the scan rather than retrying
+unprotected. The previous policy is restored when the thread leaves its scan
+scope. This follows [Apple TN3150](https://developer.apple.com/documentation/technotes/tn3150-getting-ready-for-data-less-files).
+
+Entries marked `SF_DATALESS` are omitted before retention or directory descent.
+The flag can apply to directories and document packages as well as regular
+files. Downloaded files inside iCloud, Google Drive, or other provider folders
+are still counted normally; there is no provider-name or path blacklist.
+A cloud-only selected root is rejected, and intermediate path resolution is
+protected too. If an item becomes dataless after discovery, the OS policy blocks
+materialization; `EDEADLK` from protected traversal is an intentional cloud
+exclusion rather than a permission failure. Other IO failures keep their normal
+unavailable-item treatment.
+
+`skippedCloudEntries` counts observed placeholder entries or blocked directory
+reads, not the unknown number of descendants in excluded subtrees. Details
+shows **Cloud-only items skipped** when that count is nonzero. Known placeholders
+are absent from the list and chart rather than shown as empty folders or included
+in logical totals. Totals describe the reachable local files; a concurrently
+evicted directory can already have a retained node or partially observed children.
+Placeholder metadata, provider caches, and local content hidden beneath a
+non-enumerable directory are not a complete accounting of provider disk usage.
+
+This protection covers macOS APFS dataless/File Provider semantics. It does not
+establish a no-network guarantee for arbitrary network mounts or proprietary
+virtual filesystems. Windows recall attributes and Linux provider-specific
+behavior are not implemented by this macOS change.
+
+A read-only integration test accepts a small existing cloud directory containing
+already-evicted entries. It checks both backends, rejects placeholder roots and
+paths through them, and verifies that the original placeholders remain dataless
+with unchanged identity, allocated blocks, and regular-file lengths. Directory
+`st_size` is not payload size and may change after a protected enumeration
+refusal. The test also sends one evicted directory directly to a native worker
+to exercise the protection independently of preflight filtering. It never creates, evicts, or
+modifies cloud files:
+
+```sh
+CEPA_CLOUD_FIXTURE_ROOT="/path/to/small/cloud/folder" RUSTC_WRAPPER="" CARGO_BUILD_RUSTC_WRAPPER="" \
+  cargo test --manifest-path src-tauri/Cargo.toml --no-default-features \
+  real_cloud_placeholders_remain_evicted_on_both_backends -- --ignored --nocapture
+```
+
+Host validation on 2026-09-22 (macOS arm64) exercised both production scanner
+backends through that debug integration test. Both returned the same figures:
+
+| Existing provider tree | Cloud exclusions | Local files | Allocated bytes |
+| --- | ---: | ---: | ---: |
+| iCloud Books documents | 59 | 455 | 6,488,064 |
+| Google Drive My Drive | 505,207 | 2,145 | 2,582,552,576 |
+
+The checked placeholders remained dataless. The native worker refused direct
+enumeration of an evicted directory with `EDEADLK`. These are live-tree scan
+observations, not matched performance comparisons, complete-volume accounting,
+or provider-independent guarantees. The ordinary `just check` gate passed 79
+frontend and 141 Rust tests, plus formatting, type checking, and Clippy.
+The production-protocol native WebView smoke at 620 by 480 also passed on a
+disposable 1,025-file fixture, with no page errors, correct focus and Tab bounds,
+metric switching, navigation, matching/empty searches, Home snapshot release,
+and a second scan. Its first run timed out at the no-match-search step; an
+unchanged retry passed. The cause of that first timeout was not established.
+Optional cancellation and terminal-failure preflights were not supplied for
+this smoke run; its default-true report fields are not evidence for those flows.
+
 ## Errors and concurrent changes
 
 Permission failures, entries that disappear during traversal, and recoverable

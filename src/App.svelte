@@ -1744,6 +1744,9 @@
                 <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
                 <div><dt>Items not included</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
                 <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
+                {#if result.skippedCloudEntries > 0}
+                  <div><dt>Cloud-only items skipped</dt><dd>{formatCount(result.skippedCloudEntries)}</dd></div>
+                {/if}
                 {#if result.duplicateHardLinks > 0}
                   <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>
                 {/if}

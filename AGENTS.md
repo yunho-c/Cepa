@@ -45,6 +45,15 @@ regressions when changing this state machine.
 Each falls back to `jwalk` when its native API is unavailable or unsuitable;
 Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
+On macOS, protect root resolution and every native or fallback scanner worker
+with the thread-local no-materialization policy in `scanner/local_only.rs`.
+Fail closed if that policy cannot be installed; never retry unprotected.
+Exclude dataless entries before retention and descent, and count them separately
+through `skippedCloudEntries` in quiet Details. Downloaded provider files remain
+ordinary local files: do not blacklist iCloud or Google Drive folder names.
+Keep the scoped policy restoration, protected fallback pool, and opt-in real
+cloud fixture test. This is macOS APFS/File Provider protection, not Windows,
+Linux, or arbitrary network-provider qualification.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row. Do not restore a live largest-files list
 or its empty placeholder; the scan state should stay focused on overall progress.

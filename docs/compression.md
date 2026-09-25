@@ -326,7 +326,10 @@ link counts to agree with each other and the prepared revision. Preparation also
 reads the complete retained file with positioned reads and stores a BLAKE3
 digest. Revalidation recomputes it, with metadata snapshots before and after the
 read, and rechecks the path binding afterward. The working buffer is fixed at
-1 MiB, reads do not disturb the held handle's cursor, and a newer plan, new scan,
+1 MiB. On Windows, each hash reopens the retained object with `ReOpenFile` for
+an independent read-only cursor; it never reopens the file by path or duplicates
+the shared cursor. Reads do not disturb the held handle's cursor, including on
+cancellation and failure. A newer plan, new scan,
 or Home transition cancels work between chunks. It returns `valid`, `changed`,
 or `unavailable`; regular-file replacement, unlink, symlink replacement,
 same-length mutation, a simulated metadata collision, positioned-read, and

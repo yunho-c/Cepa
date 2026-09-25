@@ -1,3 +1,4 @@
+use super::local_only;
 use super::{
     EntryKind, FileIdentity, InternalNode, MeasuredMetadata, PartialRanking, ScanCounters,
     ScanOutput, ScanPhase, ScanProgress, ScanSemantics, TraversalProgressClock, finish_scan,
@@ -40,6 +41,7 @@ struct NativeEntry {
     measured: MeasuredMetadata,
     entry_error: u32,
     mount_point: bool,
+    dataless: bool,
     firmlink: bool,
     can_enforce_mount_boundary: bool,
 }
@@ -65,6 +67,7 @@ enum WorkerMessage {
         entries: Vec<NativeEntry>,
     },
     Complete,
+    ProtectionFailed(String),
     Failed(DirectoryReadError),
 }
 
@@ -76,15 +79,9 @@ pub(super) fn scan_path<F>(
 where
     F: FnMut(ScanProgress),
 {
-    let root = root
-        .canonicalize()
-        .map_err(|error| fatal(format!("Could not open {}: {error}", root.display())))?;
-    let root_metadata = root
-        .metadata()
-        .map_err(|error| fatal(format!("Could not read {}: {error}", root.display())))?;
-    if !root_metadata.is_dir() {
-        return Err(fatal("Choose a directory to scan."));
-    }
+    let _local_only = local_only::NoMaterialization::new()
+        .map_err(|error| fatal(local_only::protection_error(error)))?;
+    let (root, _) = super::validate_scan_root(root).map_err(fatal)?;
     if cancel.load(Ordering::Relaxed) {
         return Err(fatal("Scan cancelled."));
     }
@@ -270,9 +267,18 @@ where
                     }
                 }
                 Ok(WorkerMessage::Complete) => outstanding -= 1,
+                Ok(WorkerMessage::ProtectionFailed(error)) => {
+                    result = Err(fatal(error));
+                    break;
+                }
                 Ok(WorkerMessage::Failed(read_error)) => {
                     outstanding -= 1;
                     match read_error {
+                        DirectoryReadError::Io(error)
+                            if local_only::materialization_blocked(&error) =>
+                        {
+                            counters.skipped_cloud_entries += 1;
+                        }
                         DirectoryReadError::Io(_) => counters.skipped_entries += 1,
                         DirectoryReadError::Parse(error) => {
                             result = Err(fatal(error));
@@ -309,6 +315,15 @@ fn spawn_worker<'scope, 'env: 'scope>(
     cancel: &'scope AtomicBool,
 ) {
     scope.spawn(move || {
+        let _local_only = match local_only::NoMaterialization::new() {
+            Ok(guard) => guard,
+            Err(error) => {
+                let _ = result_sender.send(WorkerMessage::ProtectionFailed(
+                    local_only::protection_error(error),
+                ));
+                return;
+            }
+        };
         let mut buffer = vec![0_u64; BUFFER_SIZE / size_of::<u64>()];
         let mut attribute_list = requested_attributes();
         loop {
@@ -391,6 +406,10 @@ where
     for entry in entries {
         if cancel.load(Ordering::Relaxed) {
             return Err(fatal("Scan cancelled."));
+        }
+        if entry.dataless || entry.entry_error == libc::EDEADLK as u32 {
+            counters.skipped_cloud_entries += 1;
+            continue;
         }
         if entry.entry_error != 0 {
             counters.skipped_entries += 1;
@@ -626,6 +645,8 @@ fn parse_entry(record: &[u8]) -> Result<NativeEntry, String> {
             metadata_error: matches!(kind, EntryKind::File) && !file_attributes_valid,
         },
         entry_error,
+        dataless: returned.commonattr & libc::ATTR_CMN_FLAGS != 0
+            && flags & local_only::SF_DATALESS != 0,
         mount_point: matches!(kind, EntryKind::Directory)
             && returned.dirattr & libc::ATTR_DIR_MOUNTSTATUS != 0
             && mount_status & libc::DIR_MNTSTATUS_MNTPOINT != 0,
@@ -700,8 +721,123 @@ fn fatal(error: impl Into<String>) -> NativeScanError {
 }
 
 #[cfg(test)]
+pub(super) fn assert_worker_blocks_evicted_directory(path: &Path) {
+    // Model eviction after scheduling: bypass the entry flag filter and send
+    // a real dataless directory to the production worker. Its policy, not the
+    // preflight check or a policy on the test thread, must prevent enumeration.
+    let (tasks, receiver) = channel::bounded(1);
+    let (sender, results) = channel::bounded(1);
+    let abort = AtomicBool::new(false);
+    let cancel = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        spawn_worker(scope, receiver, sender, &abort, &cancel);
+        tasks
+            .send(DirectoryTask {
+                path: Arc::from(path),
+                parent_id: 0,
+            })
+            .unwrap();
+        let result = results.recv_timeout(Duration::from_secs(5));
+        abort.store(true, Ordering::Relaxed);
+        drop(tasks);
+        drop(results);
+        assert!(
+            matches!(result, Ok(WorkerMessage::Failed(DirectoryReadError::Io(ref error)))
+            if local_only::materialization_blocked(error)),
+            "unexpected worker result: {result:?}"
+        );
+    });
+}
+
+#[cfg(test)]
 mod tests {
-    use super::parse_entries;
+    use super::*;
+
+    // A packed getattrlistbulk record, including the variable directory/file
+    // attribute groups. Exercise flags through parsing AND task scheduling.
+    fn entry_record(name: &str, directory: bool, flags: u32, error: u32) -> Vec<u8> {
+        let attrs = requested_attributes();
+        let mut record = vec![0; 4];
+        for word in [attrs.commonattr, 0, attrs.dirattr, attrs.fileattr, 0, error] {
+            record.extend(word.to_ne_bytes());
+        }
+        let reference = record.len();
+        record.extend([0; 8]);
+        record.extend(1_i32.to_ne_bytes()); // device
+        record.extend(if directory { VDIR } else { VREG }.to_ne_bytes());
+        record.extend([0; 2 * size_of::<libc::timespec>()]);
+        record.extend(flags.to_ne_bytes());
+        record.extend(42_u64.to_ne_bytes());
+        if directory {
+            record.extend(0_u32.to_ne_bytes());
+        } else {
+            record.extend(1_u32.to_ne_bytes());
+            record.extend(123_i64.to_ne_bytes());
+            record.extend(4096_i64.to_ne_bytes());
+        }
+        let offset = (record.len() - reference) as i32;
+        record[reference..reference + 4].copy_from_slice(&offset.to_ne_bytes());
+        record[reference + 4..reference + 8]
+            .copy_from_slice(&((name.len() + 1) as u32).to_ne_bytes());
+        record.extend(name.as_bytes());
+        record.push(0);
+        let len = record.len() as u32;
+        record[..4].copy_from_slice(&len.to_ne_bytes());
+        record
+    }
+
+    #[test]
+    fn excludes_cloud_records_before_retention_and_scheduling() {
+        let entries = [
+            ("cloud.epub", true, local_only::SF_DATALESS, 0),
+            ("cloud.pdf", false, local_only::SF_DATALESS, 0),
+            ("evicted-during-read", true, 0, libc::EDEADLK as u32),
+            ("denied", true, 0, libc::EACCES as u32),
+            ("downloaded.pdf", false, 0, 0),
+            ("Google Drive", true, 0, 0),
+        ]
+        .into_iter()
+        .map(|(name, dir, flags, error)| {
+            parse_entries(&entry_record(name, dir, flags, error), 1)
+                .unwrap()
+                .remove(0)
+        })
+        .collect();
+        let mut nodes = vec![InternalNode::root(Path::new("/fixture"))];
+        let mut counters = ScanCounters::default();
+        let mut pending = Vec::new();
+        assert!(
+            ingest_entries(
+                entries,
+                Path::new("/fixture"),
+                0,
+                &mut nodes,
+                &mut counters,
+                &mut PartialRanking::default(),
+                &mut pending,
+                &mut TraversalProgressClock::new(Instant::now()),
+                Instant::now(),
+                &AtomicBool::new(false),
+                &mut |_| {}
+            )
+            .is_ok()
+        );
+        assert_eq!(counters.skipped_cloud_entries, 3);
+        assert_eq!(counters.skipped_entries, 1);
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].path.as_ref(), Path::new("/fixture/Google Drive"));
+        assert_eq!(counters.observed_logical_bytes, 123);
+        assert_eq!(counters.observed_allocated_bytes, 4096);
+    }
+
+    #[test]
+    fn ignores_unreturned_dataless_flags() {
+        let mut record = entry_record("local", true, local_only::SF_DATALESS, 0);
+        let common = requested_attributes().commonattr & !libc::ATTR_CMN_FLAGS;
+        record[4..8].copy_from_slice(&common.to_ne_bytes());
+        assert!(!parse_entries(&record, 1).unwrap()[0].dataless);
+    }
 
     #[test]
     fn rejects_truncated_attribute_records() {

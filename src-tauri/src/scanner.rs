@@ -27,6 +27,9 @@ type RetainedScanRevision = ScannedFileRevision;
 #[path = "scanner/linux.rs"]
 mod linux;
 #[cfg(target_os = "macos")]
+#[path = "scanner/local_only.rs"]
+mod local_only;
+#[cfg(target_os = "macos")]
 #[path = "scanner/macos.rs"]
 mod macos;
 #[cfg(any(target_os = "windows", test))]
@@ -73,10 +76,7 @@ impl TraversalProgressClock {
     fn should_check_clock(&mut self) -> bool {
         debug_assert_ne!(self.entries_until_check, 0);
         self.entries_until_check -= 1;
-        if self.entries_until_check != 0 {
-            return false;
-        }
-        true
+        self.entries_until_check == 0
     }
 
     fn update_due_at(&mut self, now: Instant) -> bool {
@@ -233,6 +233,7 @@ pub struct ScanResult {
     pub directory_count: u64,
     pub skipped_entries: u64,
     pub skipped_filesystems: u64,
+    pub skipped_cloud_entries: u64,
     pub duplicate_hard_links: u64,
     pub traversal_us: u64,
     pub aggregation_us: u64,
@@ -264,6 +265,7 @@ impl ScanResult {
         compare!(directory_count);
         compare!(skipped_entries);
         compare!(skipped_filesystems);
+        compare!(skipped_cloud_entries);
         compare!(duplicate_hard_links);
         compare!(allocated_size_is_estimate);
         compare!(hard_link_deduplication_supported);
@@ -395,6 +397,7 @@ struct ScanCounters {
     directories_scanned: u64,
     skipped_entries: u64,
     skipped_filesystems: u64,
+    skipped_cloud_entries: u64,
     duplicate_hard_links: u64,
     observed_logical_bytes: u64,
     observed_allocated_bytes: u64,
@@ -649,6 +652,8 @@ where
 }
 
 pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), String> {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     let root = root
         .canonicalize()
         .map_err(|error| format!("Could not open {}: {error}", root.display()))?;
@@ -657,6 +662,13 @@ pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), Str
         .map_err(|error| format!("Could not read {}: {error}", root.display()))?;
     if !metadata.is_dir() {
         return Err("Choose a directory to scan.".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    if local_only::is_dataless(&metadata) {
+        return Err(
+            "This folder is stored in the cloud. Choose a folder available on this device."
+                .to_string(),
+        );
     }
     Ok((root, metadata))
 }
@@ -670,6 +682,8 @@ pub(crate) fn scan_path_with_backend<F>(
 where
     F: FnMut(ScanProgress),
 {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     match backend {
         ScanBackend::Auto => {
             #[cfg(target_os = "macos")]
@@ -772,6 +786,13 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum WalkMetadata {
+    Local(MeasuredMetadata),
+    #[cfg(target_os = "macos")]
+    Cloud,
+}
+
 fn scan_path_jwalk<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
@@ -780,6 +801,8 @@ fn scan_path_jwalk<F>(
 where
     F: FnMut(ScanProgress),
 {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     let (root, root_metadata) = validate_scan_root(root)?;
 
     if cancel.load(Ordering::Relaxed) {
@@ -806,10 +829,18 @@ where
         .unwrap_or(4)
         .clamp(2, 32);
 
-    let walker = WalkDirGeneric::<((), Option<MeasuredMetadata>)>::new(&root)
+    #[cfg(target_os = "macos")]
+    let parallelism = Parallelism::RayonExistingPool {
+        pool: local_only::worker_pool(threads)?,
+        busy_timeout: None,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let parallelism = Parallelism::RayonNewPool(threads);
+
+    let walker = WalkDirGeneric::<((), Option<WalkMetadata>)>::new(&root)
         .skip_hidden(false)
         .follow_links(false)
-        .parallelism(Parallelism::RayonNewPool(threads))
+        .parallelism(parallelism)
         .process_read_dir(move |_, _, _, children| {
             if worker_cancel.load(Ordering::Relaxed) {
                 children.clear();
@@ -822,6 +853,12 @@ where
             {
                 match child.metadata() {
                     Ok(metadata) => {
+                        #[cfg(target_os = "macos")]
+                        if local_only::is_dataless(&metadata) {
+                            child.read_children_path = None;
+                            child.client_state = Some(WalkMetadata::Cloud);
+                            continue;
+                        }
                         let measured = measure_metadata(&metadata, child.file_type.is_file());
                         #[cfg(windows)]
                         let measured = if child.file_type.is_file() {
@@ -842,14 +879,23 @@ where
                         {
                             child.read_children_path = None;
                         }
-                        child.client_state = Some(measured);
+                        child.client_state = Some(WalkMetadata::Local(measured));
+                    }
+                    #[cfg(target_os = "macos")]
+                    Err(error)
+                        if error
+                            .io_error()
+                            .is_some_and(local_only::materialization_blocked) =>
+                    {
+                        child.read_children_path = None;
+                        child.client_state = Some(WalkMetadata::Cloud);
                     }
                     Err(_) if child.file_type.is_dir() => {
                         child.read_children_path = None;
-                        child.client_state = Some(MeasuredMetadata {
+                        child.client_state = Some(WalkMetadata::Local(MeasuredMetadata {
                             metadata_error: true,
                             ..MeasuredMetadata::default()
-                        });
+                        }));
                     }
                     Err(_) => child.client_state = None,
                 }
@@ -863,13 +909,45 @@ where
 
         let entry = match entry_result {
             Ok(entry) => entry,
+            #[cfg(target_os = "macos")]
+            Err(error)
+                if error
+                    .io_error()
+                    .is_some_and(local_only::materialization_blocked) =>
+            {
+                if error.depth() == 0 {
+                    return Err(
+                        "The selected folder requires a cloud download to scan.".to_string()
+                    );
+                }
+                counters.skipped_cloud_entries += 1;
+                continue;
+            }
             Err(_) => {
                 counters.skipped_entries += 1;
                 continue;
             }
         };
 
+        #[cfg(target_os = "macos")]
+        if entry
+            .read_children_error
+            .as_ref()
+            .and_then(jwalk::Error::io_error)
+            .is_some_and(local_only::materialization_blocked)
+        {
+            if entry.depth == 0 {
+                return Err("The selected folder requires a cloud download to scan.".to_string());
+            }
+            counters.skipped_cloud_entries += 1;
+            continue;
+        }
+
         if entry.depth == 0 {
+            #[cfg(target_os = "macos")]
+            if matches!(entry.client_state, Some(WalkMetadata::Cloud)) {
+                return Err("The selected folder requires a cloud download to scan.".to_string());
+            }
             if entry.read_children_error.is_some() {
                 counters.skipped_entries += 1;
             }
@@ -877,7 +955,12 @@ where
         }
 
         let measured = match entry.client_state {
-            Some(measured) => measured,
+            Some(WalkMetadata::Local(measured)) => measured,
+            #[cfg(target_os = "macos")]
+            Some(WalkMetadata::Cloud) => {
+                counters.skipped_cloud_entries += 1;
+                continue;
+            }
             None => {
                 counters.skipped_entries += 1;
                 continue;
@@ -1064,6 +1147,7 @@ where
             directory_count,
             skipped_entries: counters.skipped_entries,
             skipped_filesystems: counters.skipped_filesystems,
+            skipped_cloud_entries: counters.skipped_cloud_entries,
             duplicate_hard_links: counters.duplicate_hard_links,
             traversal_us,
             aggregation_us,

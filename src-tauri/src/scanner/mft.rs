@@ -63,8 +63,8 @@ where
         let attributes = read_u32(record, 52).ok_or(ParseError::TruncatedRecord)?;
         if include(reference, parent_reference, attributes) {
             let mut name = Vec::with_capacity(name_length / size_of::<u16>());
-            for chunk in record[name_offset..name_end].chunks_exact(size_of::<u16>()) {
-                name.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+            for chunk in record[name_offset..name_end].as_chunks::<2>().0 {
+                name.push(u16::from_le_bytes(*chunk));
             }
             records.push(Record {
                 reference,
