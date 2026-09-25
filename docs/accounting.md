@@ -53,8 +53,8 @@ all use the selected metric. The summary retains both totals so the distinction
 remains visible.
 
 Ordinary list and chart entries suppress folders with zero accounted bytes in
-the selected metric and regular files whose exact name is `.DS_Store`. This is
-a presentation rule applied after aggregation and before bounded ranking; it
+the selected metric, regular files whose exact name is `.DS_Store`, and symbolic
+links. This is a presentation rule applied after aggregation and before bounded ranking; it
 does not skip traversal, discard retained nodes, or change byte totals, scan
 counts, hard-link ownership, or unavailable-item warnings. Ordinary small files
 and other dotfiles remain visible. A zero-byte folder is not necessarily empty:
@@ -114,7 +114,11 @@ rather than silently claiming complete path accounting.
 
 ## Links, mounts, and special entries
 
-- Symbolic links are listed but never followed and contribute no target bytes.
+- Symbolic links are retained and searchable but suppressed from the ordinary
+  list and map. They are never followed and contribute zero accounted bytes.
+  Suppression uses the entry type, not the name: real directories named `bin`,
+  `lib`, or similar remain eligible. Links to files, directories, missing
+  targets, and cycles all receive the same treatment without resolving targets.
   They are also excluded from reveal-in-file-manager actions because the
   cross-platform opener canonicalizes paths and would otherwise follow the
   target silently.

@@ -205,9 +205,12 @@ or its single dropped folder is being validated. Keep the covered main view
 inert and out of the accessibility tree; keyboard and screen
 reader users must encounter the overlay status rather than hidden controls.
 Ordinary result views suppress zero-byte folders under the selected size metric
-and regular files named exactly `.DS_Store`, after aggregation and before bounded
-ranking. Keep these entries in scan totals and explicit name searches; preserve
+and regular files named exactly `.DS_Store`, plus all symbolic links, after
+aggregation and before bounded ranking. Keep these entries in scan totals and explicit name searches; preserve
 their bytes in chart aggregate coverage, and do not draw zero-byte aggregates.
+Suppress links by entry type, never by names such as `bin` or `lib`, which can
+also identify real directories. Retain no-follow traversal and the guarded
+Reveal boundary for links found through search.
 Keep `totalItems` as the full direct-child count and `suppressedItems` separate;
 list counts and truncation use eligible items. A suppressed-only folder shows
 `No items to show`, not an empty-folder claim. Preserve unavailable-item warnings.

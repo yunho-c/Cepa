@@ -1771,7 +1771,8 @@ fn show_in_storage_view(
         EntryKind::File => !SUPPRESSED_FILE_NAMES
             .iter()
             .any(|name| node.name() == *name),
-        EntryKind::Symlink | EntryKind::Other => true,
+        EntryKind::Symlink => false,
+        EntryKind::Other => true,
     }
 }
 
@@ -2832,15 +2833,142 @@ mod tests {
 
         assert_eq!(output.result.logical_bytes, 0);
         assert_eq!(output.result.file_count, 0);
-        assert_eq!(view.items.len(), 1);
-        assert!(matches!(view.items[0].kind, EntryKind::Symlink));
+        assert!(view.items.is_empty());
+        assert_eq!(view.total_items, 1);
+        assert_eq!(view.suppressed_items, 1);
+        assert!(view.chart_items.iter().all(|item| item.id.is_none()));
+        let search = output
+            .snapshot
+            .search_directory(
+                1,
+                0,
+                SizeMetric::Allocated,
+                "linked-folder",
+                &AtomicBool::new(false),
+            )
+            .expect("find suppressed link");
+        assert_eq!(search.total_matches, 1);
+        assert!(matches!(search.items[0].kind, EntryKind::Symlink));
         assert_eq!(
             output
                 .snapshot
-                .reveal_path(view.items[0].id)
+                .reveal_path(search.items[0].id)
                 .expect_err("revealing a symlink would follow its target"),
             "Symbolic links cannot be revealed without following their target."
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn suppresses_all_symlink_targets_but_keeps_real_bin_directories_and_search_results() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().expect("create fixture");
+        fs::create_dir(temp.path().join("bin")).unwrap();
+        fs::write(temp.path().join("bin/program"), [1; 64]).unwrap();
+        for (name, target) in [
+            ("link-directory", "bin"),
+            ("link-file", "bin/program"),
+            ("link-dangling", "missing"),
+            ("link-cycle", "."),
+        ] {
+            symlink(target, temp.path().join(name)).unwrap();
+        }
+        let mut backends = vec![ScanBackend::Jwalk];
+        #[cfg(target_os = "macos")]
+        backends.push(ScanBackend::Getattrlistbulk);
+        #[cfg(target_os = "linux")]
+        backends.push(ScanBackend::Statx);
+        for backend in backends {
+            let output = scan_path_with_backend(
+                temp.path(),
+                Arc::new(AtomicBool::new(false)),
+                backend,
+                |_| {},
+            )
+            .unwrap();
+            assert_eq!(output.result.logical_bytes, 64);
+            assert_eq!(output.result.file_count, 1);
+            assert_eq!(output.result.directory_count, 1);
+            for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+                let view = output
+                    .snapshot
+                    .directory_view_with_metric(1, 0, metric)
+                    .unwrap();
+                assert_eq!(view.total_items, 5);
+                assert_eq!(view.suppressed_items, 4);
+                assert!(!view.items_truncated);
+                assert_eq!(view.items.len(), 1);
+                assert_eq!(view.items[0].name, "bin");
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .filter_map(|item| item.id)
+                        .collect::<Vec<_>>(),
+                    vec![view.items[0].id]
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.logical_bytes)
+                        .sum::<u64>(),
+                    view.logical_bytes
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.allocated_bytes)
+                        .sum::<u64>(),
+                    view.allocated_bytes
+                );
+                let search = output
+                    .snapshot
+                    .search_directory(1, 0, metric, "link-", &AtomicBool::new(false))
+                    .unwrap();
+                assert_eq!(search.total_matches, 4);
+                assert_eq!(search.items.len(), 4);
+                for link in search.items {
+                    assert!(matches!(link.kind, EntryKind::Symlink));
+                    assert_eq!((link.logical_bytes, link.allocated_bytes), (0, 0));
+                    assert!(
+                        output
+                            .snapshot
+                            .directory_view_with_metric(1, link.id, metric)
+                            .is_err()
+                    );
+                    assert!(output.snapshot.reveal_path(link.id).is_err());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symlink_suppression_precedes_both_ranking_limits_without_hiding_empty_files() {
+        let mut link = test_directory_node("a-link".into(), 0, 0);
+        link.kind = EntryKind::Symlink;
+        let mut file = test_directory_node("z-empty-file".into(), 0, 0);
+        file.kind = EntryKind::File;
+        let nodes = vec![
+            InternalNode::root(Path::new("/fixture")),
+            link,
+            file,
+            test_directory_node("bin".into(), 0, 1),
+        ];
+        for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+            for clone_limit in [0, usize::MAX] {
+                assert_eq!(
+                    ranked_node_ids_with_clone_limit(
+                        &[1, 2, 3],
+                        2,
+                        &nodes,
+                        metric,
+                        false,
+                        clone_limit
+                    ),
+                    vec![3, 2]
+                );
+            }
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -3361,7 +3489,7 @@ mod tests {
                 }
             }
             let mut named_entry = test_directory_node(".fseventsd".into(), 0, 1);
-            for kind in [EntryKind::File, EntryKind::Symlink, EntryKind::Other] {
+            for kind in [EntryKind::File, EntryKind::Other] {
                 named_entry.kind = kind;
                 assert!(show_in_storage_view(&named_entry, metric, true));
             }

@@ -6,6 +6,7 @@ import type {
   DirectoryView,
   DirectorySearchResult,
   ScanProgress,
+  ScanItem,
   ScanResponse,
   SavingsEstimate,
   SizeMetric,
@@ -37,6 +38,15 @@ type DevScenario =
 const ROOT = "/Users/demo";
 const scanId = 42;
 const STALE_ACTION_DELAY_MS = 1_200;
+const ROOT_SYMLINK: ScanItem = {
+  id: 4,
+  name: "Latest project",
+  kind: "symlink",
+  logicalBytes: 0,
+  allocatedBytes: 0,
+  fileCount: 0,
+  directoryCount: 0,
+};
 
 export function installDevMock(requestedScenario: string) {
   const scenario: DevScenario = isScenario(requestedScenario)
@@ -204,7 +214,8 @@ export function installDevMock(requestedScenario: string) {
           fileCount: 1,
           directoryCount: 0,
         };
-        const matches = [...source.items, hidden]
+        const suppressed = !stressView && source.nodeId === 0 ? [ROOT_SYMLINK] : [];
+        const matches = [...source.items, ...suppressed, hidden]
           .filter((item) => item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
           .sort((left, right) =>
             metric === "logical"
@@ -485,7 +496,7 @@ function rootView(): DirectoryView {
     logicalBytes: 526_133_493_760,
     allocatedBytes: 501_437_087_744,
     totalItems: 4,
-    suppressedItems: 0,
+    suppressedItems: 1,
     itemsTruncated: false,
     breadcrumbs: [{ id: 0, name: "demo" }],
     items: [
@@ -514,15 +525,6 @@ function rootView(): DirectoryView {
         logicalBytes: 71_940_358_144,
         allocatedBytes: 71_940_358_144,
         fileCount: 1,
-        directoryCount: 0,
-      },
-      {
-        id: 4,
-        name: "Latest project",
-        kind: "symlink",
-        logicalBytes: 0,
-        allocatedBytes: 0,
-        fileCount: 0,
         directoryCount: 0,
       },
     ],
