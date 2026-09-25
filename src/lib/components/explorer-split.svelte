@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onDestroy, type Snippet } from "svelte";
   import { explorerSplit, explorerSplitKey } from "$lib/explorer-layout";
+  import ChartPaneMenu from "$lib/components/chart-pane-menu.svelte";
 
-  let { chart, directory, busy = false }: {
+  let { chart, directory, busy = false, showPercentage = $bindable(false) }: {
     chart: Snippet;
     directory: Snippet;
     busy?: boolean;
+    showPercentage?: boolean;
   } = $props();
 
   const id = $props.id();
@@ -146,9 +148,9 @@
   bind:clientWidth={containerWidth}
   tabindex="-1"
 >
-  <div class="chart-pane" id={`${id}-chart`}>
+  <ChartPaneMenu id={`${id}-chart`} {busy} bind:showPercentage>
     {@render chart()}
-  </div>
+  </ChartPaneMenu>
   <!-- A focusable separator is the WAI-ARIA window splitter pattern. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div

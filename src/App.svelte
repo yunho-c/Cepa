@@ -153,6 +153,7 @@
   let sunburstElement: SVGSVGElement | undefined = $state();
   let chartBackButton: HTMLButtonElement | null = $state(null);
   let chartFocusId: number | null = $state(null);
+  let showChartPercentage = $state(false);
   let itemListElement: HTMLDivElement | undefined = $state();
   let listFocusId: number | null = $state(null);
   let contextMenuEntry: ScanItem | null = $state(null);
@@ -1855,7 +1856,7 @@
         </div>
       {/if}
 
-      <ExplorerSplit busy={isResultBusy || dropOverlayVisible}>
+      <ExplorerSplit busy={isResultBusy || dropOverlayVisible} bind:showPercentage={showChartPercentage}>
         {#snippet chart()}
           <h2 class="sr-only">
             Storage map for {directoryView.displayName}
@@ -1933,13 +1934,15 @@
             <div class="chart-center" aria-hidden="true">
               <em>{activeEntry?.name ?? directoryView.displayName}</em>
               <strong>{centerSize[0]} <span class="chart-center-unit">{centerSize[1]}</span></strong>
-              <small>{activeEntry ? formatPercent(centerBytes, viewBytes) : sizeMetric === "allocated" ? "on disk" : "logical"}</small>
+              {#if activeEntry && showChartPercentage}
+                <small>{formatPercent(centerBytes, viewBytes)}</small>
+              {/if}
             </div>
           </div>
 
           {#if sunburstSegments.length > 0}
             <p id="sunburst-navigation-help" class="sr-only">
-              Use the arrow keys to move between segments. Press Enter or Space to open the selected item.
+              Use the arrow keys to move between segments. Press Enter or Space to open the selected item. Press Shift+F10 or the Menu key for chart options.
             </p>
           {/if}
         {/snippet}

@@ -244,6 +244,12 @@ to keyboard focus. Keep its top-level row highlighted while the center describes
 the exact previewed item. Rows outside the bounded chart tree leave the map
 undimmed. Keep the larger chart opening and flat, visual-only
 name, number, and unit readout; do not restore a raised center disc.
+The chart pane has a shadcn context menu with a Show percentage checkbox for its
+center preview, off by default. Keep this display choice in memory for the app
+session. Right-click anywhere in the pane or use Shift+F10/Menu from a focused
+segment; dismissal restores the initiating chart control without adding a Tab
+stop. Close and block the menu during busy transitions. With percentages off,
+show only the name and inline number/unit; do not add a size-basis caption.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. Their grid must shrink within the directory
