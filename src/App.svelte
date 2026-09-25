@@ -319,8 +319,8 @@
           : `${searchResult.totalMatches} ${searchResult.totalMatches === 1 ? "match" : "matches"}`
         : view
           ? view.itemsTruncated
-            ? `Top ${view.items.length} of ${view.totalItems}`
-            : `${view.totalItems} items`
+            ? `Top ${view.items.length} of ${view.totalItems - view.suppressedItems}`
+            : `${view.totalItems - view.suppressedItems} ${view.totalItems - view.suppressedItems === 1 ? "item" : "items"}`
           : "",
   );
   const droppedFolderLabel = $derived(
@@ -1740,6 +1740,9 @@
                 <div><dt>Other filesystems</dt><dd>{result.sameFilesystemEnforced ? "Not traversed" : "Boundary unavailable"}</dd></div>
                 <div><dt>Items not included</dt><dd>{formatCount(result.skippedEntries)}</dd></div>
                 <div><dt>Mounted filesystems skipped</dt><dd>{formatCount(result.skippedFilesystems)}</dd></div>
+                {#if result.skippedCloudEntries > 0}
+                  <div><dt>Cloud-only items skipped</dt><dd>{formatCount(result.skippedCloudEntries)}</dd></div>
+                {/if}
                 {#if result.duplicateHardLinks > 0}
                   <div><dt>Duplicate hard links</dt><dd>{formatCount(result.duplicateHardLinks)}</dd></div>
                 {/if}
@@ -2215,7 +2218,7 @@
           {:else}
             <div class="empty-result">
               <Folder />
-              <strong>This folder is empty</strong>
+              <strong>{directoryView.suppressedItems > 0 ? "No items to show" : "This folder is empty"}</strong>
             </div>
           {/if}
         {/snippet}

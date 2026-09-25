@@ -27,6 +27,9 @@ type RetainedScanRevision = ScannedFileRevision;
 #[path = "scanner/linux.rs"]
 mod linux;
 #[cfg(target_os = "macos")]
+#[path = "scanner/local_only.rs"]
+mod local_only;
+#[cfg(target_os = "macos")]
 #[path = "scanner/macos.rs"]
 mod macos;
 #[cfg(any(target_os = "windows", test))]
@@ -73,10 +76,7 @@ impl TraversalProgressClock {
     fn should_check_clock(&mut self) -> bool {
         debug_assert_ne!(self.entries_until_check, 0);
         self.entries_until_check -= 1;
-        if self.entries_until_check != 0 {
-            return false;
-        }
-        true
+        self.entries_until_check == 0
     }
 
     fn update_due_at(&mut self, now: Instant) -> bool {
@@ -187,6 +187,7 @@ pub struct DirectoryView {
     pub logical_bytes: u64,
     pub allocated_bytes: u64,
     pub total_items: usize,
+    pub suppressed_items: usize,
     pub items_truncated: bool,
     pub breadcrumbs: Vec<Breadcrumb>,
     pub items: Vec<ScanItem>,
@@ -233,6 +234,7 @@ pub struct ScanResult {
     pub directory_count: u64,
     pub skipped_entries: u64,
     pub skipped_filesystems: u64,
+    pub skipped_cloud_entries: u64,
     pub duplicate_hard_links: u64,
     pub traversal_us: u64,
     pub aggregation_us: u64,
@@ -264,6 +266,7 @@ impl ScanResult {
         compare!(directory_count);
         compare!(skipped_entries);
         compare!(skipped_filesystems);
+        compare!(skipped_cloud_entries);
         compare!(duplicate_hard_links);
         compare!(allocated_size_is_estimate);
         compare!(hard_link_deduplication_supported);
@@ -333,6 +336,7 @@ impl ScanOutput {
 pub(crate) struct ScanSnapshot {
     root: NodeId,
     root_path: Arc<Path>,
+    root_is_macos_volume: bool,
     nodes: Vec<InternalNode>,
     allocated_size_is_estimate: bool,
     #[cfg(unix)]
@@ -395,6 +399,7 @@ struct ScanCounters {
     directories_scanned: u64,
     skipped_entries: u64,
     skipped_filesystems: u64,
+    skipped_cloud_entries: u64,
     duplicate_hard_links: u64,
     observed_logical_bytes: u64,
     observed_allocated_bytes: u64,
@@ -649,6 +654,8 @@ where
 }
 
 pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), String> {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     let root = root
         .canonicalize()
         .map_err(|error| format!("Could not open {}: {error}", root.display()))?;
@@ -657,6 +664,13 @@ pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), Str
         .map_err(|error| format!("Could not read {}: {error}", root.display()))?;
     if !metadata.is_dir() {
         return Err("Choose a directory to scan.".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    if local_only::is_dataless(&metadata) {
+        return Err(
+            "This folder is stored in the cloud. Choose a folder available on this device."
+                .to_string(),
+        );
     }
     Ok((root, metadata))
 }
@@ -670,6 +684,8 @@ pub(crate) fn scan_path_with_backend<F>(
 where
     F: FnMut(ScanProgress),
 {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     match backend {
         ScanBackend::Auto => {
             #[cfg(target_os = "macos")]
@@ -772,6 +788,13 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum WalkMetadata {
+    Local(MeasuredMetadata),
+    #[cfg(target_os = "macos")]
+    Cloud,
+}
+
 fn scan_path_jwalk<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
@@ -780,6 +803,8 @@ fn scan_path_jwalk<F>(
 where
     F: FnMut(ScanProgress),
 {
+    #[cfg(target_os = "macos")]
+    let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
     let (root, root_metadata) = validate_scan_root(root)?;
 
     if cancel.load(Ordering::Relaxed) {
@@ -806,10 +831,18 @@ where
         .unwrap_or(4)
         .clamp(2, 32);
 
-    let walker = WalkDirGeneric::<((), Option<MeasuredMetadata>)>::new(&root)
+    #[cfg(target_os = "macos")]
+    let parallelism = Parallelism::RayonExistingPool {
+        pool: local_only::worker_pool(threads)?,
+        busy_timeout: None,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let parallelism = Parallelism::RayonNewPool(threads);
+
+    let walker = WalkDirGeneric::<((), Option<WalkMetadata>)>::new(&root)
         .skip_hidden(false)
         .follow_links(false)
-        .parallelism(Parallelism::RayonNewPool(threads))
+        .parallelism(parallelism)
         .process_read_dir(move |_, _, _, children| {
             if worker_cancel.load(Ordering::Relaxed) {
                 children.clear();
@@ -822,6 +855,12 @@ where
             {
                 match child.metadata() {
                     Ok(metadata) => {
+                        #[cfg(target_os = "macos")]
+                        if local_only::is_dataless(&metadata) {
+                            child.read_children_path = None;
+                            child.client_state = Some(WalkMetadata::Cloud);
+                            continue;
+                        }
                         let measured = measure_metadata(&metadata, child.file_type.is_file());
                         #[cfg(windows)]
                         let measured = if child.file_type.is_file() {
@@ -842,14 +881,23 @@ where
                         {
                             child.read_children_path = None;
                         }
-                        child.client_state = Some(measured);
+                        child.client_state = Some(WalkMetadata::Local(measured));
+                    }
+                    #[cfg(target_os = "macos")]
+                    Err(error)
+                        if error
+                            .io_error()
+                            .is_some_and(local_only::materialization_blocked) =>
+                    {
+                        child.read_children_path = None;
+                        child.client_state = Some(WalkMetadata::Cloud);
                     }
                     Err(_) if child.file_type.is_dir() => {
                         child.read_children_path = None;
-                        child.client_state = Some(MeasuredMetadata {
+                        child.client_state = Some(WalkMetadata::Local(MeasuredMetadata {
                             metadata_error: true,
                             ..MeasuredMetadata::default()
-                        });
+                        }));
                     }
                     Err(_) => child.client_state = None,
                 }
@@ -863,13 +911,45 @@ where
 
         let entry = match entry_result {
             Ok(entry) => entry,
+            #[cfg(target_os = "macos")]
+            Err(error)
+                if error
+                    .io_error()
+                    .is_some_and(local_only::materialization_blocked) =>
+            {
+                if error.depth() == 0 {
+                    return Err(
+                        "The selected folder requires a cloud download to scan.".to_string()
+                    );
+                }
+                counters.skipped_cloud_entries += 1;
+                continue;
+            }
             Err(_) => {
                 counters.skipped_entries += 1;
                 continue;
             }
         };
 
+        #[cfg(target_os = "macos")]
+        if entry
+            .read_children_error
+            .as_ref()
+            .and_then(jwalk::Error::io_error)
+            .is_some_and(local_only::materialization_blocked)
+        {
+            if entry.depth == 0 {
+                return Err("The selected folder requires a cloud download to scan.".to_string());
+            }
+            counters.skipped_cloud_entries += 1;
+            continue;
+        }
+
         if entry.depth == 0 {
+            #[cfg(target_os = "macos")]
+            if matches!(entry.client_state, Some(WalkMetadata::Cloud)) {
+                return Err("The selected folder requires a cloud download to scan.".to_string());
+            }
             if entry.read_children_error.is_some() {
                 counters.skipped_entries += 1;
             }
@@ -877,7 +957,12 @@ where
         }
 
         let measured = match entry.client_state {
-            Some(measured) => measured,
+            Some(WalkMetadata::Local(measured)) => measured,
+            #[cfg(target_os = "macos")]
+            Some(WalkMetadata::Cloud) => {
+                counters.skipped_cloud_entries += 1;
+                continue;
+            }
             None => {
                 counters.skipped_entries += 1;
                 continue;
@@ -1029,6 +1114,9 @@ where
     let aggregation_completed_at = Instant::now();
     let aggregation_us =
         duration_us(aggregation_completed_at.duration_since(traversal_completed_at));
+    // Capture this once on the protected scan worker. View construction must
+    // remain snapshot-only and never re-query the filesystem or discover disks.
+    let root_is_macos_volume = is_macos_volume_root(&root);
     let indexing_completed_at = Instant::now();
     let indexing_us = duration_us(indexing_completed_at.duration_since(aggregation_completed_at));
 
@@ -1043,6 +1131,7 @@ where
     let snapshot = ScanSnapshot {
         root: 0,
         root_path: root_node_path,
+        root_is_macos_volume,
         nodes,
         allocated_size_is_estimate: semantics.allocated_size_is_estimate,
         #[cfg(unix)]
@@ -1064,6 +1153,7 @@ where
             directory_count,
             skipped_entries: counters.skipped_entries,
             skipped_filesystems: counters.skipped_filesystems,
+            skipped_cloud_entries: counters.skipped_cloud_entries,
             duplicate_hard_links: counters.duplicate_hard_links,
             traversal_us,
             aggregation_us,
@@ -1267,6 +1357,17 @@ impl ScanSnapshot {
         }
 
         let total_items = node.children.len();
+        let suppressed_items = node
+            .children
+            .iter()
+            .filter(|child| {
+                !show_in_storage_view(
+                    &self.nodes[**child],
+                    metric,
+                    self.root_is_macos_volume && node_id == self.root,
+                )
+            })
+            .count();
         let ranked_ids = self.ranked_child_ids(node_id, MAX_LIST_ITEMS, metric);
         let items = ranked_ids
             .iter()
@@ -1284,7 +1385,8 @@ impl ScanSnapshot {
             logical_bytes: node.logical_bytes,
             allocated_bytes: node.allocated_bytes,
             total_items,
-            items_truncated: total_items > MAX_LIST_ITEMS,
+            suppressed_items,
+            items_truncated: total_items - suppressed_items > MAX_LIST_ITEMS,
             breadcrumbs: self.breadcrumbs(node_id),
             items,
             chart_items: self.chart_items(
@@ -1497,7 +1599,13 @@ impl ScanSnapshot {
     }
 
     fn ranked_child_ids(&self, parent: NodeId, limit: usize, metric: SizeMetric) -> Vec<NodeId> {
-        ranked_node_ids(&self.nodes[parent].children, limit, &self.nodes, metric)
+        ranked_node_ids(
+            &self.nodes[parent].children,
+            limit,
+            &self.nodes,
+            metric,
+            self.root_is_macos_volume && parent == self.root,
+        )
     }
 
     fn node_path(&self, node_id: NodeId) -> PathBuf {
@@ -1636,15 +1744,46 @@ fn ranked_node_ids(
     limit: usize,
     nodes: &[InternalNode],
     metric: SizeMetric,
+    at_macos_volume_root: bool,
 ) -> Vec<NodeId> {
-    ranked_node_ids_with_clone_limit(children, limit, nodes, metric, MAX_RANKING_CLONE_IDS)
+    ranked_node_ids_with_clone_limit(
+        children,
+        limit,
+        nodes,
+        metric,
+        at_macos_volume_root,
+        MAX_RANKING_CLONE_IDS,
+    )
 }
+
+// Presentation only: retain every scanned item for accounting, explicit name
+// searches, and scan-authorized operations. Evaluate folders after aggregation
+// using the requested metric; zero accounted bytes do not prove emptiness.
+fn show_in_storage_view(
+    node: &InternalNode,
+    metric: SizeMetric,
+    at_macos_volume_root: bool,
+) -> bool {
+    match node.kind {
+        EntryKind::Directory => {
+            metric.bytes(node) != 0 && !(at_macos_volume_root && node.name() == ".fseventsd")
+        }
+        EntryKind::File => !SUPPRESSED_FILE_NAMES
+            .iter()
+            .any(|name| node.name() == *name),
+        EntryKind::Symlink => false,
+        EntryKind::Other => true,
+    }
+}
+
+const SUPPRESSED_FILE_NAMES: &[&str] = &[".DS_Store"];
 
 fn ranked_node_ids_with_clone_limit(
     children: &[NodeId],
     limit: usize,
     nodes: &[InternalNode],
     metric: SizeMetric,
+    at_macos_volume_root: bool,
     max_clone_ids: usize,
 ) -> Vec<NodeId> {
     if limit == 0 {
@@ -1657,9 +1796,13 @@ fn ranked_node_ids_with_clone_limit(
     // every child. The bounded top-500 path retains 8,000 IDs (about 64 KiB on
     // 64-bit platforms) while preserving O(n) selection work.
     let mut ranked = if children.len() > max_clone_ids {
-        bounded_ranked_node_ids(children, limit, nodes, metric)
+        bounded_ranked_node_ids(children, limit, nodes, metric, at_macos_volume_root)
     } else {
-        children.to_vec()
+        children
+            .iter()
+            .copied()
+            .filter(|child| show_in_storage_view(&nodes[*child], metric, at_macos_volume_root))
+            .collect()
     };
     retain_best_node_ids(&mut ranked, limit, nodes, metric);
     ranked.sort_unstable_by(|left, right| compare_node_ids_by_metric(nodes, *left, *right, metric));
@@ -1671,10 +1814,14 @@ fn bounded_ranked_node_ids(
     limit: usize,
     nodes: &[InternalNode],
     metric: SizeMetric,
+    at_macos_volume_root: bool,
 ) -> Vec<NodeId> {
     let buffer_capacity = limit.saturating_mul(RANKING_BUFFER_MULTIPLIER);
     let mut ranked = Vec::with_capacity(buffer_capacity);
     for child in children.iter().copied() {
+        if !show_in_storage_view(&nodes[child], metric, at_macos_volume_root) {
+            continue;
+        }
         ranked.push(child);
         if ranked.len() == buffer_capacity {
             retain_best_node_ids(&mut ranked, limit, nodes, metric);
@@ -1778,6 +1925,36 @@ fn allocated_bytes(metadata: &Metadata) -> u64 {
 #[cfg(not(unix))]
 fn allocated_bytes(metadata: &Metadata) -> u64 {
     metadata.len()
+}
+
+#[cfg(target_os = "macos")]
+fn is_macos_volume_root(root: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let Ok(path) = std::ffi::CString::new(root.as_os_str().as_bytes()) else {
+        return false;
+    };
+    let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::zeroed();
+    // SAFETY: path is null-terminated and filesystem points to writable storage.
+    if unsafe { libc::statfs(path.as_ptr(), filesystem.as_mut_ptr()) } != 0 {
+        return false;
+    }
+    // SAFETY: statfs succeeded and initialized the output structure.
+    let filesystem = unsafe { filesystem.assume_init() };
+    // Compare the canonical scan root to the actual mount path, not a guessed
+    // /Volumes prefix. In particular, the APFS Data volume is its own root.
+    let mount_bytes: Vec<u8> = filesystem
+        .f_mntonname
+        .iter()
+        .take_while(|byte| **byte != 0)
+        .map(|byte| *byte as u8)
+        .collect();
+    root == Path::new(OsStr::from_bytes(&mount_bytes))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_macos_volume_root(_: &Path) -> bool {
+    false
 }
 
 fn portable_allocated_size_is_estimate(root: &Path) -> bool {
@@ -2591,7 +2768,17 @@ mod tests {
                 .find(|item| item.name == "a-owner")
                 .expect("find deterministic owner")
                 .id;
-            let later_id = root_view
+            assert!(!root_view.items.iter().any(|item| item.name == "z-owner"));
+            let later_id = output
+                .snapshot
+                .search_directory(
+                    1,
+                    0,
+                    SizeMetric::Allocated,
+                    "z-owner",
+                    &AtomicBool::new(false),
+                )
+                .expect("find suppressed non-owner through search")
                 .items
                 .iter()
                 .find(|item| item.name == "z-owner")
@@ -2646,15 +2833,142 @@ mod tests {
 
         assert_eq!(output.result.logical_bytes, 0);
         assert_eq!(output.result.file_count, 0);
-        assert_eq!(view.items.len(), 1);
-        assert!(matches!(view.items[0].kind, EntryKind::Symlink));
+        assert!(view.items.is_empty());
+        assert_eq!(view.total_items, 1);
+        assert_eq!(view.suppressed_items, 1);
+        assert!(view.chart_items.iter().all(|item| item.id.is_none()));
+        let search = output
+            .snapshot
+            .search_directory(
+                1,
+                0,
+                SizeMetric::Allocated,
+                "linked-folder",
+                &AtomicBool::new(false),
+            )
+            .expect("find suppressed link");
+        assert_eq!(search.total_matches, 1);
+        assert!(matches!(search.items[0].kind, EntryKind::Symlink));
         assert_eq!(
             output
                 .snapshot
-                .reveal_path(view.items[0].id)
+                .reveal_path(search.items[0].id)
                 .expect_err("revealing a symlink would follow its target"),
             "Symbolic links cannot be revealed without following their target."
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn suppresses_all_symlink_targets_but_keeps_real_bin_directories_and_search_results() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().expect("create fixture");
+        fs::create_dir(temp.path().join("bin")).unwrap();
+        fs::write(temp.path().join("bin/program"), [1; 64]).unwrap();
+        for (name, target) in [
+            ("link-directory", "bin"),
+            ("link-file", "bin/program"),
+            ("link-dangling", "missing"),
+            ("link-cycle", "."),
+        ] {
+            symlink(target, temp.path().join(name)).unwrap();
+        }
+        let mut backends = vec![ScanBackend::Jwalk];
+        #[cfg(target_os = "macos")]
+        backends.push(ScanBackend::Getattrlistbulk);
+        #[cfg(target_os = "linux")]
+        backends.push(ScanBackend::Statx);
+        for backend in backends {
+            let output = scan_path_with_backend(
+                temp.path(),
+                Arc::new(AtomicBool::new(false)),
+                backend,
+                |_| {},
+            )
+            .unwrap();
+            assert_eq!(output.result.logical_bytes, 64);
+            assert_eq!(output.result.file_count, 1);
+            assert_eq!(output.result.directory_count, 1);
+            for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+                let view = output
+                    .snapshot
+                    .directory_view_with_metric(1, 0, metric)
+                    .unwrap();
+                assert_eq!(view.total_items, 5);
+                assert_eq!(view.suppressed_items, 4);
+                assert!(!view.items_truncated);
+                assert_eq!(view.items.len(), 1);
+                assert_eq!(view.items[0].name, "bin");
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .filter_map(|item| item.id)
+                        .collect::<Vec<_>>(),
+                    vec![view.items[0].id]
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.logical_bytes)
+                        .sum::<u64>(),
+                    view.logical_bytes
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.allocated_bytes)
+                        .sum::<u64>(),
+                    view.allocated_bytes
+                );
+                let search = output
+                    .snapshot
+                    .search_directory(1, 0, metric, "link-", &AtomicBool::new(false))
+                    .unwrap();
+                assert_eq!(search.total_matches, 4);
+                assert_eq!(search.items.len(), 4);
+                for link in search.items {
+                    assert!(matches!(link.kind, EntryKind::Symlink));
+                    assert_eq!((link.logical_bytes, link.allocated_bytes), (0, 0));
+                    assert!(
+                        output
+                            .snapshot
+                            .directory_view_with_metric(1, link.id, metric)
+                            .is_err()
+                    );
+                    assert!(output.snapshot.reveal_path(link.id).is_err());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symlink_suppression_precedes_both_ranking_limits_without_hiding_empty_files() {
+        let mut link = test_directory_node("a-link".into(), 0, 0);
+        link.kind = EntryKind::Symlink;
+        let mut file = test_directory_node("z-empty-file".into(), 0, 0);
+        file.kind = EntryKind::File;
+        let nodes = vec![
+            InternalNode::root(Path::new("/fixture")),
+            link,
+            file,
+            test_directory_node("bin".into(), 0, 1),
+        ];
+        for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+            for clone_limit in [0, usize::MAX] {
+                assert_eq!(
+                    ranked_node_ids_with_clone_limit(
+                        &[1, 2, 3],
+                        2,
+                        &nodes,
+                        metric,
+                        false,
+                        clone_limit
+                    ),
+                    vec![3, 2]
+                );
+            }
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -2888,6 +3202,319 @@ mod tests {
     }
 
     #[test]
+    fn suppresses_storage_clutter_without_losing_accounting_or_search_access() {
+        let temp = tempfile::tempdir().expect("create fixture");
+        for name in [
+            ".DocumentRevisions-V100",
+            ".Spotlight-V100",
+            "TemporaryItems",
+        ] {
+            fs::create_dir(temp.path().join(name)).expect("create empty folder");
+        }
+        fs::create_dir(temp.path().join("nested")).expect("create nested folder");
+        fs::write(temp.path().join(".DS_Store"), [1; 40]).expect("write housekeeping file");
+        fs::write(temp.path().join("nested/.DS_Store"), [2; 60])
+            .expect("write nested housekeeping file");
+        fs::write(temp.path().join(".DS_Store.backup"), [3]).expect("write ordinary dotfile");
+        fs::write(temp.path().join("empty.txt"), []).expect("write ordinary empty file");
+
+        let mut backends = vec![ScanBackend::Jwalk];
+        #[cfg(target_os = "macos")]
+        backends.push(ScanBackend::Getattrlistbulk);
+        #[cfg(target_os = "linux")]
+        backends.push(ScanBackend::Statx);
+        for backend in backends {
+            let output = scan_path_with_backend(
+                temp.path(),
+                Arc::new(AtomicBool::new(false)),
+                backend,
+                |_| {},
+            )
+            .expect("scan clutter fixture");
+            assert_eq!(output.result.logical_bytes, 101);
+            assert_eq!(output.result.file_count, 4);
+            assert_eq!(output.result.directory_count, 4);
+            for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+                let view = output
+                    .snapshot
+                    .directory_view_with_metric(1, 0, metric)
+                    .unwrap();
+                assert_eq!(view.total_items, 7);
+                assert_eq!(view.suppressed_items, 4);
+                assert_eq!(view.items.len(), 3);
+                assert!(!view.items_truncated);
+                assert!(
+                    view.items
+                        .iter()
+                        .any(|item| item.name == ".DS_Store.backup")
+                );
+                assert!(view.items.iter().any(|item| item.name == "empty.txt"));
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.logical_bytes)
+                        .sum::<u64>(),
+                    view.logical_bytes
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.allocated_bytes)
+                        .sum::<u64>(),
+                    view.allocated_bytes
+                );
+                let nested = view
+                    .chart_items
+                    .iter()
+                    .find(|item| item.name == "nested")
+                    .unwrap();
+                assert_eq!(nested.children.len(), 1);
+                assert!(nested.children[0].id.is_none());
+                assert_eq!(nested.children[0].logical_bytes, 60);
+                let nested_view = output
+                    .snapshot
+                    .directory_view_with_metric(1, nested.id.unwrap(), metric)
+                    .unwrap();
+                assert!(nested_view.items.is_empty());
+                assert_eq!(nested_view.suppressed_items, 1);
+                for query in [".DS_Store", ".Spotlight-V100"] {
+                    let matches = output
+                        .snapshot
+                        .search_directory(1, 0, metric, query, &AtomicBool::new(false))
+                        .unwrap();
+                    let found = matches
+                        .items
+                        .iter()
+                        .find(|item| item.name == query)
+                        .unwrap();
+                    assert_eq!(
+                        output.snapshot.reveal_path(found.id).unwrap(),
+                        temp.path().canonicalize().unwrap().join(query)
+                    );
+                    if matches!(found.kind, EntryKind::Directory) {
+                        let empty = output
+                            .snapshot
+                            .directory_view_with_metric(1, found.id, metric)
+                            .unwrap();
+                        assert!(empty.items.is_empty());
+                        assert_eq!(empty.total_items, 0);
+                        assert_eq!(empty.suppressed_items, 0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn filters_before_both_ranking_paths_and_rechecks_folder_metric() {
+        let mut root = InternalNode::root(Path::new("/fixture"));
+        let mut nodes = vec![InternalNode::root(Path::new("/fixture"))];
+        for index in 0..MAX_LIST_ITEMS - 1 {
+            let mut file = test_directory_node(format!("file-{index:04}"), 0, 1);
+            file.kind = EntryKind::File;
+            nodes.push(file);
+        }
+        let mut housekeeping = test_directory_node(".DS_Store".into(), 0, 1_000_000);
+        housekeeping.kind = EntryKind::File;
+        nodes.push(housekeeping);
+        nodes.push(test_directory_node("empty".into(), 0, 0));
+        let mut sparse = test_directory_node("sparse-folder".into(), 0, 10_000);
+        sparse.allocated_bytes = 0;
+        let sparse_id = nodes.len();
+        nodes.push(sparse);
+        // A directory with this name is not a housekeeping file.
+        nodes.push(test_directory_node(".DS_Store".into(), 0, 2));
+        root.children = (1..nodes.len()).collect();
+        nodes[0] = root;
+        for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+            let mut expected: Vec<_> = (1..MAX_LIST_ITEMS).collect();
+            if metric == SizeMetric::Logical {
+                expected.push(sparse_id);
+            }
+            expected.push(nodes.len() - 1);
+            expected.sort_unstable_by(|left, right| {
+                compare_node_ids_by_metric(&nodes, *left, *right, metric)
+            });
+            expected.truncate(MAX_LIST_ITEMS);
+            for clone_limit in [0, usize::MAX] {
+                let ranked = ranked_node_ids_with_clone_limit(
+                    &nodes[0].children,
+                    MAX_LIST_ITEMS,
+                    &nodes,
+                    metric,
+                    false,
+                    clone_limit,
+                );
+                assert_eq!(ranked, expected);
+                assert!(ranked.capacity() <= MAX_LIST_ITEMS * RANKING_BUFFER_MULTIPLIER);
+            }
+        }
+        let snapshot = ScanSnapshot {
+            root: 0,
+            root_path: Arc::from(Path::new("/fixture")),
+            root_is_macos_volume: false,
+            nodes,
+            allocated_size_is_estimate: false,
+            #[cfg(unix)]
+            revision_filesystem_id: None,
+        };
+        let allocated = snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Allocated)
+            .unwrap();
+        assert_eq!(allocated.items.len(), MAX_LIST_ITEMS);
+        assert_eq!(allocated.suppressed_items, 3);
+        assert!(!allocated.items_truncated);
+        let logical = snapshot
+            .directory_view_with_metric(1, 0, SizeMetric::Logical)
+            .unwrap();
+        assert_eq!(logical.items.len(), MAX_LIST_ITEMS);
+        assert_eq!(logical.suppressed_items, 2);
+        assert!(logical.items_truncated);
+        assert_eq!(logical.items[0].id, wire_id(sparse_id));
+    }
+
+    #[test]
+    fn volume_event_logs_remain_accounted_and_searchable_without_hiding_nested_names() {
+        let temp = tempfile::tempdir().expect("create fixture");
+        fs::create_dir(temp.path().join(".fseventsd")).unwrap();
+        fs::write(temp.path().join(".fseventsd/events"), [1; 80]).unwrap();
+        fs::create_dir_all(temp.path().join("ordinary/.fseventsd")).unwrap();
+        fs::write(temp.path().join("ordinary/.fseventsd/user.txt"), [2; 20]).unwrap();
+        let mut backends = vec![ScanBackend::Jwalk];
+        #[cfg(target_os = "macos")]
+        backends.push(ScanBackend::Getattrlistbulk);
+        #[cfg(target_os = "linux")]
+        backends.push(ScanBackend::Statx);
+        for backend in backends {
+            let mut output = scan_path_with_backend(
+                temp.path(),
+                Arc::new(AtomicBool::new(false)),
+                backend,
+                |_| {},
+            )
+            .unwrap();
+            // The real temporary scan is not a volume root, so its names remain
+            // visible. Simulate a qualified root on the same retained fixture
+            // below without creating or altering any real volume metadata.
+            assert!(!output.snapshot.root_is_macos_volume);
+            assert_eq!(output.result.logical_bytes, 100);
+            assert_eq!(output.result.file_count, 2);
+            assert_eq!(output.result.directory_count, 3);
+            let ordinary_view = output.snapshot.directory_view(1, 0).unwrap();
+            assert_eq!(ordinary_view.items.len(), 2);
+            assert_eq!(ordinary_view.suppressed_items, 0);
+            output.snapshot.root_is_macos_volume = true;
+            for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+                let view = output
+                    .snapshot
+                    .directory_view_with_metric(1, 0, metric)
+                    .unwrap();
+                assert_eq!(view.total_items, 2);
+                assert_eq!(view.suppressed_items, 1);
+                assert_eq!(view.items.len(), 1);
+                assert_eq!(view.items[0].name, "ordinary");
+                assert_eq!(view.logical_bytes, 100);
+                assert_eq!(view.allocated_bytes, output.result.allocated_bytes);
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.logical_bytes)
+                        .sum::<u64>(),
+                    view.logical_bytes
+                );
+                assert_eq!(
+                    view.chart_items
+                        .iter()
+                        .map(|item| item.allocated_bytes)
+                        .sum::<u64>(),
+                    view.allocated_bytes
+                );
+                assert!(
+                    !view
+                        .chart_items
+                        .iter()
+                        .any(|item| item.name == ".fseventsd")
+                );
+                let ordinary_chart = view
+                    .chart_items
+                    .iter()
+                    .find(|item| item.name == "ordinary")
+                    .unwrap();
+                assert_eq!(ordinary_chart.children[0].name, ".fseventsd");
+                let nested = output
+                    .snapshot
+                    .directory_view_with_metric(1, view.items[0].id, metric)
+                    .unwrap();
+                assert_eq!(nested.items[0].name, ".fseventsd");
+                assert_eq!(nested.suppressed_items, 0);
+                let search = output
+                    .snapshot
+                    .search_directory(1, 0, metric, ".fseventsd", &AtomicBool::new(false))
+                    .unwrap();
+                assert_eq!(search.total_matches, 1);
+                let events = output
+                    .snapshot
+                    .directory_view_with_metric(1, search.items[0].id, metric)
+                    .unwrap();
+                assert_eq!(events.items[0].name, "events");
+                assert_eq!(
+                    output.snapshot.reveal_path(search.items[0].id).unwrap(),
+                    temp.path().canonicalize().unwrap().join(".fseventsd")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn volume_event_directory_rule_precedes_both_ranking_limits_and_requires_directory_kind() {
+        let nodes = vec![
+            InternalNode::root(Path::new("/fixture")),
+            test_directory_node(".fseventsd".into(), 0, 1_000),
+            test_directory_node("ordinary".into(), 0, 1),
+        ];
+        for metric in [SizeMetric::Allocated, SizeMetric::Logical] {
+            for clone_limit in [0, usize::MAX] {
+                for qualified in [false, true] {
+                    assert_eq!(
+                        ranked_node_ids_with_clone_limit(
+                            &[1, 2],
+                            1,
+                            &nodes,
+                            metric,
+                            qualified,
+                            clone_limit
+                        ),
+                        vec![if qualified { 2 } else { 1 }]
+                    );
+                }
+            }
+            let mut named_entry = test_directory_node(".fseventsd".into(), 0, 1);
+            for kind in [EntryKind::File, EntryKind::Other] {
+                named_entry.kind = kind;
+                assert!(show_in_storage_view(&named_entry, metric, true));
+            }
+            named_entry.kind = EntryKind::Directory;
+            named_entry.name = ".fseventsd.backup".into();
+            assert!(show_in_storage_view(&named_entry, metric, true));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn qualifies_actual_macos_mount_roots_only() {
+        let _protection = local_only::NoMaterialization::new().unwrap();
+        assert!(is_macos_volume_root(Path::new("/")));
+        // APFS startup scans use the Data volume instead of the sealed root.
+        let data = Path::new("/System/Volumes/Data");
+        if data.exists() {
+            assert!(is_macos_volume_root(data));
+        }
+        let temp = tempfile::tempdir().unwrap();
+        assert!(!is_macos_volume_root(&temp.path().canonicalize().unwrap()));
+        assert!(!is_macos_volume_root(&temp.path().join("missing")));
+    }
+
+    #[test]
     fn globally_bounds_deep_chart_views_without_losing_accounted_bytes() {
         const BRANCHES: usize = MAX_CHART_ITEMS_PER_DIRECTORY + 1;
 
@@ -2931,6 +3558,7 @@ mod tests {
         let snapshot = ScanSnapshot {
             root: 0,
             root_path: Arc::from(root_path),
+            root_is_macos_volume: false,
             nodes,
             allocated_size_is_estimate: false,
             #[cfg(unix)]
@@ -3037,6 +3665,7 @@ mod tests {
         let snapshot = ScanSnapshot {
             root: 0,
             root_path: Arc::from(root_path),
+            root_is_macos_volume: false,
             nodes,
             allocated_size_is_estimate: false,
             #[cfg(unix)]
@@ -3089,6 +3718,7 @@ mod tests {
         let snapshot = ScanSnapshot {
             root: 0,
             root_path: Arc::from(root_path),
+            root_is_macos_volume: false,
             nodes,
             allocated_size_is_estimate: false,
             #[cfg(unix)]
@@ -3107,6 +3737,7 @@ mod tests {
                 MAX_LIST_ITEMS,
                 &snapshot.nodes,
                 metric,
+                false,
                 MAX_LIST_ITEMS,
             );
             assert_eq!(ranked, expected);

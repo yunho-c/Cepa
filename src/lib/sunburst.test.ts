@@ -118,6 +118,15 @@ describe("sunburst geometry", () => {
       .toMatchObject({ branchId: 1, colorIndex: 0 });
   });
 
+  test("zero-byte aggregate coverage stays invisible in the selected metric", () => {
+    const aggregate: ChartItem = { ...item(1, 0, 100), id: null, kind: "other" };
+    expect(createSunburst([aggregate], "allocated")).toEqual([]);
+    expect(createSunburst([aggregate], "logical")).toHaveLength(1);
+    expect(createSunburst([item(2, 100), aggregate], "allocated")).toEqual(
+      createSunburst([item(2, 100)], "allocated"),
+    );
+  });
+
   test("changes geometry with the selected metric", () => {
     const items = [item(1, 90, 10), item(2, 10, 90)];
     const allocated = createSunburst(items, "allocated");

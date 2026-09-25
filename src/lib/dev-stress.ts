@@ -37,6 +37,7 @@ export function createStressView(scanId: number, root: string): DirectoryView {
     logicalBytes: directoryBytes + fileBytes,
     allocatedBytes: directoryBytes + fileBytes,
     totalItems: items.length,
+    suppressedItems: 0,
     itemsTruncated: false,
     breadcrumbs: [{ id: 0, name: "Stress fixture" }],
     items,
@@ -81,6 +82,7 @@ export function createStressDirectoryView(
     logicalBytes: item.logicalBytes,
     allocatedBytes: item.allocatedBytes,
     totalItems: items.length,
+    suppressedItems: 0,
     itemsTruncated: false,
     breadcrumbs: [
       { id: rootView.nodeId, name: rootView.displayName },

@@ -208,7 +208,7 @@ fn decode_report(encoded: &str) -> Result<Value, String> {
         return Err("the hex payload has an odd length".into());
     }
     let mut bytes = Vec::with_capacity(encoded.len() / 2);
-    for pair in encoded.as_bytes().chunks_exact(2) {
+    for pair in encoded.as_bytes().as_chunks::<2>().0 {
         let pair = std::str::from_utf8(pair)
             .map_err(|error| format!("the hex payload is not UTF-8: {error}"))?;
         bytes.push(

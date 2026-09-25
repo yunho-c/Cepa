@@ -45,6 +45,15 @@ regressions when changing this state machine.
 Each falls back to `jwalk` when its native API is unavailable or unsuitable;
 Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
 whole-volume fixed cost.
+On macOS, protect root resolution and every native or fallback scanner worker
+with the thread-local no-materialization policy in `scanner/local_only.rs`.
+Fail closed if that policy cannot be installed; never retry unprotected.
+Exclude dataless entries before retention and descent, and count them separately
+through `skippedCloudEntries` in quiet Details. Downloaded provider files remain
+ordinary local files: do not blacklist iCloud or Google Drive folder names.
+Keep the scoped policy restoration, protected fallback pool, and opt-in real
+cloud fixture test. This is macOS APFS/File Provider protection, not Windows,
+Linux, or arbitrary network-provider qualification.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row. Do not restore a live largest-files list
 or its empty placeholder; the scan state should stay focused on overall progress.
@@ -195,6 +204,22 @@ The native folder-drop overlay is interaction-exclusive while a drag is active
 or its single dropped folder is being validated. Keep the covered main view
 inert and out of the accessibility tree; keyboard and screen
 reader users must encounter the overlay status rather than hidden controls.
+Ordinary result views suppress zero-byte folders under the selected size metric
+and regular files named exactly `.DS_Store`, plus all symbolic links, after
+aggregation and before bounded ranking. Keep these entries in scan totals and explicit name searches; preserve
+their bytes in chart aggregate coverage, and do not draw zero-byte aggregates.
+Suppress links by entry type, never by names such as `bin` or `lib`, which can
+also identify real directories. Retain no-follow traversal and the guarded
+Reveal boundary for links found through search.
+Keep `totalItems` as the full direct-child count and `suppressedItems` separate;
+list counts and truncation use eligible items. A suppressed-only folder shows
+`No items to show`, not an empty-folder claim. Preserve unavailable-item warnings.
+On macOS, also suppress a directory named exactly `.fseventsd` only as a direct
+child of a scan root confirmed by `statfs` to be a volume mount root. Capture
+that fact once on the protected scan worker; view construction stays entirely
+snapshot-based. An ordinary folder with that name, a non-directory entry, or an
+unconfirmed mount root keeps the ordinary visibility rules. Totals, aggregate
+coverage, search, and explicit navigation into the directory remain available.
 Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving

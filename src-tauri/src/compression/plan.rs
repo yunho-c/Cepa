@@ -411,6 +411,18 @@ fn hash_open_file_observed(
     cancel: &AtomicBool,
     mut on_chunk: impl FnMut(u64),
 ) -> Result<ContentDigest, IntegrityError> {
+    if cancel.load(Ordering::Acquire) {
+        return Err(IntegrityError::Cancelled);
+    }
+    // Windows seek_read changes its handle's cursor. Reopen the anchored object
+    // once per hash so concurrent readers never touch the retained cursor.
+    // File::try_clone would share that cursor, and reopening a path could bind
+    // to a replacement file instead of the retained object.
+    #[cfg(windows)]
+    let reader = reopen_hash_reader(file).map_err(IntegrityError::Io)?;
+    #[cfg(windows)]
+    let file = &reader;
+
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0_u8; CONTENT_HASH_CHUNK_BYTES];
     let mut offset = 0_u64;
@@ -490,6 +502,34 @@ fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
 }
 
 #[cfg(windows)]
+fn reopen_hash_reader(file: &File) -> io::Result<File> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    use windows_sys::Win32::Foundation::{GENERIC_READ, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        ReOpenFile,
+    };
+
+    // SAFETY: file owns a live handle throughout this call. ReOpenFile opens the
+    // same filesystem object with an independent cursor and no path lookup.
+    // Match the anchor's sharing and no-follow flags; request read access only.
+    let handle = unsafe {
+        ReOpenFile(
+            file.as_raw_handle(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            FILE_FLAG_OPEN_REPARSE_POINT,
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the successful call returned a new owned handle, closed by File
+    // on success, cancellation, and every error path.
+    Ok(unsafe { File::from_raw_handle(handle) })
+}
+
+#[cfg(windows)]
 fn read_at(file: &File, buffer: &mut [u8], offset: u64) -> io::Result<usize> {
     use std::os::windows::fs::FileExt;
 
@@ -547,6 +587,7 @@ fn validate_anchor_binding(
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::{Seek, SeekFrom};
 
     fn prepare_test(
         plan_id: u64,
@@ -676,26 +717,34 @@ mod tests {
         let path = temp.path().join("file.bin");
         let logical_bytes = CONTENT_HASH_CHUNK_BYTES * 2;
         fs::write(&path, vec![7_u8; logical_bytes]).expect("write fixture");
-        let opened =
+        let mut opened =
             file_revision::open_content_snapshot_no_follow(&path).expect("open fixture safely");
+        opened
+            .file
+            .seek(SeekFrom::Start(17))
+            .expect("set anchor cursor");
         let cancel = AtomicBool::new(false);
         let result = hash_open_file_observed(&opened.file, logical_bytes as u64, &cancel, |_| {
+            assert_eq!((&opened.file).stream_position().expect("anchor cursor"), 17);
             cancel.store(true, Ordering::Release)
         });
 
         assert!(matches!(result, Err(IntegrityError::Cancelled)));
+        assert_eq!(opened.file.stream_position().expect("anchor cursor"), 17);
     }
 
     #[test]
     fn positioned_content_hashing_preserves_the_anchor_cursor() {
-        use std::io::Seek;
-
         let temp = tempfile::tempdir().expect("create fixture directory");
         let path = temp.path().join("file.bin");
         let content = vec![9_u8; CONTENT_HASH_CHUNK_BYTES + 7];
         fs::write(&path, &content).expect("write fixture");
         let mut opened =
             file_revision::open_content_snapshot_no_follow(&path).expect("open fixture safely");
+        opened
+            .file
+            .seek(SeekFrom::Start(17))
+            .expect("set anchor cursor");
         let before = opened
             .file
             .stream_position()
@@ -716,6 +765,80 @@ mod tests {
                 .expect("read final anchor cursor"),
             before
         );
+    }
+
+    #[test]
+    fn content_hashing_preserves_the_anchor_cursor_on_read_error() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, b"short file").expect("write fixture");
+        let mut opened =
+            file_revision::open_content_snapshot_no_follow(&path).expect("open fixture safely");
+        opened
+            .file
+            .seek(SeekFrom::Start(3))
+            .expect("set anchor cursor");
+
+        let result = hash_open_file(&opened.file, 100, &AtomicBool::new(false));
+
+        assert!(matches!(result, Err(IntegrityError::Io(error))
+            if error.kind() == io::ErrorKind::UnexpectedEof));
+        assert_eq!(opened.file.stream_position().expect("anchor cursor"), 3);
+    }
+
+    #[test]
+    fn concurrent_content_hashes_leave_the_anchor_cursor_untouched() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        let mut content = vec![7_u8; CONTENT_HASH_CHUNK_BYTES];
+        content.extend(vec![9_u8; CONTENT_HASH_CHUNK_BYTES + 7]);
+        fs::write(&path, &content).expect("write fixture");
+        let mut opened =
+            file_revision::open_content_snapshot_no_follow(&path).expect("open fixture safely");
+        opened
+            .file
+            .seek(SeekFrom::Start(17))
+            .expect("set anchor cursor");
+        let barrier = std::sync::Barrier::new(2);
+        let expected = ContentDigest(*blake3::hash(&content).as_bytes());
+
+        std::thread::scope(|scope| {
+            let hash = || {
+                // Rendezvous once before hashing, then observe the shared cursor
+                // after every chunk. No barrier inside a fallible read loop.
+                barrier.wait();
+                hash_open_file_observed(
+                    &opened.file,
+                    content.len() as u64,
+                    &AtomicBool::new(false),
+                    |_| {
+                        assert_eq!((&opened.file).stream_position().expect("anchor cursor"), 17);
+                    },
+                )
+                .expect("hash fixture concurrently")
+            };
+            let first = scope.spawn(hash);
+            let second = scope.spawn(hash);
+            assert_eq!(first.join().expect("first hash worker"), expected);
+            assert_eq!(second.join().expect("second hash worker"), expected);
+        });
+        assert_eq!(opened.file.stream_position().expect("anchor cursor"), 17);
+    }
+
+    #[test]
+    fn content_hashing_keeps_the_original_object_after_path_replacement() {
+        let temp = tempfile::tempdir().expect("create fixture directory");
+        let path = temp.path().join("file.bin");
+        fs::write(&path, b"original").expect("write fixture");
+        let opened =
+            file_revision::open_content_snapshot_no_follow(&path).expect("open fixture safely");
+        fs::rename(&path, temp.path().join("moved.bin")).expect("rename original");
+        fs::write(&path, b"replaced").expect("replace original path");
+
+        let digest = hash_open_file(&opened.file, 8, &AtomicBool::new(false))
+            .expect("hash original object after rename and replacement");
+
+        assert_eq!(digest, ContentDigest(*blake3::hash(b"original").as_bytes()));
     }
 
     #[test]
