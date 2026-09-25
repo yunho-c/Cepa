@@ -508,7 +508,7 @@ void (async () => {{
     const titlebar = document.querySelector('.window-titlebar');
     const windowChromePresent = titlebar !== null
       && titlebar.querySelector('[data-tauri-drag-region]') !== null
-      && titlebar.getBoundingClientRect().height === 40;
+      && titlebar.getBoundingClientRect().height === 20;
     const titlebarContentClear = windowChromePresent
       && document.querySelector('.results-view').getBoundingClientRect().top
         >= titlebar.getBoundingClientRect().bottom;
@@ -842,7 +842,7 @@ void (async () => {{
     await waitFor(() => document.querySelector('.results-view'), 'rescanned result');
     await painted();
     const rescanCompleted = document.querySelector('.results-view') !== null;
-    const rescanHeading = document.querySelector('.result-title h1');
+    const rescanHeading = document.querySelector('.breadcrumb-root');
     const rescanResultFocused = document.activeElement === rescanHeading;
     const rescanRows = document.querySelectorAll('.storage-row').length;
     const rescanChartSegments = document.querySelectorAll('[data-chart-node-id]').length;

@@ -150,11 +150,16 @@ Development-only `?mock=root-preparing&roots=preview` holds the volume-validatio
 state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Do not restore the
 completed result's former logical-size, file-count, folder-count, and elapsed-time
-summary row. Do not show the authoritative scan root as a persistent subtitle on
-the completed analysis screen. Hovering the visible result name reveals that
-path in a restrained Tooltip, while the result heading's accessible name retains
-both values. Keep the heading as the programmatic completion focus target without
-opening the Tooltip merely because focus was moved there. Logical size remains
+summary row. The completed analysis header contains Back, the current-path
+breadcrumbs, and the warning, Info, and appearance actions in one row. The first breadcrumb
+shows the scan display name and reveals the authoritative root path in a Tooltip
+on hover or keyboard focus. It replaces the former large disk-name heading and
+Space on disk total. Keep that breadcrumb in a compact level-one heading; the
+heading and its button retain both the display name and root path in their
+accessible names. The heading receives focus on completion without automatically
+opening the Tooltip, including after a keyboard-started scan. Long
+paths scroll within the breadcrumb strip without displacing Back or the actions;
+navigation scrolls the strip to the current folder. Logical size remains
 available through the advanced `Size basis`
 control at the top of the Info action's collapsed `Details` popover; file and
 folder counts plus scan time follow it. Keep `On disk` as the default and do not
@@ -172,13 +177,19 @@ mislabel all such items as permission failures. Its Tooltip opens on hover and
 keyboard focus, while the trigger's accessible name carries the full warning
 and unavailable-item count. Do not make the warning hover-only or put live,
 status, or alert semantics inside its Tooltip. It also has explicit cancellation and
-navigation-error states. Appearance follows the operating system and updates
-live; development-only `?appearance=dark` and `?appearance=light` previews cover
-both palettes without introducing a production setting.
+navigation-error states. Appearance starts with the operating system and updates
+live until the user uses the analysis header's sun/moon toggle, immediately to
+the right of Info in the same action group. A manual light/dark
+choice lasts for the app session, including navigation and new scans; the next
+launch follows the system again. Keep the toggle inert with the result view
+during a folder-drop overlay. Development-only
+`?appearance=dark` and `?appearance=light` previews set the initial palette and
+ignore system changes while still allowing the toggle. Keep them out of production.
 Do not restore a persistent application header on landing, scanning, or result
 views. The landing tile owns app identity, active scans keep Stop beside their
-status, and completed results use a compact two-row masthead: Back and the
-icon-only Details action sit above the scan identity and total. The Info
+status, and completed results use a single compact navigation row: breadcrumbs
+sit to the right of Back, with the icon-only Details and appearance actions at
+the far end. The Info
 action opens an anchored shadcn-svelte Popover containing the quiet technical
 evidence; do not restore a full-width disclosure, turn it into a no-op, or make
 it a competing live region. Returning home must first
@@ -385,9 +396,13 @@ may use the pane as an internal scroll container only when their disclosed
 details exceed it; keep Try again, Clear search, and the collapsed Search
 details affordance visible in the ordinary compact state. Browser previews
 below 560 pixels may retain taller stacked-state minima.
-The desktop shell uses a 40-pixel integrated title bar. macOS retains native
-traffic lights through Tauri's overlay title bar; Windows and Linux remove
-decorations before startup placement and use accessible webview window controls.
+The desktop shell reserves a 20-pixel integrated drag strip. macOS retains native
+traffic lights through Tauri's overlay title bar with the established 20-pixel
+vertical inset. Do not halve that native inset with the CSS strip: Tauri changes
+the native button container height, and a 10-pixel inset clips the controls.
+The native buttons extend into the view's empty top padding; keep them clear of
+the header actions. Windows and Linux remove decorations before startup placement
+and use accessible webview window controls.
 Keep the drag region separate from buttons, retain double-click maximize, and
 derive view heights from the remaining content height so controls never overlap
 the application. Window controls are inert during the folder-drop overlay.
@@ -430,7 +445,7 @@ under the packaged CSP, nested chart-to-row branch highlighting, and Enter
 activation of a chart folder.
 It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
-second scan in the same process with scan-heading and result-heading focus
+second scan in the same process with scan-heading and root-breadcrumb focus
 restored for both successful scans. Derive that
 completed ID from the optional failure and cancellation preflights; with both it
 is ID 3. Checking either earlier ID is a false positive and does not prove Home
@@ -777,8 +792,8 @@ Every workflow should have intentional empty, loading, partial-result, error,
 cancelled, and completed states. Preserve keyboard navigation, visible focus,
 semantic controls, readable contrast, and reduced-motion usability. Progressive
 updates should feel smooth without hiding freshness or blocking interaction.
-Follow the live operating-system light/dark appearance rather than adding an
-application-only theme preference. New bespoke surfaces must use the semantic
+Follow the live operating-system light/dark appearance until the user makes a
+session-only choice with the analysis-header toggle. New bespoke surfaces must use the semantic
 tokens in `src/app.css` and be reviewed in both appearances.
 
 Avoid decorative complexity, excessive animation, generic dashboard layouts,
@@ -796,7 +811,7 @@ Treat unavailable entries as an incomplete-coverage exception, but keep expected
 filesystem-boundary counts in `Details` rather than presenting them as an
 error. Loading routine capability or accounting evidence into that popover is
 not an application status change and must not compete with the
-focused result heading, coverage warning action, or folder-search status.
+focused root breadcrumb, coverage warning action, or folder-search status.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 
@@ -820,8 +835,8 @@ Start with these files:
   the `?mock=` query parameter.
 - `src/lib/dev-stress.ts`: deterministic 500-row, 512-chart-node frontend
   stress fixture and coherent drill-down views.
-- `src/lib/appearance.ts`: root appearance synchronization and live system-theme
-  change handling.
+- `src/lib/appearance.ts`: root appearance synchronization, live system-theme
+  change handling, and the session-only manual toggle.
 - `src/lib/folder-drop.ts`: pure native drag-event decisions and privacy-safe
   dropped-item labels.
 - `src/lib/scan-roots.ts`: scan-root wire type and bounded capacity helpers.

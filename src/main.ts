@@ -1,7 +1,7 @@
 import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
-import { installSystemAppearance } from "$lib/appearance";
+import { createAppearanceController } from "$lib/appearance";
 import { windowPlatform } from "$lib/window-chrome";
 
 if (windowPlatform) document.documentElement.dataset.windowChrome = windowPlatform;
@@ -16,12 +16,12 @@ const forcedDark =
     : appearancePreview === "light"
       ? false
       : undefined;
-const stopAppearanceSync = installSystemAppearance(
+const appearance = createAppearanceController(
   document.documentElement,
   window.matchMedia("(prefers-color-scheme: dark)"),
   forcedDark,
 );
-if (import.meta.hot) import.meta.hot.dispose(stopAppearanceSync);
+if (import.meta.hot) import.meta.hot.dispose(appearance.dispose);
 
 const mockScenario = developmentParameters?.get("mock");
 if (mockScenario) {
@@ -31,6 +31,7 @@ if (mockScenario) {
 
 const app = mount(App, {
   target: document.getElementById("app")!,
+  props: { appearance },
 });
 
 export default app;
