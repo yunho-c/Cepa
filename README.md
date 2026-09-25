@@ -9,15 +9,17 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 
 ## Current capabilities
 
-- Parallel portable traversal with `jwalk`
+- Parallel portable traversal with `jwalk` on macOS and Linux
 - Batched, bounded-parallel `getattrlistbulk` traversal on macOS, with automatic
   fallback to `jwalk` when the native API is unavailable for the selected
   filesystem
 - Bounded-parallel `getdents64` + `statx` traversal on Linux, with automatic
   fallback to `jwalk` when the kernel/runtime cannot supply the required fields
 - MFT enumeration on Windows NTFS volume roots, with exact allocation sizes,
-  hard-link name recovery, and automatic `jwalk` fallback for subfolders,
+  hard-link name recovery, and a local-only `win32` fallback for subfolders,
   non-NTFS volumes, or unavailable volume access
+- Cloud-only entries skipped on macOS APFS/File Provider and Windows Cloud
+  Files/NTFS, while downloaded provider files remain included
 - Read-only native storage discovery with free/total capacity and a direct scan
   action for local volumes, while keeping the folder picker visible at the
   default and minimum window heights
@@ -34,11 +36,11 @@ radial storage map and size-ranked directory list. All scanning happens locally.
 - Scan-entry and stop failures lead with actionable recovery guidance while exact
   platform diagnostics remain available under collapsed error details
 - Logical and allocated byte accounting, with exact allocation on macOS,
-  non-Btrfs Unix filesystems, and native Windows MFT scans; Btrfs and portable
-  Windows scans are explicitly labeled estimates
+  non-Btrfs Unix filesystems, and both Windows scan paths; Btrfs scans are
+  explicitly labeled estimates
 - Metric-aware directory ranking and charts switchable between space on disk
   and logical size
-- Deterministic Unix hard-link deduplication and same-filesystem traversal
+- Deterministic Unix and Windows hard-link deduplication and same-filesystem traversal
   boundaries
 - Permission and traversal-error accounting without aborting the whole scan,
   with a visible incomplete-coverage warning action and hover/focus Tooltip when

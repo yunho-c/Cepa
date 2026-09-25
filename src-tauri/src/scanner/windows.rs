@@ -1,8 +1,9 @@
 use super::mft::{self, Record};
+use super::windows_local as local;
 use super::{
-    CANCELLATION_CHECK_INTERVAL_ENTRIES, EntryKind, FileIdentity, HardLinkOwner, InternalNode,
-    MeasuredMetadata, PROGRESS_INTERVAL, PartialRanking, ScanCounters, ScanOutput, ScanPhase,
-    ScanProgress, ScanSemantics, finish_scan, observe_partial_file,
+    EntryKind, FileIdentity, HardLinkOwner, InternalNode, MeasuredMetadata, PROGRESS_INTERVAL,
+    PartialRanking, ScanCounters, ScanOutput, ScanPhase, ScanProgress, ScanSemantics, finish_scan,
+    observe_partial_file,
 };
 use crate::file_revision::ScannedFileRevision;
 use std::collections::HashSet;
@@ -25,11 +26,12 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_ATTRIBUTE_DIRECTORY,
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_BASIC_INFO, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_DESCRIPTOR, FILE_ID_DESCRIPTOR_0, FILE_READ_ATTRIBUTES,
-    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileBasicInfo,
-    FileIdType, FileStandardInfo, FindClose, FindFirstFileNameW, FindNextFileNameW,
-    GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
-    GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, OPEN_EXISTING, OpenFileById,
+    FILE_FLAG_OPEN_NO_RECALL, FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_DESCRIPTOR,
+    FILE_ID_DESCRIPTOR_0, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileBasicInfo, FileIdType, FileStandardInfo, FindClose,
+    FindFirstFileNameW, FindNextFileNameW, GetFileInformationByHandle,
+    GetFileInformationByHandleEx, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    GetVolumePathNameW, OPEN_EXISTING, OpenFileById,
 };
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, MFT_ENUM_DATA_V0};
@@ -40,6 +42,7 @@ const MEASUREMENT_BATCH_SIZE: usize = 256;
 const RESULT_BATCHES_PER_WORKER: usize = 2;
 const WINDOWS_PATH_BUFFER: usize = 32_768;
 
+#[derive(Debug)]
 pub(super) enum NativeScanError {
     Unavailable,
     Fatal(String),
@@ -47,6 +50,7 @@ pub(super) enum NativeScanError {
 
 #[derive(Clone, Copy, Debug, Default)]
 struct WindowsMeasurement {
+    cloud: bool,
     measured: MeasuredMetadata,
     link_count: u32,
 }
@@ -76,14 +80,38 @@ pub(super) fn scan_path<F>(
 where
     F: FnMut(ScanProgress),
 {
-    let root = root
-        .canonicalize()
-        .map_err(|error| fatal(format!("Could not open {}: {error}", root.display())))?;
+    scan_path_impl(root, cancel, on_progress, true)
+}
+
+#[cfg(test)]
+pub(super) fn scan_fixture<F>(
+    root: &Path,
+    on_progress: &mut F,
+) -> Result<ScanOutput, NativeScanError>
+where
+    F: FnMut(ScanProgress),
+{
+    // Exercise the production MFT pipeline against a disposable subtree without
+    // retaining every unrelated file on the test machine. Production remains
+    // volume-root-only; enumeration still uses the real volume index.
+    scan_path_impl(root, Arc::new(AtomicBool::new(false)), on_progress, false)
+}
+
+fn scan_path_impl<F>(
+    root: &Path,
+    cancel: Arc<AtomicBool>,
+    on_progress: &mut F,
+    volume_only: bool,
+) -> Result<ScanOutput, NativeScanError>
+where
+    F: FnMut(ScanProgress),
+{
+    let _mode = local::PlaceholderMode::new().map_err(|e| fatal(e.to_string()))?;
+    let (root, root_handle) = local::open_root(root).map_err(|e| fatal(e.to_string()))?;
     if cancel.load(Ordering::Relaxed) {
         return Err(fatal("Scan cancelled."));
     }
 
-    let root_handle = open_path(&root, FILE_READ_ATTRIBUTES)?;
     let root_information = file_information(&root_handle)
         .map_err(|error| fatal(format!("Could not read {}: {error}", root.display())))?;
     if root_information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
@@ -97,7 +125,7 @@ where
     if !is_ntfs(&volume_root)? {
         return Err(NativeScanError::Unavailable);
     }
-    if volume_root_reference(&volume_root)? != root_reference {
+    if volume_only && volume_root_reference(&volume_root)? != root_reference {
         return Err(NativeScanError::Unavailable);
     }
     let volume_handle = open_volume(&volume_root)?;
@@ -127,14 +155,10 @@ where
     let mut node_by_reference = std::collections::HashMap::with_capacity(ordered.len() + 1);
     let mut file_nodes = Vec::new();
     let mut hard_links = Vec::new();
-    node_by_reference.insert(root_reference, 0_usize);
+    node_by_reference.insert(root_reference, Some(super::ParentId::new(0)));
 
     for &record_index in &ordered {
-        if nodes
-            .len()
-            .is_multiple_of(CANCELLATION_CHECK_INTERVAL_ENTRIES as usize)
-            && cancel.load(Ordering::Relaxed)
-        {
+        if cancel.load(Ordering::Relaxed) {
             return Err(fatal("Scan cancelled."));
         }
         let record = &records[record_index];
@@ -142,11 +166,46 @@ where
             .get(&record.parent_reference)
             .copied()
             .ok_or(NativeScanError::Unavailable)?;
-        let kind = entry_kind(record.attributes);
+        let Some(parent) = parent else {
+            node_by_reference.insert(record.reference, None);
+            continue;
+        };
+        let parent = parent.node_id();
+        if local::needs_recall(record.attributes) {
+            counters.skipped_cloud_entries += 1;
+            node_by_reference.insert(record.reference, None);
+            continue;
+        }
+        let kind = if record.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            // MFT attributes alone cannot distinguish a downloaded cloud item
+            // from a junction. Query its tag through a metadata-only ID open.
+            match open_file_by_id(volume_handle.as_raw_handle() as usize, record.reference)
+                .and_then(|file| local::attributes(&file))
+            {
+                Ok(info) if local::needs_recall(info.FileAttributes) => {
+                    counters.skipped_cloud_entries += 1;
+                    node_by_reference.insert(record.reference, None);
+                    continue;
+                }
+                Ok(info) => local::classify(info.FileAttributes, info.ReparseTag),
+                Err(_) => {
+                    counters.skipped_entries += 1;
+                    node_by_reference.insert(record.reference, None);
+                    continue;
+                }
+            }
+        } else {
+            entry_kind(record.attributes)
+        };
         let name = OsString::from_wide(&record.name);
         let (node_id, _) =
             counters.push_node(&mut nodes, parent, name, kind, MeasuredMetadata::default());
-        node_by_reference.insert(record.reference, node_id);
+        // Prune descendants of actual links, even though the MFT index can
+        // contain them. Cloud directories with local contents remain traversable.
+        node_by_reference.insert(
+            record.reference,
+            (kind == EntryKind::Directory).then(|| super::ParentId::new(node_id)),
+        );
         if matches!(kind, EntryKind::File) {
             file_nodes.push((record_index, node_id));
         }
@@ -317,12 +376,13 @@ where
                     let record = &records[record_index];
                     let measurement =
                         measure_file_by_id(volume_handle, record.reference, volume_serial)
-                            .unwrap_or(WindowsMeasurement {
+                            .unwrap_or_else(|error| WindowsMeasurement {
+                                cloud: local::is_cloud_error(&error),
                                 measured: MeasuredMetadata {
                                     metadata_error: true,
                                     ..MeasuredMetadata::default()
                                 },
-                                link_count: 0,
+                                ..WindowsMeasurement::default()
                             });
                     batch.push((node_id, measurement));
                     if batch.len() == MEASUREMENT_BATCH_SIZE {
@@ -399,6 +459,13 @@ fn apply_measurement(
     partial_ranking: &mut PartialRanking,
     hard_links: &mut Vec<HardLinkCandidate>,
 ) {
+    if measurement.cloud {
+        // A file can be evicted after its node was retained from the index.
+        // Preserve the zero-byte observed node, but do not rank it or report a
+        // permission failure. Known placeholders were excluded before retention.
+        counters.skipped_cloud_entries += 1;
+        return;
+    }
     if measurement.measured.metadata_error {
         counters.skipped_entries = counters.skipped_entries.saturating_add(1);
         return;
@@ -437,11 +504,7 @@ fn apply_measurement(
     }
 }
 
-fn measure_file_by_id(
-    volume_handle: usize,
-    reference: u64,
-    volume_serial: u64,
-) -> io::Result<WindowsMeasurement> {
+fn open_file_by_id(volume_handle: usize, reference: u64) -> io::Result<File> {
     let descriptor = FILE_ID_DESCRIPTOR {
         dwSize: size_of::<FILE_ID_DESCRIPTOR>() as u32,
         Type: FileIdType,
@@ -456,10 +519,26 @@ fn measure_file_by_id(
             FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             null(),
-            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_OPEN_NO_RECALL,
         )
     };
-    let file = owned_file(handle)?;
+    owned_file(handle)
+}
+
+fn measure_file_by_id(
+    volume_handle: usize,
+    reference: u64,
+    volume_serial: u64,
+) -> io::Result<WindowsMeasurement> {
+    let _mode = local::PlaceholderMode::new()?;
+    let file = open_file_by_id(volume_handle, reference)?;
+    let info = local::attributes(&file)?;
+    if local::needs_recall(info.FileAttributes) {
+        return Err(local::cloud_error());
+    }
+    if local::classify(info.FileAttributes, info.ReparseTag) != EntryKind::File {
+        return Err(io::Error::other("The indexed file changed type"));
+    }
     let mut standard = FILE_STANDARD_INFO::default();
     let success = unsafe {
         GetFileInformationByHandleEx(
@@ -484,7 +563,11 @@ fn measure_file_by_id(
     if success == 0 {
         return Err(io::Error::last_os_error());
     }
+    if local::needs_recall(basic.FileAttributes) {
+        return Err(local::cloud_error());
+    }
     Ok(WindowsMeasurement {
+        cloud: false,
         measured: MeasuredMetadata {
             logical_bytes: u64::try_from(standard.EndOfFile).unwrap_or(0),
             allocated_bytes: u64::try_from(standard.AllocationSize).unwrap_or(0),
@@ -672,7 +755,7 @@ fn open_path(path: &Path, access: u32) -> Result<File, NativeScanError> {
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             null(),
             OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_OPEN_NO_RECALL,
             null_mut(),
         )
     };
@@ -1013,6 +1096,7 @@ mod tests {
         apply_measurement(
             node_id,
             WindowsMeasurement {
+                cloud: false,
                 measured: MeasuredMetadata {
                     logical_bytes: 4_096,
                     allocated_bytes: 8_192,
@@ -1056,6 +1140,7 @@ mod tests {
         apply_measurement(
             node_id,
             WindowsMeasurement {
+                cloud: false,
                 measured: MeasuredMetadata {
                     metadata_error: true,
                     ..MeasuredMetadata::default()
@@ -1072,5 +1157,35 @@ mod tests {
         assert_eq!(nodes[node_id].logical_bytes, 0);
         assert!(ranking.candidates.is_empty());
         assert!(hard_links.is_empty());
+    }
+    #[test]
+    fn eviction_after_indexing_is_not_a_permission_error_or_ranked_file() {
+        let mut nodes = vec![InternalNode::root(Path::new(r"C:\"))];
+        let mut counters = ScanCounters::default();
+        let mut ranking = PartialRanking::default();
+        let mut links = Vec::new();
+        let (id, _) = counters.push_node(
+            &mut nodes,
+            0,
+            "evicted".into(),
+            EntryKind::File,
+            MeasuredMetadata::default(),
+        );
+        apply_measurement(
+            id,
+            WindowsMeasurement {
+                cloud: true,
+                ..WindowsMeasurement::default()
+            },
+            &mut nodes,
+            &mut counters,
+            &mut ranking,
+            &mut links,
+        );
+        assert_eq!(counters.skipped_cloud_entries, 1);
+        assert_eq!(counters.skipped_entries, 0);
+        assert_eq!(nodes[id].logical_bytes, 0);
+        assert!(ranking.items(&nodes).is_empty());
+        assert!(links.is_empty());
     }
 }

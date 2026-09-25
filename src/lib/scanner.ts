@@ -1,5 +1,5 @@
 export type EntryKind = "directory" | "file" | "symlink" | "other";
-export type ScanBackend = "jwalk" | "getattrlistbulk" | "mft" | "statx";
+export type ScanBackend = "jwalk" | "getattrlistbulk" | "mft" | "win32" | "statx";
 export type ScanPhase = "scanning" | "finishing";
 export type SizeMetric = "allocated" | "logical";
 export type CompressionCapabilityStatus =
@@ -272,6 +272,7 @@ export function formatPercent(part: number, total: number): string {
 export function formatBackend(backend: ScanBackend): string {
   if (backend === "getattrlistbulk") return "macOS native";
   if (backend === "mft") return "Windows native";
+  if (backend === "win32") return "Windows local";
   if (backend === "statx") return "Linux native";
   return "Portable";
 }

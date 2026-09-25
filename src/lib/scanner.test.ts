@@ -175,6 +175,7 @@ describe("scanner presentation helpers", () => {
     expect(formatBackend("jwalk")).toBe("Portable");
     expect(formatBackend("getattrlistbulk")).toBe("macOS native");
     expect(formatBackend("mft")).toBe("Windows native");
+    expect(formatBackend("win32")).toBe("Windows local");
     expect(formatBackend("statx")).toBe("Linux native");
   });
 

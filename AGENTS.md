@@ -43,8 +43,9 @@ scan or replace its snapshot; release its rejected snapshot away from the
 runtime thread. Preserve the concurrent-start and superseded-completion
 regressions when changing this state machine.
 Each falls back to `jwalk` when its native API is unavailable or unsuitable;
-Windows subfolder scans deliberately use `jwalk` because MFT enumeration has a
-whole-volume fixed cost.
+Windows subfolder scans use the protected `win32` directory walker because MFT
+enumeration has a whole-volume fixed cost. The explicit `jwalk` selector also
+resolves to `win32` on Windows; never fall back to unprotected std enumeration.
 On macOS, protect root resolution and every native or fallback scanner worker
 with the thread-local no-materialization policy in `scanner/local_only.rs`.
 Fail closed if that policy cannot be installed; never retry unprotected.
@@ -52,8 +53,20 @@ Exclude dataless entries before retention and descent, and count them separately
 through `skippedCloudEntries` in quiet Details. Downloaded provider files remain
 ordinary local files: do not blacklist iCloud or Google Drive folder names.
 Keep the scoped policy restoration, protected fallback pool, and opt-in real
-cloud fixture test. This is macOS APFS/File Provider protection, not Windows,
-Linux, or arbitrary network-provider qualification.
+cloud fixture test. This is macOS APFS/File Provider protection, not Linux or
+arbitrary network-provider qualification. Windows has separate Cloud Files/NTFS
+protection in `scanner/windows_local.rs` and `scanner/windows_walk.rs`. Preserve
+held-parent-relative metadata opens, scoped placeholder exposure on the caller
+and every worker, bounded 32-entry metadata batches with at most eight workers, no-recall and
+no-reparse flags, and on-disk-only directory enumeration. Exposure alone is not
+a no-hydration policy. Never retry unsupported enumeration unprotected. Check
+OFFLINE/RECALL_ON_DATA_ACCESS on both Windows paths, but interpret RECALL_ON_OPEN
+only in enumeration (its basic-metadata bit also means EA). Keep downloaded
+Cloud Files reparse points distinct from links; pin/unpin intent is not residency.
+Root resolution must reject unavailable ancestors before following them. Keep
+cloud exclusions separate from unavailable-item errors and preserve the connected
+provider fixture's zero-fetch assertions, positive control, and read-only real
+provider test. This does not qualify every proprietary Windows virtual drive.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row. Do not restore a live largest-files list
 or its empty placeholder; the scan state should stay focused on overall progress.
@@ -573,7 +586,10 @@ identity-safe, race-resistant contract before they can enter the UI.
 
 The intended scanning architecture is:
 
-- `jwalk` as the implemented portable fallback and behavioral reference.
+- `jwalk` as the portable fallback and behavioral reference outside Windows.
+  Windows uses handle-relative `win32` traversal with on-disk-only enumeration
+  for folders and the MFT fallback; both report native allocation and deduplicate
+  NTFS hard links. Do not restore unprotected Windows directory enumeration.
 - `getattrlistbulk` as the implemented macOS backend. Its first parity fixture
   plus synthetic and two-shape local real-tree validation exist. A current
   221,920-entry build checkout and 63,904-entry source registry retained exact

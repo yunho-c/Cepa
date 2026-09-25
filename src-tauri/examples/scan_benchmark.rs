@@ -254,7 +254,7 @@ fn parse_positive_usize(value: OsString, name: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-    "usage: scan_benchmark <directory> [iterations] [auto|jwalk|getattrlistbulk|mft|statx]"
+    "usage: scan_benchmark <directory> [iterations] [auto|jwalk|getattrlistbulk|mft|win32|statx]"
         .to_string()
 }
 

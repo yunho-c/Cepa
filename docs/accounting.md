@@ -31,9 +31,8 @@ inspection, estimation, or planning.
 - Logical size is the byte length reported for regular files. Directory,
   symbolic-link, and other entry types contribute zero direct bytes.
 - Allocated size uses native allocation attributes on macOS,
-  `FILE_STANDARD_INFO::AllocationSize` in the Windows MFT backend, and physical
-  blocks multiplied by 512 on other Unix filesystems. The portable Windows
-  fallback reports logical size as an estimate.
+  `FILE_STANDARD_INFO::AllocationSize` in both Windows backends, and physical
+  blocks multiplied by 512 on other Unix filesystems.
 - Btrfs is also explicitly estimated for both `jwalk` and `statx`. Its
   `st_blocks`/`statx` block count can expose the uncompressed referenced length
   for encoded extents instead of their compressed physical length. The ordinary
@@ -137,8 +136,8 @@ non-enumerable directory are not a complete accounting of provider disk usage.
 
 This protection covers macOS APFS dataless/File Provider semantics. It does not
 establish a no-network guarantee for arbitrary network mounts or proprietary
-virtual filesystems. Windows recall attributes and Linux provider-specific
-behavior are not implemented by this macOS change.
+virtual filesystems. Windows uses the separate protection described below;
+Linux provider-specific protection is not implemented.
 
 A read-only integration test accepts a small existing cloud directory containing
 already-evicted entries. It checks both backends, rejects placeholder roots and
@@ -191,3 +190,88 @@ or resized during traversal can make the result differ from any single instant.
 Cepa avoids undefined accounting and arithmetic overflow, but it does not claim
 transactional snapshot semantics. For backend parity and performance evidence,
 use a quiescent fixture.
+
+## Cloud-backed storage on Windows
+
+Windows scans exclude entries with `FILE_ATTRIBUTE_OFFLINE` or
+`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`. Directory enumeration also checks
+`FILE_ATTRIBUTE_RECALL_ON_OPEN`; that bit is deliberately **not** interpreted as
+recall in basic metadata or USN records, where the same value can mean extended
+attributes. Pin/unpin intent does not establish residency. Downloaded Cloud
+Files files and directories remain included, including unpinned local copies.
+There is no provider-name blacklist.
+
+The volume-root MFT backend filters known placeholders before retaining nodes
+or dispatching file measurement, and prunes excluded directory subtrees. It
+queries reparse tags through metadata-only file-ID handles so Cloud Files tags
+are distinguished from symbolic links and junctions. Workers expose placeholder
+metadata with a scoped, thread-bound compatibility guard and recheck recall
+state through their opened handles. A file evicted after index admission may
+remain as a zero-byte observed node; its exclusion is counted as cloud-related,
+not as a permission error, and it is not ranked as a measured file.
+
+Folder scans and the MFT fallback use the `win32` backend. The explicit `jwalk`
+selector also resolves to `win32` on Windows and reports that actual backend:
+the standard-library enumeration used by jwalk cannot request local-only
+population. Other platforms keep their existing fallback. The Windows walker:
+
+- Resolves roots component by component using metadata-only, no-reparse,
+  no-recall opens relative to held parent handles. It rejects cloud-only roots
+  and cloud-only ancestors. Selected paths through symbolic links or junctions
+  are rejected rather than resolved implicitly.
+- Enumerates held directory objects with `NtQueryDirectoryFileEx` and
+  `SL_RETURN_ON_DISK_ENTRIES_ONLY`. It never retries without that flag.
+- Rechecks each child's attributes before measurement or descent, retains only
+  recognized downloaded Cloud Files reparse points as ordinary items, and
+  preserves the existing no-follow treatment of other reparse points.
+- Reads allocation, hard-link identity, and revision metadata through the same
+  child handle without requesting file-content access. Hard-link deduplication
+  is enabled for NTFS; other filesystems do not use the retained 64-bit ID for
+  deduplication. Metadata inspection uses at most eight workers and 32-entry
+  handoffs; each worker installs and restores placeholder exposure before IO.
+  Cancellation is checked
+  per entry and progress retains the shared adaptive clock and 100 ms cadence.
+
+Placeholder compatibility mode only exposes metadata; it does **not** itself
+prevent hydration. The handle-relative opens, no-recall/no-reparse flags, and
+on-disk-only enumeration are all parts of the protection. Directory handles are
+reopened relative to the already-checked held object; a pathname replacement
+cannot change its identity or turn directory-list access into file-content access.
+
+The implementation follows Microsoft's [file attribute definitions](https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants),
+[placeholder compatibility mode](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-rtlsetthreadplaceholdercompatibilitymode),
+and [on-disk directory query flags](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntquerydirectoryfileex).
+The supported API baseline is Windows 10 version 1709 or later. Qualification
+covers Windows Cloud Files on NTFS. Arbitrary network filesystems, third-party
+virtual drives, and provider-specific filter behavior are not a universal
+no-network guarantee. Unsupported local-only enumeration fails closed: a root
+failure terminates the scan, while a child failure is an unavailable item.
+Google Drive streaming on G14W is a measured exception: its FAT32 virtual drive
+accepted the protected calls but exposed ordinary attributes and virtual
+allocation sizes, so cloud entries were counted with zero cloud exclusions.
+The inspected content cache did not grow during the bounded test, but this is
+not correct local-only accounting. Google Drive streaming remains unsupported
+by this protection; see the [provider-specific test results](validation-results/2026-09-25-google-drive-windows.md).
+As on macOS, skipped counts describe observed entries, not unknown descendants.
+Virtual entries omitted entirely by the filesystem are not counted. Local data
+beneath an excluded directory and provider caches are not a complete provider
+storage inventory.
+
+Windows tests include a disposable, connected Cloud Files provider. It creates
+online-only files and a directory plus downloaded files and a downloaded
+cloud directory; both walkers must agree, leave placeholders unavailable, and
+produce zero data-fetch or directory-population callbacks. An ordinary content
+read afterward is a positive control for the callback counter. The MFT fixture
+uses the production pipeline with a test-only subtree admission; production
+MFT selection remains volume-root-only.
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features `
+  cloud_files_fixture -- --ignored --nocapture
+
+# Read-only existing-provider check; choose a small, already populated root
+# containing unavailable direct children. Never creates or evicts user files.
+$env:CEPA_CLOUD_FIXTURE_ROOT = 'C:\path\to\existing\cloud\folder'
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features `
+  existing_cloud_placeholders -- --ignored --nocapture
+```

@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-25",
+  "host": "G14W",
+  "conclusion": "Google Drive streaming fails local-only accounting qualification: ordinary attributes and virtual allocation are counted with zero cloud exclusions. No persistent cache change was observed.",
+  "drive": {
+    "DeviceID": "G:",
+    "VolumeName": "Google Drive",
+    "FileSystem": "FAT32",
+    "DriveType": 3
+  },
+  "providerProcesses": [
+    {
+      "Id": 24708,
+      "Path": "C:\\Program Files\\Google\\Drive File Stream\\130.0.2.0\\GoogleDriveFS.exe",
+      "Version": "130.0.2.0"
+    },
+    {
+      "Id": 105748,
+      "Path": "C:\\Program Files\\Google\\Drive File Stream\\131.0.2.0\\GoogleDriveFS.exe",
+      "Version": "131.0.2.0"
+    }
+  ],
+  "provenance": {
+    "priorValidation": "2026-09-25-windows-cloud.json",
+    "baseCommit": "585390a7ab573bbec51791d6d81ed8186a060f2f",
+    "originalBuildInputs": 142,
+    "localBuildInputMismatches": [],
+    "sourceManifestSha256": "5441968e34848763c3295f4645832cc5c86a204824e06d25fe3912c3e56b7368",
+    "scanObservationBinary": {
+      "Algorithm": "SHA256",
+      "Hash": "7A58AB3D52B5E53DDD17D97F8D63B89884D52CF83CD818F24A975B05C07A768C",
+      "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\release\\examples\\scan_observation.exe"
+    },
+    "probeHashes": [
+      {
+        "Hash": "A5E9A6EA8238F3758835C76DF27C225B91A5654346B3E68D4FFFF6ABF2E436C2",
+        "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\google-drive\\probe-target\\release\\cepa-google-probe.exe"
+      },
+      {
+        "Hash": "95CF3C937C8EB6CF63E75CAB789C0E01194B6691D827A3126003BAE904FFCB3C",
+        "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\google-drive\\probe\\src\\main.rs"
+      },
+      {
+        "Hash": "784F8F20F4E46F1132BEA5A0BE1CCDB1C7A89C2B467CEABB90BBB94DB861A96B",
+        "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\google-drive\\probe\\src\\windows_local.rs"
+      }
+    ],
+    "productionWindowsLocalSha256": "784f8f20f4e46f1132bea5a0be1ccdb1c7a89c2b467ceabb90bbb94db861a96b"
+  },
+  "probeObservations": {
+    "root": {
+      "attributes": 16,
+      "ntfs": false,
+      "root": "\\\\?\\G:\\",
+      "tag": 0,
+      "entries": 5,
+      "recallEntries": 0,
+      "samples": 5,
+      "sampleAttributesUnchanged": true,
+      "enumerationAttributeCountsAmongSamples": {
+        "16": 2,
+        "18": 2,
+        "22": 1
+      },
+      "reparseTagCountsAmongSamples": {
+        "0": 5
+      }
+    },
+    "myDrive": {
+      "attributes": 16,
+      "ntfs": false,
+      "root": "\\\\?\\G:\\My Drive",
+      "tag": 0,
+      "entries": 775,
+      "recallEntries": 0,
+      "samples": 40,
+      "sampleAttributesUnchanged": true,
+      "enumerationAttributeCountsAmongSamples": {
+        "16": 9,
+        "128": 31
+      },
+      "reparseTagCountsAmongSamples": {
+        "0": 40
+      }
+    },
+    "colabBefore": {
+      "attributes": 16,
+      "ntfs": false,
+      "root": "\\\\?\\G:\\My Drive\\Colab Notebooks",
+      "tag": 0,
+      "entries": 55,
+      "recallEntries": 0,
+      "samples": 40,
+      "sampleAttributesUnchanged": true,
+      "enumerationAttributeCountsAmongSamples": {
+        "128": 37,
+        "16": 3
+      },
+      "reparseTagCountsAmongSamples": {
+        "0": 40
+      }
+    },
+    "colabAfter": {
+      "attributes": 16,
+      "ntfs": false,
+      "root": "\\\\?\\G:\\My Drive\\Colab Notebooks",
+      "tag": 0,
+      "entries": 55,
+      "recallEntries": 0,
+      "samples": 40,
+      "sampleAttributesUnchanged": true,
+      "enumerationAttributeCountsAmongSamples": {
+        "128": 37,
+        "16": 3
+      },
+      "reparseTagCountsAmongSamples": {
+        "0": 40
+      }
+    }
+  },
+  "scan": {
+    "schemaVersion": 2,
+    "cepaVersion": "0.1.0",
+    "environment": {
+      "os": "windows",
+      "architecture": "x86_64",
+      "logicalCpus": 16,
+      "buildProfile": "release"
+    },
+    "backend": "win32",
+    "path": "\\\\?\\G:\\My Drive\\Colab Notebooks",
+    "result": {
+      "root": "\\\\?\\G:\\My Drive\\Colab Notebooks",
+      "displayName": "Colab Notebooks",
+      "backend": "win32",
+      "logicalBytes": 789758598,
+      "allocatedBytes": 789851648,
+      "fileCount": 760,
+      "directoryCount": 136,
+      "skippedEntries": 0,
+      "skippedFilesystems": 0,
+      "skippedCloudEntries": 0,
+      "duplicateHardLinks": 0,
+      "traversalUs": 16058659,
+      "aggregationUs": 37,
+      "indexingUs": 0,
+      "elapsedMs": 16058,
+      "allocatedSizeIsEstimate": false,
+      "hardLinkDeduplicationSupported": false,
+      "sameFilesystemEnforced": true
+    },
+    "initialViewMs": 0.1325,
+    "progressEvents": 19,
+    "initialResponse": {
+      "responseBytes": 14176,
+      "serializationUs": 77,
+      "listItems": 55,
+      "chartItems": 51
+    },
+    "wallMs": 16062.2948
+  },
+  "cacheBefore": {
+    "Utc": "2026-09-25T16:08:17.9057597Z",
+    "CacheFiles": 5,
+    "CacheBytes": 1982621
+  },
+  "cacheAfter": {
+    "Utc": "2026-09-25T16:09:44.6594247Z",
+    "CacheFiles": 5,
+    "CacheBytes": 1982621,
+    "ManifestUnchanged": true,
+    "ProbeUnchanged": true
+  },
+  "existingPlaceholderTest": {
+    "root": "G:\\",
+    "result": "failed precondition before scan",
+    "reason": "fixture must contain unavailable entries",
+    "elapsedSeconds": 0.01
+  },
+  "limits": [
+    "No provider callback or network instrumentation",
+    "Only one existing subtree scanned",
+    "No independent per-file cache-residency identification",
+    "No file content reads or availability changes",
+    "Both running DriveFS versions recorded; mount ownership not established"
+  ],
+  "artifactSha256": {
+    "cache-after-summary.json": "67e20994194bcf49abbff9311dd738c464b341f6f5a0732ae371ac4423d17a60",
+    "cache-after.json": "d228796afb242920ede8bf11b7bf614ce59c882de91638f9b475f0eba8385b7d",
+    "cache-before-summary.json": "c8474bdba076fc2bd594d48c10ee8fe965a19398cd03daf5d7c284acb5a0ed90",
+    "cache-before.json": "d228796afb242920ede8bf11b7bf614ce59c882de91638f9b475f0eba8385b7d",
+    "colab-probe-after.jsonl": "788d6332bb1262564016737b972ebe376859f58f8bd1814891cebfbd432e60c7",
+    "colab-probe-after.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "colab-probe-before.jsonl": "788d6332bb1262564016737b972ebe376859f58f8bd1814891cebfbd432e60c7",
+    "colab-probe-before.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "colab-scan.json": "9366b729dc5c9259a156c90ccd4cf7293268432699cb0c67036a61e1bc116711",
+    "colab-scan.stderr.log": "b1153851a6d151ba79baa652520c137ca2347c0bebcc69e5ae35f48b1cbb4298",
+    "drive.json": "db0e18678147c80cb467b227afb48b8f932f079b4649f863105320b05e014aa0",
+    "my-drive-probe.jsonl": "f9c5567924ddc659181f66b42d845101221fe64dcfefa16c558c42b5d53fc034",
+    "my-drive-probe.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-build.log": "47989f13d62ef81aeafb5de3d640d25f720b2477e34a153917c7d2a93a3f3ea7",
+    "probe-hashes.json": "951a62b59e6c8ba1f447a27323bdd8ae6d09e323be85bbf07896f769072ff6e9",
+    "probe.tar.gz": "00ec3b55935f491aacaf57e9e2c97039d7331581cc55fc548b8179bcbfe2bc4f",
+    "provider.json": "d4688539f69b086c4e68b6aad4f26dacd02e7dfbcd3e372d883ab23a845bb133",
+    "root-probe.jsonl": "13399c2e9961f1bb272fd1d9b348f39493d245bca591605244ae2b57e1ead0b2",
+    "root-probe.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "root-test.stderr.log": "bb45945ea11f0831ffa805f8e7746d4740930dacef9167d4858132e0209430fe",
+    "root-test.stdout.log": "7bf05ce2cb5d3281962d039634366d18783fa6fd133b4598b0886db7295c72da",
+    "scan-observation-hash.json": "b74becfae79d94860698f4702be92098cdf133eaaff99533bcde7dc84297fc57"
+  },
+  "rawArtifacts": "/tmp/cepa-windows-cloud-20260925/google-drive"
+}

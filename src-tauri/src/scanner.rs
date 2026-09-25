@@ -1,3 +1,4 @@
+#[cfg(not(windows))]
 use jwalk::{Parallelism, WalkDirGeneric};
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,12 @@ mod mft;
 #[cfg(target_os = "windows")]
 #[path = "scanner/windows.rs"]
 mod windows;
+#[cfg(windows)]
+#[path = "scanner/windows_local.rs"]
+mod windows_local;
+#[cfg(windows)]
+#[path = "scanner/windows_walk.rs"]
+mod windows_walk;
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_CLOCK_CHECK_INTERVAL_ENTRIES: u8 = 32;
@@ -205,7 +212,7 @@ pub(crate) struct DirectorySearchResult {
     pub items: Vec<ScanItem>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EntryKind {
     Directory,
@@ -280,6 +287,7 @@ pub enum ScanBackend {
     Jwalk,
     Getattrlistbulk,
     Mft,
+    Win32,
     Statx,
 }
 
@@ -290,6 +298,7 @@ impl ScanBackend {
             Self::Jwalk => "jwalk",
             Self::Getattrlistbulk => "getattrlistbulk",
             Self::Mft => "mft",
+            Self::Win32 => "win32",
             Self::Statx => "statx",
         }
     }
@@ -310,9 +319,10 @@ impl FromStr for ScanBackend {
             "jwalk" => Ok(Self::Jwalk),
             "getattrlistbulk" => Ok(Self::Getattrlistbulk),
             "mft" => Ok(Self::Mft),
+            "win32" => Ok(Self::Win32),
             "statx" => Ok(Self::Statx),
             value => Err(format!(
-                "unknown backend {value:?}; expected auto, jwalk, getattrlistbulk, mft, or statx"
+                "unknown backend {value:?}; expected auto, jwalk, getattrlistbulk, mft, win32, or statx"
             )),
         }
     }
@@ -651,6 +661,7 @@ where
     scan_path_with_backend(root, cancel, ScanBackend::Auto, on_progress)
 }
 
+#[cfg(not(windows))]
 pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), String> {
     #[cfg(target_os = "macos")]
     let _local_only = local_only::NoMaterialization::new().map_err(local_only::protection_error)?;
@@ -671,6 +682,11 @@ pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), Str
         );
     }
     Ok((root, metadata))
+}
+
+#[cfg(windows)]
+pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), String> {
+    windows_local::validate_root(root)
 }
 
 pub(crate) fn scan_path_with_backend<F>(
@@ -716,6 +732,16 @@ where
             }
         }
         ScanBackend::Jwalk => scan_path_jwalk(root, cancel, on_progress),
+        ScanBackend::Win32 => {
+            #[cfg(windows)]
+            {
+                windows_walk::scan_path(root, cancel, on_progress)
+            }
+            #[cfg(not(windows))]
+            {
+                Err("Windows directory traversal is only available on Windows.".into())
+            }
+        }
         ScanBackend::Getattrlistbulk => {
             #[cfg(target_os = "macos")]
             {
@@ -787,12 +813,28 @@ where
 }
 
 #[derive(Clone, Copy, Debug)]
+#[cfg(not(windows))]
 enum WalkMetadata {
     Local(MeasuredMetadata),
     #[cfg(target_os = "macos")]
     Cloud,
 }
 
+// Keep the explicit portable selector safe on Windows too. Its reported
+// backend is win32: std/jwalk cannot request on-disk-only enumeration.
+#[cfg(windows)]
+fn scan_path_jwalk<F>(
+    root: &Path,
+    cancel: Arc<AtomicBool>,
+    on_progress: F,
+) -> Result<ScanOutput, String>
+where
+    F: FnMut(ScanProgress),
+{
+    windows_walk::scan_path(root, cancel, on_progress)
+}
+
+#[cfg(not(windows))]
 fn scan_path_jwalk<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,
@@ -860,19 +902,6 @@ where
                             continue;
                         }
                         let measured = measure_metadata(&metadata, child.file_type.is_file());
-                        #[cfg(windows)]
-                        let measured = if child.file_type.is_file() {
-                            MeasuredMetadata {
-                                scan_revision: crate::file_revision::snapshot_no_follow(
-                                    &child.path(),
-                                )
-                                .ok()
-                                .map(|snapshot| snapshot.scanned),
-                                ..measured
-                            }
-                        } else {
-                            measured
-                        };
                         if child.file_type.is_dir()
                             && root_filesystem.is_some()
                             && measured.filesystem_id != root_filesystem
@@ -1836,6 +1865,7 @@ fn duration_us(duration: Duration) -> u64 {
     duration.as_micros().min(u128::from(u64::MAX)) as u64
 }
 
+#[cfg(not(windows))]
 fn measure_metadata(metadata: &Metadata, is_file: bool) -> MeasuredMetadata {
     let (logical_bytes, allocated_bytes) = if is_file {
         (metadata.len(), allocated_bytes(metadata))
@@ -1860,10 +1890,12 @@ fn allocated_bytes(metadata: &Metadata) -> u64 {
 }
 
 #[cfg(not(unix))]
+#[cfg(not(windows))]
 fn allocated_bytes(metadata: &Metadata) -> u64 {
     metadata.len()
 }
 
+#[cfg(not(windows))]
 fn portable_allocated_size_is_estimate(root: &Path) -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -1918,6 +1950,7 @@ fn filesystem_id(metadata: &Metadata) -> Option<u64> {
 }
 
 #[cfg(not(unix))]
+#[cfg(not(windows))]
 fn filesystem_id(_: &Metadata) -> Option<u64> {
     None
 }
@@ -1929,6 +1962,7 @@ fn file_identity(metadata: &Metadata) -> Option<FileIdentity> {
 }
 
 #[cfg(not(unix))]
+#[cfg(not(windows))]
 fn file_identity(_: &Metadata) -> Option<FileIdentity> {
     None
 }
@@ -1939,6 +1973,7 @@ fn scanned_file_revision(metadata: &Metadata) -> Option<ScannedFileRevision> {
 }
 
 #[cfg(not(unix))]
+#[cfg(not(windows))]
 fn scanned_file_revision(_: &Metadata) -> Option<ScannedFileRevision> {
     None
 }
@@ -2114,6 +2149,8 @@ mod tests {
                 "getattrlistbulk"
             } else if cfg!(target_os = "linux") {
                 "statx"
+            } else if cfg!(windows) {
+                "win32"
             } else {
                 "jwalk"
             }
@@ -2877,14 +2914,14 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn windows_auto_uses_portable_traversal_for_subfolders() {
+    fn windows_auto_uses_local_only_traversal_for_subfolders() {
         let temp = tempfile::tempdir().expect("create fixture directory");
         fs::write(temp.path().join("file.bin"), vec![1_u8; 17]).expect("write fixture file");
 
         let output = scan_path(temp.path(), Arc::new(AtomicBool::new(false)), |_| {})
             .expect("scan subfolder with automatic backend");
 
-        assert_eq!(output.result.backend, "jwalk");
+        assert_eq!(output.result.backend, "win32");
         assert_eq!(output.result.logical_bytes, 17);
     }
 

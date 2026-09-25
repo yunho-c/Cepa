@@ -1,0 +1,403 @@
+{
+  "baseRevision": "585390a7ab573bbec51791d6d81ed8186a060f2f",
+  "host": "G14W",
+  "os": "Windows 11 Home 10.0.26200 x86_64",
+  "rust": "1.97.0",
+  "sourceSha256": {
+    ".gitattributes": "1a1dbe176bc233b499d35a57db7513f2941c99ab9759f177830c9149be99005b",
+    ".gitignore": "9e7e4169fe620dfbbc9ba333f00cdf4daba0ea3a2887771ea1431c5643ad2b08",
+    ".vscode/extensions.json": "48d16bbc435fc3caeb5e85ea5fcf61226945af49066de7475ed3d8dc5b4c0961",
+    ".vscode/settings.json": "285549cb3e16ace7a832ec86d20d77d5fc0f97b618c7bb8ff00e7ac8b5088ec4",
+    "Justfile": "c56ce9b01e5342457c0f5f9f4678cfa560c1db332734a64de10d6a046c1231a0",
+    "LICENSE": "22f41709953844a82e98c9ff53c251e04532e8af5883ee7c91ccf3035f3fd615",
+    "bun.lock": "6b1835ff08c3cbfcac053ae52354656cf78cfc211c89259f4c026dad807b54b9",
+    "components.json": "9f67d2b4c696eb7e1c32042d299ad72a6aaccebf704cce256b1a5671a85a0a0d",
+    "index.html": "8533d37fca6e2b313aeb77e8817d61d407553c32d8aff77cdb7c374643ea697d",
+    "package.json": "b1390a8565a971ac0955a8d9f0e2c2d094d7c2615ebee752f33f280a2aface90",
+    "performance-results/2026-07-11-linux-container-statx-cancellation.json": "0a9b4ec37fdbd161d538f528e194db59be76188bead76fe5d49c06994bc9fb53",
+    "performance-results/2026-07-11-linux-container-statx-parity.json": "bae51bfbb18ba00ce55aca6e208962a9f3739f62650cd409310fa95a831d7b2e",
+    "public/cepa-icon.svg": "796d61e9160284d874ff89f3ab689f56b0b1e93cc9fdb95f4b5369103a73ba03",
+    "scripts/benchmark-count-format.ts": "c7a770b3b44501d6b6ece3bf34ee7d763d89267bd5af0f3705157a835425b40c",
+    "scripts/generate-icons.ts": "7559b539fd288debd2cff590a4f3b8f7f8e51b782a3bb84fd76fc1c1a18354f0",
+    "scripts/smoke-linux-desktop.sh": "f0dfd972ab38e474f88c325ae6f7fdb9b35f01ac4bb11f8210e9afad7985bc8d",
+    "scripts/validate-btrfs-compression.sh": "363599c83f959c614a79d90765f59487ac6ae78d3b684bbb5b34b0b907ea354a",
+    "scripts/validate-linux-bundles.sh": "846c6f40efb6f154452bbf9da748021abc842954320e6f05d97e5e3a97ef0c19",
+    "scripts/validate-macos-bundles.sh": "ac5a9c6bd65e84b1199aaa7e0d4ee7444ce7b03fc658524a71cfe2e349a4fbb3",
+    "scripts/validate-windows-bundles.ps1": "91182244c0371ebd39fcbd0f1a85bc4846286f39c3621ded9c7c40c4e07fa44f",
+    "src-tauri/.gitignore": "88707cda7ba4226eda3ffa91d8284f1a0d12b827f06fb9bc48425cc0d4af04af",
+    "src-tauri/Cargo.lock": "b632ace600743cda83016286dd1e6aeb3dad22c2911a9d5d6aef151452d05ced",
+    "src-tauri/Cargo.toml": "26c4b3463e48ed6ba3844a88210845ba47dd665ad2fcdd4ca40337f815aaa6fc",
+    "src-tauri/build.rs": "c66454eee2e1db18b1a293d8235675e1eb8fa3dde89992c5c448637db32f9e2d",
+    "src-tauri/capabilities/default.json": "ce2c7271d7b357bfc274eeebb14ad595ff4d73b364ed0bbdf58b038dfcfe62f7",
+    "src-tauri/examples/aggregation_cancellation.rs": "c46df9e5f78c047f82bea982d0f7ad860b05796ca7b4e914ee026b15d4c30206",
+    "src-tauri/examples/content_integrity_benchmark.rs": "52a1fb3625d43c73a7b92157c5258fc256c2b2b21ebe89a000c6dfa1a27b581d",
+    "src-tauri/examples/generate_scan_fixture.rs": "708a29178cb3200be08693f9343f64a5fe9b39a02e397ae75ee4e8be941b0d1e",
+    "src-tauri/examples/native_scan_smoke.rs": "b52471edc33c45643b78b2c1842f11c01c95e14393f943043ff151967d4780db",
+    "src-tauri/examples/scan_benchmark.rs": "49ec0b9661769aa5af0e36b163ae7931b4719bc1778556a24a1049fd63637453",
+    "src-tauri/examples/scan_cancellation.rs": "65593aad37d7ab5170d1d82375e4b4ad24ecc866f4b1144e633a51815d151426",
+    "src-tauri/examples/scan_comparison.rs": "fc8a35b9a9ed7ff8d0f9f926777f5381c9ae420e765bcaa92146da02f4e5f865",
+    "src-tauri/examples/scan_observation.rs": "d205bbdba51b8d2dbb7d72aed5d6757bde6c12e21247965c356c409f90053664",
+    "src-tauri/examples/scan_parity.rs": "d15691092363787778fc22de9010e851b8dfec738b564a09e9b583f6ceb31617",
+    "src-tauri/examples/search_benchmark.rs": "4e557f23af751e6f3aa9183863728bea198eb2766ce2bd92ce350023d67ac5f8",
+    "src-tauri/examples/window_state_smoke.rs": "5e07b80d470708b26744dc526c4a53cff780696dec95e147108b46117823d157",
+    "src-tauri/icons/128x128.png": "c0c1c360ed42b5ea4240088154d218cd9ffd3d76f04765413f06e26ed35d5e90",
+    "src-tauri/icons/128x128@2x.png": "c5a4cc1dda6249700bf3c25d96b92a25c6ac6e134e4754bba247acd7fc11e316",
+    "src-tauri/icons/32x32.png": "21b4f221ff18b159105f928ced4a836b97b89fd5a254c9c73cd83719dbd89e7b",
+    "src-tauri/icons/Square107x107Logo.png": "a2edbda992c0a282325e19349b7ce0b45083d8eaacebfa50a2e47146846d8198",
+    "src-tauri/icons/Square142x142Logo.png": "dc4182af7bd86f00ca59c5e46b7009a9abf765232843585356326a9c5f33a979",
+    "src-tauri/icons/Square150x150Logo.png": "c308e85f7471b0736d8f8b8d09867c1f4289410406450dcd9083b05b65045e42",
+    "src-tauri/icons/Square284x284Logo.png": "500b4eaa6b07e970ab82814f0b8d493bfd4298c2d5077513f01f5a38945efb88",
+    "src-tauri/icons/Square30x30Logo.png": "3bee6ce0d8c756dca915a93bad450c545186c17dc8a3639186b4f3855824fb10",
+    "src-tauri/icons/Square310x310Logo.png": "b70a4fa4b6959343e6a6f038083465e61b0e58217cbb84d05d9c44c1798419f6",
+    "src-tauri/icons/Square44x44Logo.png": "9e5393b086591e1a59b1a64a470bbca91f7b5e4a1a202f646a553b5ee50fd4cb",
+    "src-tauri/icons/Square71x71Logo.png": "02a7f1305eaaa4fd214ce524894086c2bbf9b20bf77d56113e160e5aa9fa83dc",
+    "src-tauri/icons/Square89x89Logo.png": "5e56fb8f575e427c0aa963af97b0176dd5420c2dd5694aaf36a7cd72586a3360",
+    "src-tauri/icons/StoreLogo.png": "9d879a32d53c54c31d6f8476d5f38cecef971954bfd842ce76fd02f3c1316adf",
+    "src-tauri/icons/icon.icns": "9bfa9aeff00909ee956fbb3b8eddcf75724088303d1676667e08cbf1286e9854",
+    "src-tauri/icons/icon.ico": "14d748cb740105b610fdd40014091b935277c24b9c789d40946d663f17bc7e73",
+    "src-tauri/icons/icon.png": "28176a3679595bdd1a9dbca94489f6477b4c36e3ee2bbce9faf3278a00e74eda",
+    "src-tauri/src/compression.rs": "fc2156f6587bd34b4b593857086e83e355cbe3498780cd7b58db51c8e458ffdd",
+    "src-tauri/src/compression/estimator.rs": "499e0044cb98ffa3f1726d8d64ddf96687936ec8853d4679b0041df668b53c37",
+    "src-tauri/src/compression/plan.rs": "bab8928e2334dc927d68ae3df8e0a3acaef6900895e7c946e3356b49872137f8",
+    "src-tauri/src/desktop_menu.rs": "0d6cb9a8fc06adc41e3eab41229862966f50a5d4441dda0985e22ac3d4ef4b36",
+    "src-tauri/src/desktop_window.rs": "ef83b6a3d2c2f1b3f705635e8a784559e612a448abd5876d3af2aca051c6e60b",
+    "src-tauri/src/desktop_window/placement.rs": "27ee6bccb83d1fdf3bacd28bfd3d17756f30eb7d01500fcf82431b4be2eb9c14",
+    "src-tauri/src/desktop_window/policy.rs": "2da9311b83f498adf28630dd16c76d6a44282e1f114762739952f05e5be064d1",
+    "src-tauri/src/file_revision.rs": "0706c19a2d48ab0ba95e632a7f871fd288da346357561f74f37a0f4b58f0a90e",
+    "src-tauri/src/lib.rs": "db957a24742a53c4012545fa3ae6a5a9d9eae9c98d2f4b7c41cafd84a51383fa",
+    "src-tauri/src/main.rs": "a8b52ea1bd6f302a7f88627df0aa882772160a8dd8d9e43ff2fd8e2782e28820",
+    "src-tauri/src/scan_roots.rs": "0207fd8c893fa9368a85fb40c6a90a29f95912a985e677b1ca507678be10bf8f",
+    "src-tauri/src/scanner.rs": "4088dce9ba9a946f709e01911ceb7dece418057de19ee5c686000fd3a297fd73",
+    "src-tauri/src/scanner/linux.rs": "0718b713cfc5e260e922e0b4abc697fb7112d191aa85bea73b60e116a055ead5",
+    "src-tauri/src/scanner/local_only.rs": "7d218ef3db2f55ebe4852626550753e1dc806e1e4c19b0f602fd9b6c81dc316e",
+    "src-tauri/src/scanner/macos.rs": "47be05ec05d067b16994fc73a18539d78c6953bfb43588f6395242e2671b0478",
+    "src-tauri/src/scanner/mft.rs": "4d18a63fbcc7bfc7e1c968d440e27998024b6195e0964459e32fc3475bd28ac1",
+    "src-tauri/src/scanner/windows.rs": "00cb0075f3423a662d117e5fec25f8cb30f9f30a28b8a5d0172ea46b60fb6912",
+    "src-tauri/src/scanner/windows_cloud_tests.rs": "6742fd087773e87c6186605152151bc817d8394ec0c87aa3574da987cadead65",
+    "src-tauri/src/scanner/windows_local.rs": "784f8f20f4e46f1132bea5a0be1ccdb1c7a89c2b467ceabb90bbb94db861a96b",
+    "src-tauri/src/scanner/windows_walk.rs": "5b8b1a9c14bf81300e7f4760064f854bc77b28d897f293238605bbe5079fa198",
+    "src-tauri/tauri.conf.json": "b02afb72e97b8225f9d7028a5698da82e4d9bdb186f94acf693f3a50ccb99f2b",
+    "src-tauri/tests/tauri_config.rs": "f182f18614ea2e9f5aeca64e63c4eced5514c99570cffda41ea45f889c09a614",
+    "src/App.svelte": "f5098e00ce81c80f3d9902071f41045e55b63808fcf26d6fedd4cd492dc12462",
+    "src/app.css": "3f1c96109eb973d538e11e047d89bc88f7909745b99bbd8ff8a4520cf83b0dd6",
+    "src/lib/app-shell.ts": "634655ff7da105ffd2573d320ee826368bc7ae2144f49fb255079ee330492999",
+    "src/lib/appearance.test.ts": "f8a485c8b0529c335b5ef447d6d4af13ce84e2e726ea17221a070ec55cf6247c",
+    "src/lib/appearance.ts": "c26e962eb2a6f50b27399dc4c2df68bc8e7221b7de1243f110d49296f34a3693",
+    "src/lib/completed-scan-request.test.ts": "2bc6b440e20c70676f7af95b642a061b19a661216447dd3ca465ccd387d77273",
+    "src/lib/completed-scan-request.ts": "7b754c86ad49de906a4176e822824833fedef11029f591983d281dc0a62940a0",
+    "src/lib/components/cepa-mark.svelte": "01426906573dd45a3d786eece720d6a056503877998f59598ebf43cf69a1f0a9",
+    "src/lib/components/scan-root-picker.svelte": "128ddc990e3e2588990749cf9351604a70a9d0a4790574ac5b4b6ed368cbf85b",
+    "src/lib/components/ui/button/button.svelte": "3100b55fd19e87386b3d8320a937da79253744869ac93b29302103b9d7a3e175",
+    "src/lib/components/ui/button/index.ts": "0f6b6f040d92b4153821d3f9b4d6b9cbc567247e4fda913e64c1d0fcc4a2f386",
+    "src/lib/components/ui/card/card-action.svelte": "032220a0e351eac68b77e4cedf938597376703f1a95648a615306b0a648d2851",
+    "src/lib/components/ui/card/card-content.svelte": "4fba5d44c333f36929c3e246d8ec8bfd06eeda2372f6f59dada733b100c43616",
+    "src/lib/components/ui/card/card-description.svelte": "28216234c26a7844f017589c1a661d2db6ef785f396d4d3554c32f25bc4326e5",
+    "src/lib/components/ui/card/card-footer.svelte": "8562a1e7b4d53f9c7c4f9c792112f1cac38e779f3e24b4481e611a92a62733ac",
+    "src/lib/components/ui/card/card-header.svelte": "94ff20e5ff0d9aa849d896581cdc6a4fba7d4433f8cb646e11102f4f23727e43",
+    "src/lib/components/ui/card/card-title.svelte": "6ad8f2dbf303a34f7d906c1b3ad0be025e8c58a66226379ca001b3d757c7fa70",
+    "src/lib/components/ui/card/card.svelte": "d8cca4219d4115f3b2bea2926963272562deea202d9188c1a41de22e75e7b133",
+    "src/lib/components/ui/card/index.ts": "218019c78c8be52b5add8267a758f2d2c685e036e35d6bbcee147333e6534db8",
+    "src/lib/components/ui/input/index.ts": "4e0ad69d49a27194c7f3dfd0cdd5933ee13fc40cc13a77138b547d300701d390",
+    "src/lib/components/ui/input/input.svelte": "728286a2bfbcd5384640e02fd3868372b665ef129d931ebfcc445544ad702d5a",
+    "src/lib/components/ui/popover/index.ts": "8d70adde101a522ca11cbed47d2b1ede6c2fa7163080276314252c57d054cf3d",
+    "src/lib/components/ui/popover/popover-close.svelte": "bec13457158cb16ba4a0d45789ef2a6b6f3b2c84e14c819ebfa8eca76baced77",
+    "src/lib/components/ui/popover/popover-content.svelte": "39da0499217c542ae13378b900d5b9f4d31808771c4e2f28a2e07855a4fc25df",
+    "src/lib/components/ui/popover/popover-description.svelte": "3ccedd4ef3312b03db6e2cd91cab18c60ff12d7c3e39f09e016aa2199ab68a0b",
+    "src/lib/components/ui/popover/popover-header.svelte": "e96799264b9c17f5b29002b604a7a8087e74d8c698f5bd838b2cb19bcf07c550",
+    "src/lib/components/ui/popover/popover-portal.svelte": "4db64c036aace1359a29d703a842998a6c74b17e84900eb6289cedc5f37ff43a",
+    "src/lib/components/ui/popover/popover-title.svelte": "bdf383a53039186425da5cd312a0f685a878f8d2097a480a8dd418777e104c3f",
+    "src/lib/components/ui/popover/popover-trigger.svelte": "6b8f6549c81f9e3ed1a0fd890bf488e6fe9c3bb48f6891f5baca4d4efec3ef75",
+    "src/lib/components/ui/popover/popover.svelte": "9697cf96a4ab4970b93e0aafd3962aaa21a97d88d2976886f2a7dd22db87b1ca",
+    "src/lib/components/ui/tooltip/index.ts": "509107c659c77010d0d64bb0af50fda1214164e4fd66280757c5f1496a0be5ec",
+    "src/lib/components/ui/tooltip/tooltip-content.svelte": "c23991f352bdce7d71366341bcc7ffebeca99ca1bb60a11731d9afc4de15f8a8",
+    "src/lib/components/ui/tooltip/tooltip-portal.svelte": "d38e62fa30732ba5ea79df440badb59331d22c13a19fdc1ad777857f6039b648",
+    "src/lib/components/ui/tooltip/tooltip-provider.svelte": "3599daffb73460dc3377582b99fb04503cc1f3facd660f99db5e9c785c48367e",
+    "src/lib/components/ui/tooltip/tooltip-trigger.svelte": "139ecd079c457f1318a8cfee9495143859a84fda92b0b811e893a738b46dddbd",
+    "src/lib/components/ui/tooltip/tooltip.svelte": "a33d843a5e4e6e5fe426654f6742a453f44f4ff928e94a21d188d9035e4d02f8",
+    "src/lib/components/window-titlebar.svelte": "6041b63bb478147b84fa16e3a31b6101a7d0c240bf14f612540d31175e49a5e5",
+    "src/lib/dev-mock.ts": "435440ba7cc4615bdc157c34c05c810e928ddd50b71d4eef4ec8af2b8be8bf95",
+    "src/lib/dev-stress.test.ts": "693cc6ada5835695a25e9f5bd58684d0d6cdd390ca51bcf596fcc80168a27856",
+    "src/lib/dev-stress.ts": "c2246030a90162359b9f53d8d2182b5de4ea46d16844498339a00e0b6b6bb6dd",
+    "src/lib/folder-drop.test.ts": "06a7cc614b4713fbfb6ea135dac53ddff928de12462ad525af1f793df193fd2a",
+    "src/lib/folder-drop.ts": "52d23bc7c4b80a7ae2f1fbdef97c21558676c75674350de40cdeedc62e146916",
+    "src/lib/inspector-announcement.test.ts": "4cc098b476dcbc14aaeb86e31f8255826254c2e4c1207128c5b993af71a927d5",
+    "src/lib/inspector-announcement.ts": "f234436f214a9b5d3c2264b8f8bc4239cfc3c0ca9cba35a3a58fe3959a2657ef",
+    "src/lib/list-navigation.test.ts": "a35c2af490347670edb83ced4a5e30b76c3e2222cdb9eb86f838c9f344549fa0",
+    "src/lib/list-navigation.ts": "1251c37d055c1be829b49c4c986febbcb43cf4ae3559ba825e37d9cdc591cb24",
+    "src/lib/recovery-copy.test.ts": "22f170119a5d2ef119a477bdd3d6720b40a7aa8737633be168d19313d2005e6a",
+    "src/lib/recovery-copy.ts": "b68000114dc016e365f6bd6f3371c46c2bdc692be6807c6e06bf31f8b9844ddb",
+    "src/lib/result-action-recovery.test.ts": "e098fc06161f0610c057406a15ee715dc150d06e78ba4a3461eeefc3da01bbc6",
+    "src/lib/result-action-recovery.ts": "66e06c51e5c8e0411dbf033a09b34d79bb4866b144e3ad702d1025b639f6564f",
+    "src/lib/scan-progress-announcement.test.ts": "87493bb88551559d8834a00ae01eecdfdaaa3deae76b288de5c37ff47239f5fe",
+    "src/lib/scan-progress-announcement.ts": "e9e9dbd250dd57b2a6956e664bbb247a4e3ed174ee84e319787c70f298f2a6be",
+    "src/lib/scan-roots.test.ts": "da54ea852eb68c724207635d39bd68c6489eade28e0c2e77896af3f0e80a1d6b",
+    "src/lib/scan-roots.ts": "bc7b2a8f03f57e0d7b788bffae383f2e69c43fb69cf3e909d0334a606c17b95b",
+    "src/lib/scanner.test.ts": "875b781a089a8f9c59dc90fd45b771f0966b181004e61c727fff28dd914db05f",
+    "src/lib/scanner.ts": "52285a452c95e31d6fb9fa9d2dad1326ee038150675204381bc6f97ae59f490c",
+    "src/lib/shortcuts.test.ts": "a0833e54f874f58771bfbe09fbfdf3ade0ff21276e4ab7744e7638c55940cc02",
+    "src/lib/shortcuts.ts": "4ecab2791beba49606a349dda7f2d370f5b2c97d5b12ed1c50bb85816670e317",
+    "src/lib/style-sources.test.ts": "70b136e8fcd1723fb57d654d1e5e458189a4a167e6e1491b3501386158d70514",
+    "src/lib/sunburst.test.ts": "01a718302a971fbbb9c6da1578524edbe0977c2430c4c656b6a4f25f82371f0d",
+    "src/lib/sunburst.ts": "30e99326c91b1b8b7bdd2bcd1537e5420684a61af5447ad6d26fbfc9fd9f9c28",
+    "src/lib/utils.ts": "97d136e64b4db75064bcc44f3bff64293818f504e2c29524bac813ec425a1d63",
+    "src/lib/window-chrome.ts": "9b91138045777cb08a91040970e063d4eaa975310ec4cecc2ead00894aac7062",
+    "src/main.ts": "a0bd8d473e661715ffee5690722e1dcbdf8ec7c258da0f47ef61a01a6f2993cb",
+    "static/favicon.png": "5146ed79b486cb9e1cdcdd7814cd22ae78e70ceb30fa06b4cd9a16cf121bc9e6",
+    "svelte.config.js": "23d8a48271a38bbffed6278deeecc6bc5e76f7c79efcff2203125d1882f46978",
+    "tsconfig.json": "317c0ed13355730143afc1a5cae9761cdc32d0b5d45700c7b9734ad78f8e5d56",
+    "vite.config.ts": "678ab6dc6b86a353796fb1952df307dbe4d61e1a99dde7ef298ecb3864151bb7"
+  },
+  "binarySha256": [
+    {
+      "Algorithm": "SHA256",
+      "Hash": "210E21024560D18D2AF65142520EE6FF8D0C82E69AFEAC63E136663E98DB9DFD",
+      "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\release\\cepa.exe"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "546857C5E67AACDF80325EB31A25A6530A5BCE3D2AAC9BE7D0B05BE54076BCEE",
+      "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\release\\examples\\scan_benchmark.exe"
+    },
+    {
+      "Algorithm": "SHA256",
+      "Hash": "5B4D110AA24241593AF532A8CF32951C61FA4E2E11CFB4D0BA2B18A6F10545DB",
+      "Path": "C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\baseline-target\\release\\examples\\scan_benchmark.exe"
+    }
+  ],
+  "performance": {
+    "files": {
+      "baselineWorkload": {
+        "files": 10001,
+        "directories": 41,
+        "entries": 10042,
+        "logicalBytes": 40960178,
+        "allocatedBytes": 40960178,
+        "skippedEntries": 0,
+        "skippedFilesystems": 0,
+        "duplicateHardLinks": 0,
+        "allocatedSizeIsEstimate": true,
+        "hardLinkDeduplicationSupported": false,
+        "sameFilesystemEnforced": false
+      },
+      "candidateWorkload": {
+        "files": 10001,
+        "directories": 41,
+        "entries": 10042,
+        "logicalBytes": 40960178,
+        "allocatedBytes": 40960184,
+        "skippedEntries": 0,
+        "skippedFilesystems": 0,
+        "duplicateHardLinks": 0,
+        "allocatedSizeIsEstimate": false,
+        "hardLinkDeduplicationSupported": true,
+        "sameFilesystemEnforced": true
+      },
+      "pairs": [
+        {
+          "pair": 1,
+          "first": "baseline",
+          "baselineMs": 308.3032,
+          "candidateMs": 142.0892
+        },
+        {
+          "pair": 2,
+          "first": "candidate",
+          "baselineMs": 259.3562,
+          "candidateMs": 145.9726
+        },
+        {
+          "pair": 3,
+          "first": "baseline",
+          "baselineMs": 259.2891,
+          "candidateMs": 148.563
+        },
+        {
+          "pair": 4,
+          "first": "candidate",
+          "baselineMs": 257.0417,
+          "candidateMs": 143.84910000000002
+        },
+        {
+          "pair": 5,
+          "first": "baseline",
+          "baselineMs": 258.382,
+          "candidateMs": 146.0352
+        },
+        {
+          "pair": 6,
+          "first": "candidate",
+          "baselineMs": 253.98120000000003,
+          "candidateMs": 149.1718
+        },
+        {
+          "pair": 7,
+          "first": "baseline",
+          "baselineMs": 255.9984,
+          "candidateMs": 148.9831
+        }
+      ],
+      "baselineMedianMs": 258.382,
+      "candidateMedianMs": 146.0352,
+      "medianPairedChangePercent": -43.48089263183967
+    },
+    "directories": {
+      "baselineWorkload": {
+        "files": 5001,
+        "directories": 1010,
+        "entries": 6011,
+        "logicalBytes": 176,
+        "allocatedBytes": 176,
+        "skippedEntries": 0,
+        "skippedFilesystems": 0,
+        "duplicateHardLinks": 0,
+        "allocatedSizeIsEstimate": true,
+        "hardLinkDeduplicationSupported": false,
+        "sameFilesystemEnforced": false
+      },
+      "candidateWorkload": {
+        "files": 5001,
+        "directories": 1010,
+        "entries": 6011,
+        "logicalBytes": 176,
+        "allocatedBytes": 176,
+        "skippedEntries": 0,
+        "skippedFilesystems": 0,
+        "duplicateHardLinks": 0,
+        "allocatedSizeIsEstimate": false,
+        "hardLinkDeduplicationSupported": true,
+        "sameFilesystemEnforced": true
+      },
+      "pairs": [
+        {
+          "pair": 1,
+          "first": "baseline",
+          "baselineMs": 158.8763,
+          "candidateMs": 200.0035
+        },
+        {
+          "pair": 2,
+          "first": "candidate",
+          "baselineMs": 169.181,
+          "candidateMs": 195.4026
+        },
+        {
+          "pair": 3,
+          "first": "baseline",
+          "baselineMs": 161.17890000000003,
+          "candidateMs": 200.2741
+        },
+        {
+          "pair": 4,
+          "first": "candidate",
+          "baselineMs": 160.6244,
+          "candidateMs": 197.3879
+        },
+        {
+          "pair": 5,
+          "first": "baseline",
+          "baselineMs": 163.2513,
+          "candidateMs": 205.02020000000002
+        },
+        {
+          "pair": 6,
+          "first": "candidate",
+          "baselineMs": 163.3205,
+          "candidateMs": 198.89100000000002
+        },
+        {
+          "pair": 7,
+          "first": "baseline",
+          "baselineMs": 161.3787,
+          "candidateMs": 200.4531
+        }
+      ],
+      "baselineMedianMs": 161.3787,
+      "candidateMedianMs": 200.0035,
+      "medianPairedChangePercent": 24.212860805050475
+    }
+  },
+  "cancellation": {
+    "schemaVersion": 1,
+    "path": "\\\\?\\C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\fixture-cancel",
+    "backend": "win32",
+    "triggerAfterEntries": 2048,
+    "warmupRuns": 1,
+    "workloadEntries": 100102,
+    "runs": [
+      {
+        "entriesAtRequest": 4868,
+        "scanElapsedUs": 101645,
+        "cancellationLatencyUs": 685
+      },
+      {
+        "entriesAtRequest": 6250,
+        "scanElapsedUs": 101606,
+        "cancellationLatencyUs": 705
+      },
+      {
+        "entriesAtRequest": 6713,
+        "scanElapsedUs": 101384,
+        "cancellationLatencyUs": 794
+      },
+      {
+        "entriesAtRequest": 6737,
+        "scanElapsedUs": 101679,
+        "cancellationLatencyUs": 802
+      },
+      {
+        "entriesAtRequest": 6753,
+        "scanElapsedUs": 101288,
+        "cancellationLatencyUs": 683
+      }
+    ],
+    "summary": {
+      "medianCancellationLatencyUs": 705.0,
+      "minCancellationLatencyUs": 683,
+      "maxCancellationLatencyUs": 802,
+      "medianScanElapsedUs": 101606.0
+    }
+  },
+  "volumeObservation": {
+    "schemaVersion": 2,
+    "cepaVersion": "0.1.0",
+    "environment": {
+      "os": "windows",
+      "architecture": "x86_64",
+      "logicalCpus": 16,
+      "buildProfile": "release"
+    },
+    "backend": "mft",
+    "path": "\\\\?\\R:\\",
+    "result": {
+      "root": "\\\\?\\R:\\",
+      "displayName": "\\\\?\\R:\\",
+      "backend": "mft",
+      "logicalBytes": 12433538894,
+      "allocatedBytes": 12453140552,
+      "fileCount": 41477,
+      "directoryCount": 1706,
+      "skippedEntries": 0,
+      "skippedFilesystems": 0,
+      "skippedCloudEntries": 0,
+      "duplicateHardLinks": 96,
+      "traversalUs": 699343,
+      "aggregationUs": 525,
+      "indexingUs": 0,
+      "elapsedMs": 699,
+      "allocatedSizeIsEstimate": false,
+      "hardLinkDeduplicationSupported": true,
+      "sameFilesystemEnforced": true
+    },
+    "initialViewMs": 0.0535,
+    "progressEvents": 6,
+    "initialResponse": {
+      "responseBytes": 15040,
+      "serializationUs": 29,
+      "listItems": 6,
+      "chartItems": 123
+    },
+    "wallMs": 701.7769000000001
+  },
+  "cloudFixtureLog": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s\n     Running unittests src\\lib.rs (C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\debug\\deps\\cepa_lib-446dd0867ff226ba.exe)\n\nrunning 1 test\nwin32: 3 local files, 4150 logical, 4160 allocated, 2 cloud exclusions\nmft: 3 local files, 4150 logical, 4160 allocated, 2 cloud exclusions\nprovider fetch callbacks: 0; cloud-only roots and descendants rejected; on-disk enumeration did not populate a cloud directory\npositive-control content read reached provider: 2 fetch callbacks\ntest scanner::windows_local::tests::cloud_files_fixture_skips_without_fetching_on_both_backends ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 21.69s\n\n     Running tests\\tauri_config.rs (C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\debug\\deps\\tauri_config-dd6a0e04f200a369.exe)\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s\n\n",
+  "existingProviderLog": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s\n     Running unittests src\\lib.rs (C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\debug\\deps\\cepa_lib-446dd0867ff226ba.exe)\n\nrunning 1 test\nExisting cloud fixture: 2 directly observed placeholders unchanged; 1595 local files, 2206 directories, 55018467188 logical bytes, 55021735080 allocated bytes, 46053 cloud exclusions, 0 unavailable items\ntest scanner::windows_local::tests::existing_cloud_placeholders_stay_offline ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.92s\n\n     Running tests\\tauri_config.rs (C:\\Users\\G14\\AppData\\Local\\Temp\\cepa-windows-cloud-20260925\\target\\debug\\deps\\tauri_config-dd6a0e04f200a369.exe)\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s\n\n"
+}
