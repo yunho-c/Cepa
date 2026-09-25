@@ -1,5 +1,20 @@
 Circle sizing validation, 2026-09-25
 
+Follow-up default-width adjustment:
+  Ordinary layouts now default to 40% of the window width, with a 340px preferred
+  floor and the existing divider bounds. Removed the former 520px default cap;
+  the 1040px divider maximum and minimum list width still apply.
+  Browser-verified pane / chart-square widths (CSS px):
+    880 x 620:   352 / 288
+    620 x 480:   211.3125 / 179.3125 (compact rule unchanged)
+    1440 x 900:  576 / 512
+    1920 x 1080: 768 / 704
+    3200 x 1400: 1040 / 976
+  All fit the pane content box, preserve list minimum width, and avoid horizontal
+  overflow. Wide screenshot inspected. Frontend diagnostics: 0 errors/warnings;
+  all 92 frontend tests passed. No fresh native smoke or Rust checks for this
+  frontend-only adjustment; earlier limitations below still apply.
+
 Follow-up padding adjustment:
   Increased ordinary padding to 32px and compact padding to 16px.
   Browser-verified square sizes: 256px at 880 x 620, 179.3125px at 620 x 480.

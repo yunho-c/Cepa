@@ -681,7 +681,7 @@ body {
   flex: 1;
   min-height: 214px;
   display: grid;
-  grid-template-columns: var(--chart-width, clamp(320px, 32vw, 520px)) 1px minmax(0, 1fr);
+  grid-template-columns: var(--chart-width, clamp(340px, 40vw, 1040px)) 1px minmax(0, 1fr);
   overflow: hidden;
 }
 

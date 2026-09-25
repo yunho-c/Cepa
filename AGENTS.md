@@ -363,10 +363,11 @@ The chart retains its quiet surface, the ranked list retains its brighter card
 surface, and their single internal divider preserves the coordinated two-pane
 structure without making the explorer look like a nested window. At wider
 windows, let the result view reach its responsive outer gutters and let the
-explorer use the available viewport height. Default the chart column to 320
-through 520 logical pixels and give the remaining space to the ranked list;
-do not restore the former 1,240-pixel result-width or 590-pixel explorer-height
-ceilings.
+explorer use the available viewport height. Default the chart column to 40% of
+the window width with a 340-pixel preferred floor, clamped to the divider bounds
+below, and give the remaining space to the ranked list. Do not restore the former
+520-pixel default chart-column cap, 1,240-pixel result-width ceiling, or 590-pixel
+explorer-height ceiling.
 From 560 through 720 logical pixels wide, use the compact two-column explorer;
 only browser previews below 560 pixels stack the panes. The internal divider is
 draggable and keyboard focusable. Left/Right resize by 10 pixels (40 with Shift),

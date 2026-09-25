@@ -19,7 +19,7 @@ export function explorerSplit(
   const max = Math.max(0, Math.min(1040, available - (compact ? 300 : 320)));
   const min = Math.min(compact ? 196 : 320, max);
   const clamp = (width: number) => Math.min(max, Math.max(min, width));
-  const defaultWidth = clamp(compact ? available * 0.36 : Math.min(520, viewportWidth * 0.32));
+  const defaultWidth = clamp(compact ? available * 0.36 : Math.max(340, viewportWidth * 0.40));
   return {
     stacked,
     available,
