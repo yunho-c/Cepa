@@ -260,8 +260,11 @@ describe("production style sources", () => {
     expect(results).not.toContain("max-width: 1240px");
     expect(explorerStart).toBeGreaterThan(-1);
     expect(stylesheet).toContain("--content-height: calc(100vh - var(--titlebar-height))");
-    expect(explorer).toContain("height: calc(var(--content-height) - 192px)");
-    expect(explorer).toContain("min-height: 370px");
+    expect(results).toContain("height: var(--content-height)");
+    expect(results).toContain("display: flex");
+    expect(results).toContain("flex-direction: column");
+    expect(explorer).toContain("flex: 1");
+    expect(explorer).toContain("min-height: 214px");
     expect(explorer).toContain(
       "grid-template-columns: clamp(320px, 32vw, 520px) minmax(0, 1fr)",
     );
