@@ -20,6 +20,9 @@ radial storage map and size-ranked directory list. All scanning happens locally.
   non-NTFS volumes, or unavailable volume access
 - Cloud-only entries skipped on macOS APFS/File Provider and Windows Cloud
   Files/NTFS, while downloaded provider files remain included
+- Google Drive's Windows streaming volumes excluded before traversal because
+  they do not expose reliable local residency; mirrored folders and physical
+  cache storage remain scannable
 - Read-only native storage discovery with free/total capacity and a direct scan
   action for local volumes, while keeping the folder picker visible at the
   default and minimum window heights

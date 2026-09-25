@@ -41,6 +41,17 @@ pub(crate) fn discover_scan_roots() -> Vec<ScanRoot> {
     let roots = disks
         .list()
         .iter()
+        .filter(|disk| {
+            #[cfg(windows)]
+            {
+                !crate::scanner::is_google_drive_root(disk.mount_point())
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = disk;
+                true
+            }
+        })
         .map(|disk| RawScanRoot {
             name: disk.name().to_string_lossy().into_owned(),
             path: disk.mount_point().to_path_buf(),

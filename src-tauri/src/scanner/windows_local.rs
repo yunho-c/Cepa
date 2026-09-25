@@ -19,6 +19,9 @@ use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Storage::FileSystem::*;
 use windows_sys::Win32::System::SystemServices::{IO_REPARSE_TAG_CLOUD, IO_REPARSE_TAG_CLOUD_MASK};
 
+#[path = "windows_streams.rs"]
+mod streams;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -273,6 +276,9 @@ pub(super) fn open_root(path: &Path) -> io::Result<(PathBuf, File)> {
         return Err(io::Error::last_os_error());
     }
     let mut file = unsafe { File::from_raw_handle(handle) };
+    // Some virtual providers return ordinary attributes and fictional allocation.
+    // Check the held volume before resolving descendants or listing anything.
+    streams::check_volume(&file)?;
     check_directory(&file)?;
     for component in components {
         match component {
@@ -304,6 +310,10 @@ pub(super) fn open_root(path: &Path) -> io::Result<(PathBuf, File)> {
     use std::os::windows::ffi::OsStringExt;
     let resolved = PathBuf::from(std::ffi::OsString::from_wide(&buffer[..count]));
     Ok((resolved, file))
+}
+
+pub(super) fn is_google_drive_root(path: &Path) -> bool {
+    open_root(path).is_err_and(|error| streams::is_google_drive_error(&error))
 }
 pub(super) fn validate_root(path: &Path) -> Result<(PathBuf, Metadata), String> {
     let (root, file) = open_root(path).map_err(|e| {

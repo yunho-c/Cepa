@@ -1,10 +1,14 @@
 # Google Drive streaming validation — G14W, 2026-09-25
 
-**The current Windows implementation does not exclude cloud-only Google Drive
+**The Windows implementation at checkpoint `f202b8f` did not exclude cloud-only Google Drive
 streaming entries on this host.** The scan completed without observed content-cache
 growth, but counted virtual files and their provider-reported allocation as local
 storage. This is a failed local-only accounting qualification, not a passing
 Google Drive cloud-exclusion test.
+
+The subsequent [stream-volume guard](2026-09-25-google-drive-guard.md) rejects this
+virtual namespace before traversal. The observations below preserve the original
+failure and do not describe selective cached-file support after that fix.
 
 ## Environment and provenance
 

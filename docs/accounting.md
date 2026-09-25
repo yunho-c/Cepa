@@ -246,12 +246,32 @@ covers Windows Cloud Files on NTFS. Arbitrary network filesystems, third-party
 virtual drives, and provider-specific filter behavior are not a universal
 no-network guarantee. Unsupported local-only enumeration fails closed: a root
 failure terminates the scan, while a child failure is an unavailable item.
-Google Drive streaming on G14W is a measured exception: its FAT32 virtual drive
-accepted the protected calls but exposed ordinary attributes and virtual
-allocation sizes, so cloud entries were counted with zero cloud exclusions.
-The inspected content cache did not grow during the bounded test, but this is
-not correct local-only accounting. Google Drive streaming remains unsupported
-by this protection; see the [provider-specific test results](validation-results/2026-09-25-google-drive-windows.md).
+Google Drive streaming on G14W is a measured exception to attribute-based
+residency checks: its FAT32 virtual drive accepted the protected calls but
+exposed ordinary attributes and virtual allocation sizes. The initial test
+counted cloud entries with zero cloud exclusions; see the
+[provider-specific test results](validation-results/2026-09-25-google-drive-windows.md).
+
+Cepa now rejects a Google streaming volume or a path inside it before descendant
+resolution or enumeration, and omits that volume from local storage discovery.
+It enumerates live driver objects under the Windows `\FileSystem` object
+directory and checks recognized `googledrivefs` drivers, including numeric
+version suffixes, against the held volume using
+[`FileFsDriverPathInformation`](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_fs_driver_path_information).
+This kernel query is independent of the filesystem and sends no request to the
+provider. Discovery hides only confirmed Google streaming volumes. Driver
+inspection failures remain visible through scan validation and never cause an
+unprotected retry. The driver list is refreshed for each root check rather than
+cached across mount changes.
+
+This excludes the entire streaming namespace, including cached files accessed
+through it: Google does not expose usable per-file residency in the measured
+Windows metadata. A selected stream root produces an actionable error, not an
+empty result or an invented cloud-exclusion count. The local disk containing
+Drive's cache and ordinary mirrored folders can still be scanned. Folder names,
+volume labels, drive letters, and FAT32 are not exclusion criteria. This does not
+establish support for every future Google driver or other proprietary virtual
+filesystem.
 As on macOS, skipped counts describe observed entries, not unknown descendants.
 Virtual entries omitted entirely by the filesystem are not counted. Local data
 beneath an excluded directory and provider caches are not a complete provider
@@ -274,4 +294,9 @@ cargo test --manifest-path src-tauri/Cargo.toml --no-default-features `
 $env:CEPA_CLOUD_FIXTURE_ROOT = 'C:\path\to\existing\cloud\folder'
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features `
   existing_cloud_placeholders -- --ignored --nocapture
+
+# Read-only rejection test against an existing Google streaming volume.
+$env:CEPA_GOOGLE_DRIVE_ROOT = 'G:\'
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features `
+  google_drive_stream_volume -- --ignored --nocapture
 ```

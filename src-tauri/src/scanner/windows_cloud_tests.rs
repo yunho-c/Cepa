@@ -76,10 +76,12 @@ fn relative_open_rejects_paths_and_keeps_the_original_parent() {
 #[test]
 fn downloaded_provider_named_files_and_hard_links_are_counted() {
     let temp = tempfile::tempdir().unwrap();
-    let folder = temp.path().join("OneDrive");
-    std::fs::create_dir(&folder).unwrap();
-    std::fs::write(folder.join("z-file"), [7; 31]).unwrap();
-    std::fs::hard_link(folder.join("z-file"), folder.join("a-file")).unwrap();
+    for name in ["OneDrive", "Google Drive"] {
+        let folder = temp.path().join(name);
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("z-file"), [7; 31]).unwrap();
+        std::fs::hard_link(folder.join("z-file"), folder.join("a-file")).unwrap();
+    }
     let output = scan_path_with_backend(
         temp.path(),
         Arc::new(AtomicBool::new(false)),
@@ -87,11 +89,59 @@ fn downloaded_provider_named_files_and_hard_links_are_counted() {
         |_| {},
     )
     .unwrap();
-    assert_eq!(output.result.logical_bytes, 31);
-    assert_eq!(output.result.file_count, 2);
-    assert_eq!(output.result.duplicate_hard_links, 1);
+    assert_eq!(output.result.logical_bytes, 62);
+    assert_eq!(output.result.file_count, 4);
+    assert_eq!(output.result.duplicate_hard_links, 2);
     assert_eq!(output.result.skipped_cloud_entries, 0);
     assert_eq!(output.result.skipped_entries, 0);
+}
+
+#[test]
+#[ignore = "read-only guard check of CEPA_GOOGLE_DRIVE_ROOT on an existing streaming volume"]
+fn google_drive_stream_volume_is_rejected_before_traversal() {
+    let root = std::env::var_os("CEPA_GOOGLE_DRIVE_ROOT").expect("set CEPA_GOOGLE_DRIVE_ROOT");
+    let root = Path::new(&root);
+    assert!(
+        is_google_drive_root(root),
+        "fixture must be a Google streaming volume"
+    );
+    for path in [
+        root.to_path_buf(),
+        root.join("My Drive"),
+        root.join("nonexistent-test-child"),
+    ] {
+        let error = crate::scanner::validate_scan_root(&path).unwrap_err();
+        assert!(error.contains("streaming drive does not expose"), "{error}");
+        for backend in [
+            ScanBackend::Auto,
+            ScanBackend::Win32,
+            ScanBackend::Jwalk,
+            ScanBackend::Mft,
+        ] {
+            let mut progress = 0;
+            let result =
+                scan_path_with_backend(&path, Arc::new(AtomicBool::new(false)), backend, |_| {
+                    progress += 1
+                });
+            let error = match result {
+                Ok(_) => panic!("streaming volume was scanned"),
+                Err(e) => e,
+            };
+            assert!(
+                error.contains("streaming drive does not expose"),
+                "{backend}: {error}"
+            );
+            assert_eq!(progress, 0, "{backend} traversed a virtual stream");
+        }
+    }
+    assert!(
+        crate::scan_roots::discover_scan_roots()
+            .iter()
+            .all(|item| !is_google_drive_root(item.path()))
+    );
+    eprintln!(
+        "Google Drive volume and descendants rejected by validation and all 4 Windows selectors with zero progress; streaming volume absent from discovered roots"
+    );
 }
 
 fn wide(value: &OsStr) -> Vec<u16> {

@@ -689,6 +689,11 @@ pub(crate) fn validate_scan_root(root: &Path) -> Result<(PathBuf, Metadata), Str
     windows_local::validate_root(root)
 }
 
+#[cfg(windows)]
+pub(crate) fn is_google_drive_root(root: &Path) -> bool {
+    windows_local::is_google_drive_root(root)
+}
+
 pub(crate) fn scan_path_with_backend<F>(
     root: &Path,
     cancel: Arc<AtomicBool>,

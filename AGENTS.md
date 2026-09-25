@@ -67,6 +67,18 @@ Root resolution must reject unavailable ancestors before following them. Keep
 cloud exclusions separate from unavailable-item errors and preserve the connected
 provider fixture's zero-fetch assertions, positive control, and read-only real
 provider test. This does not qualify every proprietary Windows virtual drive.
+Google Drive's Windows streaming volumes expose ordinary attributes and virtual
+allocation sizes. Reject these roots before descent and omit them from local
+storage discovery. `scanner/windows_streams.rs` identifies the live Google
+filesystem driver on the held volume through `FileFsDriverPathInformation`;
+never substitute folder names, volume labels, drive letters, or a FAT32 ban.
+Keep the query before root-component resolution and apply it to every Windows
+backend, including explicit selectors. Discovery hides only confirmed Google
+streaming volumes; other probe errors remain available for normal validation.
+Driver-inspection errors fail the scan without an unprotected retry. This is
+whole-stream-volume exclusion, not selective cached-file support through that
+virtual namespace. Mirrored folders and physical cache files remain ordinary
+local storage. Preserve the real-driver test and zero-progress guard regression.
 The active-scan view is deliberately unframed: space found and the current path
 lead, followed by a compact facts row. Do not restore a live largest-files list
 or its empty placeholder; the scan state should stay focused on overall progress.
