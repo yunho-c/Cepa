@@ -118,6 +118,9 @@ function appendSegments(
 }
 
 function itemWeight(item: ChartItem, metric: SizeMetric): number {
+  // Suppressed items still contribute to aggregate byte coverage, but an
+  // aggregate with no bytes in this metric must not create a phantom segment.
+  if (item.id === null) return metricBytes(item, metric);
   return Math.max(metricBytes(item, metric), 1);
 }
 

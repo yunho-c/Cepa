@@ -204,6 +204,19 @@ The native folder-drop overlay is interaction-exclusive while a drag is active
 or its single dropped folder is being validated. Keep the covered main view
 inert and out of the accessibility tree; keyboard and screen
 reader users must encounter the overlay status rather than hidden controls.
+Ordinary result views suppress zero-byte folders under the selected size metric
+and regular files named exactly `.DS_Store`, after aggregation and before bounded
+ranking. Keep these entries in scan totals and explicit name searches; preserve
+their bytes in chart aggregate coverage, and do not draw zero-byte aggregates.
+Keep `totalItems` as the full direct-child count and `suppressedItems` separate;
+list counts and truncation use eligible items. A suppressed-only folder shows
+`No items to show`, not an empty-folder claim. Preserve unavailable-item warnings.
+On macOS, also suppress a directory named exactly `.fseventsd` only as a direct
+child of a scan root confirmed by `statfs` to be a volume mount root. Capture
+that fact once on the protected scan worker; view construction stays entirely
+snapshot-based. An ordinary folder with that name, a non-directory entry, or an
+unconfirmed mount root keeps the ordinary visibility rules. Totals, aggregate
+coverage, search, and explicit navigation into the directory remain available.
 Completed directory views retain at most 500 list rows. The hierarchical chart
 retains at most 16 ranked children per directory, three levels, and 512 recursive
 wire nodes globally; every omitted sibling set is folded into byte-preserving

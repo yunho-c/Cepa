@@ -317,8 +317,8 @@
           : `${searchResult.totalMatches} ${searchResult.totalMatches === 1 ? "match" : "matches"}`
         : view
           ? view.itemsTruncated
-            ? `Top ${view.items.length} of ${view.totalItems}`
-            : `${view.totalItems} items`
+            ? `Top ${view.items.length} of ${view.totalItems - view.suppressedItems}`
+            : `${view.totalItems - view.suppressedItems} ${view.totalItems - view.suppressedItems === 1 ? "item" : "items"}`
           : "",
   );
   const droppedFolderLabel = $derived(
@@ -2233,7 +2233,7 @@
           {:else}
             <div class="empty-result">
               <Folder />
-              <strong>This folder is empty</strong>
+              <strong>{view.suppressedItems > 0 ? "No items to show" : "This folder is empty"}</strong>
             </div>
           {/if}
         </div>

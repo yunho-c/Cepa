@@ -52,6 +52,33 @@ list, recursive chart selection, aggregate remainder, percentages, and geometry
 all use the selected metric. The summary retains both totals so the distinction
 remains visible.
 
+Ordinary list and chart entries suppress folders with zero accounted bytes in
+the selected metric and regular files whose exact name is `.DS_Store`. This is
+a presentation rule applied after aggregation and before bounded ranking; it
+does not skip traversal, discard retained nodes, or change byte totals, scan
+counts, hard-link ownership, or unavailable-item warnings. Ordinary small files
+and other dotfiles remain visible. A zero-byte folder is not necessarily empty:
+its contents may be unavailable, charged to another hard-link path, or occupy
+bytes only under the other metric.
+
+The directory response retains the full direct-child count in `totalItems` and
+reports `suppressedItems` separately. The list count and truncation use eligible
+items. A folder with only suppressed children shows `No items to show`, while
+a folder with no retained children keeps `This folder is empty`. Suppressed bytes
+remain in the chart's aggregate remainder under both metrics; zero-byte
+aggregates do not draw a segment in the selected metric. Explicit name search
+includes suppressed entries, preserving navigation and inspection access.
+
+On macOS, a `.fseventsd` directory directly beneath a confirmed volume scan root
+is also suppressed, including when it has nonzero bytes. The protected scan
+worker checks the canonical root against `statfs`'s mount path once and retains
+the result; navigation and metric switching perform no additional filesystem
+queries. This includes the APFS Data volume used for startup-disk scans. Failed
+mount queries, other platforms, nested directories, and non-directory entries
+keep the ordinary visibility rules. This directory-specific rule retains all
+accounted bytes and search access just like the file rule. Selecting `.fseventsd`
+itself as a scan root still allows its contents to be explored.
+
 Current-folder search runs against the retained snapshot and never rereads the
 filesystem. It trims the query, limits it to 128 Unicode characters, and performs
 a Unicode-aware case-insensitive literal substring match against every direct

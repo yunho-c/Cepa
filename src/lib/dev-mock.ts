@@ -485,6 +485,7 @@ function rootView(): DirectoryView {
     logicalBytes: 526_133_493_760,
     allocatedBytes: 501_437_087_744,
     totalItems: 4,
+    suppressedItems: 0,
     itemsTruncated: false,
     breadcrumbs: [{ id: 0, name: "demo" }],
     items: [
@@ -601,6 +602,7 @@ function mockDirectoryView(nodeId: number): DirectoryView {
     logicalBytes: 251_255_586_816,
     allocatedBytes: 236_223_201_280,
     totalItems: 2,
+    suppressedItems: 0,
     itemsTruncated: false,
     breadcrumbs: [
       { id: 0, name: "demo" },
@@ -666,6 +668,7 @@ function emptyDirectoryView(
     logicalBytes,
     allocatedBytes,
     totalItems: 0,
+    suppressedItems: 0,
     itemsTruncated: false,
     breadcrumbs,
     items: [],
