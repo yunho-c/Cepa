@@ -276,8 +276,8 @@ pending, confirms the discarded scan is no
 longer addressable, and completes a second scan in the same process. With both
 preflights, the
 discard check targets completed scan 3 rather than the earlier failed or
-cancelled scans. Both active-scan headings, the landing heading, and the second-
-result heading must receive focus at their respective view transitions.
+cancelled scans. Both active-scan headings, the landing heading, and the rescanned
+root breadcrumb must receive focus at their respective view transitions.
 Its window state uses a dedicated filename that is removed after the run. This
 proves programmatic production-WebView, IPC, terminal failure, cancellation,
 keyboard-event, and completed-scan lifecycle behavior; it does not exercise

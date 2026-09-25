@@ -145,6 +145,7 @@
   let estimateActionNotice: HTMLDivElement | undefined = $state();
   let inspectionReturnTarget: (HTMLElement | SVGGElement) | null = null;
   let resultHeading: HTMLHeadingElement | undefined = $state();
+  let breadcrumbsElement: HTMLElement | undefined = $state();
   let scanDetailsOpen = $state(false);
   let landingHeading: HTMLHeadingElement | undefined = $state();
   let chooseDirectoryButton: HTMLButtonElement | null = $state(null);
@@ -271,8 +272,13 @@
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const centerBytes = $derived(activeEntry ? metricBytes(activeEntry, sizeMetric) : viewBytes);
   const centerSize = $derived(formatBytes(centerBytes).split(" "));
-  const resultSize = $derived(formatBytes(result?.allocatedBytes ?? 0).split(" "));
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
+  $effect(() => {
+    if (!view || !breadcrumbsElement) return;
+    breadcrumbsElement.scrollLeft = view.breadcrumbs.length > 1
+      ? breadcrumbsElement.scrollWidth
+      : 0;
+  });
   const canEstimateSavings = $derived(
     inspectedEntry?.kind === "file" &&
       compressionState !== null &&
@@ -1661,6 +1667,42 @@
             <ArrowLeft data-icon="inline-start" />
             Back
           </Button>
+          <nav class="breadcrumbs" aria-label="Current scan path" bind:this={breadcrumbsElement}>
+            {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
+              {#if index === 0}
+                <h1
+                  class="breadcrumb-root"
+                  tabindex="-1"
+                  bind:this={resultHeading}
+                  aria-label={`${completedResult.displayName}, ${completedResult.root}`}
+                >
+                  <Tooltip.Root ignoreNonKeyboardFocus={true}>
+                    <Tooltip.Trigger
+                      type="button"
+                      aria-label={`${completedResult.displayName}, ${completedResult.root}`}
+                      aria-disabled={isResultBusy}
+                      aria-current={view.breadcrumbs.length === 1 ? "page" : undefined}
+                      onclick={() => openDirectory(breadcrumb.id)}
+                    >{completedResult.displayName}</Tooltip.Trigger>
+                    <Tooltip.Content
+                      side="bottom"
+                      align="start"
+                      sideOffset={6}
+                      class="breadcrumb-path-tooltip"
+                    >{completedResult.root}</Tooltip.Content>
+                  </Tooltip.Root>
+                </h1>
+              {:else}
+                <ChevronRight aria-hidden="true" />
+                <button
+                  type="button"
+                  aria-disabled={isResultBusy}
+                  aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
+                  onclick={() => openDirectory(breadcrumb.id)}
+                >{breadcrumb.name}</button>
+              {/if}
+            {/each}
+          </nav>
         </div>
         <div class="result-actions" role="group" aria-label="Analysis actions">
           {#if result.skippedEntries > 0}
@@ -1762,46 +1804,7 @@
             </Popover.Content>
           </Popover.Root>
         </div>
-        <div class="result-title">
-          <Tooltip.Root ignoreNonKeyboardFocus={true}>
-            <Tooltip.Trigger tabindex={-1}>
-              {#snippet child({ props: { type: _type, ...triggerProps } })}
-                <span {...triggerProps} class="result-title-trigger">
-                  <h1
-                    tabindex="-1"
-                    bind:this={resultHeading}
-                    aria-label={`${completedResult.displayName}, ${completedResult.root}`}
-                  >{completedResult.displayName}</h1>
-                </span>
-              {/snippet}
-            </Tooltip.Trigger>
-            <Tooltip.Content
-              side="bottom"
-              align="start"
-              sideOffset={6}
-              class="result-path-tooltip"
-            >{completedResult.root}</Tooltip.Content>
-          </Tooltip.Root>
-        </div>
-        <div class="result-total">
-          <span>Space on disk{result.allocatedSizeIsEstimate ? " (estimated)" : ""}</span>
-          <strong>{resultSize[0]} <small>{resultSize[1]}</small></strong>
-        </div>
       </section>
-
-      <div class="explorer-toolbar">
-        <nav class="breadcrumbs" aria-label="Current scan path">
-          {#each view.breadcrumbs as breadcrumb, index (breadcrumb.id)}
-            {#if index > 0}<ChevronRight aria-hidden="true" />{/if}
-            <button
-              type="button"
-              aria-disabled={isResultBusy}
-              aria-current={index === view.breadcrumbs.length - 1 ? "page" : undefined}
-              onclick={() => openDirectory(breadcrumb.id)}
-            >{breadcrumb.name}</button>
-          {/each}
-        </nav>
-      </div>
 
       {#if navigationError}
         <div

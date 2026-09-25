@@ -150,11 +150,16 @@ Development-only `?mock=root-preparing&roots=preview` holds the volume-validatio
 state; keep it out of production.
 The UI keeps the storage map and ranked items primary. Do not restore the
 completed result's former logical-size, file-count, folder-count, and elapsed-time
-summary row. Do not show the authoritative scan root as a persistent subtitle on
-the completed analysis screen. Hovering the visible result name reveals that
-path in a restrained Tooltip, while the result heading's accessible name retains
-both values. Keep the heading as the programmatic completion focus target without
-opening the Tooltip merely because focus was moved there. Logical size remains
+summary row. The completed analysis header contains Back, the current-path
+breadcrumbs, and the warning and Info actions in one row. The first breadcrumb
+shows the scan display name and reveals the authoritative root path in a Tooltip
+on hover or keyboard focus. It replaces the former large disk-name heading and
+Space on disk total. Keep that breadcrumb in a compact level-one heading; the
+heading and its button retain both the display name and root path in their
+accessible names. The heading receives focus on completion without automatically
+opening the Tooltip, including after a keyboard-started scan. Long
+paths scroll within the breadcrumb strip without displacing Back or the actions;
+navigation scrolls the strip to the current folder. Logical size remains
 available through the advanced `Size basis`
 control at the top of the Info action's collapsed `Details` popover; file and
 folder counts plus scan time follow it. Keep `On disk` as the default and do not
@@ -177,8 +182,8 @@ live; development-only `?appearance=dark` and `?appearance=light` previews cover
 both palettes without introducing a production setting.
 Do not restore a persistent application header on landing, scanning, or result
 views. The landing tile owns app identity, active scans keep Stop beside their
-status, and completed results use a compact two-row masthead: Back and the
-icon-only Details action sit above the scan identity and total. The Info
+status, and completed results use a single compact navigation row: breadcrumbs
+sit to the right of Back, with the icon-only Details action at the far end. The Info
 action opens an anchored shadcn-svelte Popover containing the quiet technical
 evidence; do not restore a full-width disclosure, turn it into a no-op, or make
 it a competing live region. Returning home must first
@@ -430,7 +435,7 @@ under the packaged CSP, nested chart-to-row branch highlighting, and Enter
 activation of a chart folder.
 It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
-second scan in the same process with scan-heading and result-heading focus
+second scan in the same process with scan-heading and root-breadcrumb focus
 restored for both successful scans. Derive that
 completed ID from the optional failure and cancellation preflights; with both it
 is ID 3. Checking either earlier ID is a false positive and does not prove Home
@@ -796,7 +801,7 @@ Treat unavailable entries as an incomplete-coverage exception, but keep expected
 filesystem-boundary counts in `Details` rather than presenting them as an
 error. Loading routine capability or accounting evidence into that popover is
 not an application status change and must not compete with the
-focused result heading, coverage warning action, or folder-search status.
+focused root breadcrumb, coverage warning action, or folder-search status.
 Prefer native-feeling grouped surfaces, compact list rows, sentence-case labels,
 and subtle separators over bordered dashboard grids and all-caps microcopy.
 
