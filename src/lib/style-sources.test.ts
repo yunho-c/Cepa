@@ -350,8 +350,10 @@ describe("production style sources", () => {
     expect(component).toContain("data-branch-selected={activeBranch?.id === item.id}");
     expect(component).toContain("data-color={chartBranches.get(item.id)?.colorIndex}");
     expect(stylesheet).toContain(
-      '.sunburst:has(path[data-branch-selected="true"]) path:not([data-branch-selected="true"]) { opacity: 0.24; }',
+      '.sunburst path[data-emphasis="dimmed"] { opacity: 0.24; }',
     );
+    expect(stylesheet).toContain('.sunburst path[data-emphasis="context"] { opacity: 0.5; }');
+    expect(component).toContain("data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}");
     expect(stylesheet).not.toContain(".sunburst:has(g:hover");
   });
 

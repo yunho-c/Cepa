@@ -237,9 +237,12 @@ and corresponding list icon. Resolve colors and branch selection from the
 unfiltered, bounded chart tree so search cannot recolor or disconnect a row.
 Keep top-level aggregates and rows outside that tree neutral; they must not
 imply a known individual chart match. Nested aggregates inherit their containing
-branch but remain non-interactive. Previewing a nested segment emphasizes the
-whole containing branch and its top-level row, while the center still describes
-the exact previewed item. Keep the larger chart opening and flat, visual-only
+branch but remain non-interactive. Previewing a segment keeps that item and its
+descendants at full opacity, the rest of its top-level branch at 50%, and other
+branches at 24%, with the existing 160 ms transition. Apply the same hierarchy
+to keyboard focus. Keep its top-level row highlighted while the center describes
+the exact previewed item. Rows outside the bounded chart tree leave the map
+undimmed. Keep the larger chart opening and flat, visual-only
 name, number, and unit readout; do not restore a raised center disc.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable

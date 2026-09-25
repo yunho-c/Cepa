@@ -13,11 +13,23 @@ export interface SunburstSegment {
   pathData: string;
   branchId: number | null;
   colorIndex: number | null;
+  ancestorIds: readonly number[];
 }
 
 export interface SunburstBranch {
   id: number;
   colorIndex: number;
+}
+
+export function sunburstEmphasis(
+  segment: SunburstSegment,
+  selectedId: number | null,
+  selectedBranchId: number | null,
+): "full" | "context" | "dimmed" {
+  // Rows outside the bounded chart tree must not dim an unrelated map.
+  if (selectedId === null || selectedBranchId === null) return "full";
+  if (segment.item.id === selectedId || segment.ancestorIds.includes(selectedId)) return "full";
+  return segment.branchId === selectedBranchId ? "context" : "dimmed";
 }
 
 /** Use the unfiltered chart tree so search and sub-segment focus keep row colors stable. */
@@ -56,6 +68,7 @@ export function createSunburst(
     Math.PI * 1.5,
     null,
     "",
+    [],
   );
   return segments;
 }
@@ -92,6 +105,7 @@ function appendSegments(
   endAngle: number,
   parentBranch: SunburstBranch | null,
   keyPrefix: string,
+  ancestorIds: readonly number[],
 ) {
   const weights = items.map((item) => itemWeight(item, metric));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
@@ -122,6 +136,7 @@ function appendSegments(
         ),
         branchId: branch?.id ?? null,
         colorIndex: branch?.colorIndex ?? null,
+        ancestorIds,
       });
     }
 
@@ -135,6 +150,7 @@ function appendSegments(
         itemEnd,
         branch,
         keyPath,
+        item.id === null ? ancestorIds : [...ancestorIds, item.id],
       );
     }
   });

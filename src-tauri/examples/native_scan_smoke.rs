@@ -567,6 +567,12 @@ void (async () => {{
       && branchRow.getAttribute('data-color') === nestedPath.getAttribute('data-color')
       && branchPaths.every((path) => path.getAttribute('data-branch-selected') === 'true'
         && path.getAttribute('data-color') === nestedPath.getAttribute('data-color'))
+      && nestedPath.getAttribute('data-emphasis') === 'full'
+      && branchPaths.find((path) => path.getAttribute('data-depth') === '0')
+        ?.getAttribute('data-emphasis') === 'context'
+      && [...document.querySelectorAll('.sunburst path')]
+        .filter((path) => path.getAttribute('data-branch-id') !== branchId)
+        .every((path) => path.getAttribute('data-emphasis') === 'dimmed')
       && [...document.querySelectorAll('.sunburst path[data-branch-selected="true"]')]
         .every((path) => path.getAttribute('data-branch-id') === branchId);
     checkingSplitter = true;

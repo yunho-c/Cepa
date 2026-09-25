@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChartItem } from "./scanner";
-import { createSunburst, sunburstBranches, sunburstNavigationTarget } from "./sunburst";
+import { createSunburst, sunburstBranches, sunburstEmphasis, sunburstNavigationTarget } from "./sunburst";
 
 function item(
   id: number,
@@ -51,6 +51,50 @@ describe("sunburst geometry", () => {
     }
     expect(branches.get(2)).toEqual({ id: 2, colorIndex: 1 });
     expect(segments.find(segment => segment.item.id === 2)).toMatchObject({ branchId: 2, colorIndex: 1 });
+  });
+
+  test("emphasizes the selected subtree while retaining quieter branch context", () => {
+    const segments = createSunburst([
+      item(1, 80, 80, [item(3, 50, 50, [item(5, 50)]), item(4, 30, 30, [item(6, 30)])]),
+      item(2, 20),
+    ]);
+    const emphasis = (id: number | null, branch: number | null) =>
+      Object.fromEntries(segments.map(segment => [segment.item.id, sunburstEmphasis(segment, id, branch)]));
+
+    expect(emphasis(3, 1)).toEqual({ 1: "context", 3: "full", 5: "full", 4: "context", 6: "context", 2: "dimmed" });
+    expect(emphasis(5, 1)).toEqual({ 1: "context", 3: "context", 5: "full", 4: "context", 6: "context", 2: "dimmed" });
+    expect(emphasis(1, 1)).toEqual({ 1: "full", 3: "full", 5: "full", 4: "full", 6: "full", 2: "dimmed" });
+    expect(Object.values(emphasis(null, null)).every(value => value === "full")).toBe(true);
+    expect(Object.values(emphasis(999, null)).every(value => value === "full")).toBe(true);
+  });
+
+  test("emphasizes aggregate coverage only within the selected subtree", () => {
+    const aggregate: ChartItem = { ...item(9, 25), id: null, name: "More items", kind: "other" };
+    const segments = createSunburst([
+      item(0, 75, 75, [item(1, 50, 50, [aggregate]), aggregate]),
+      item(2, 25, 25, [aggregate]),
+      aggregate,
+    ]);
+    const aggregates = segments.filter(segment => segment.item.id === null);
+    expect(aggregates.map(segment => sunburstEmphasis(segment, 1, 0)))
+      .toEqual(["full", "context", "dimmed", "dimmed"]);
+    expect(aggregates.map(segment => sunburstEmphasis(segment, 0, 0)))
+      .toEqual(["full", "full", "dimmed", "dimmed"]);
+  });
+
+  test("keeps subtree identity when a size metric change exposes tiny entries", () => {
+    const segments = createSunburst([
+      item(1, 1_000_000),
+      item(2, 1, 1, [item(3, 1)]),
+    ]);
+    // Use the alternate metric to expose the same tree at a different ranking/scale.
+    const visible = createSunburst([
+      item(1, 1_000_000, 1),
+      item(2, 1, 1_000, [item(3, 1, 1_000)]),
+    ], "logical");
+    expect(segments.some(segment => segment.item.id === 2)).toBe(false);
+    expect(visible.find(segment => segment.item.id === 3)?.ancestorIds).toEqual([2]);
+    expect(visible.filter(segment => segment.branchId === 2).every(segment => sunburstEmphasis(segment, 2, 2) === "full")).toBe(true);
   });
 
   test("retains branch identity for tiny entries and filtered row subsets", () => {

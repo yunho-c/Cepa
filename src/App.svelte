@@ -88,7 +88,7 @@
     type DesktopCommandContext,
     type DesktopMenuAvailability,
   } from "$lib/shortcuts";
-  import { createSunburst, sunburstBranches, sunburstNavigationTarget } from "$lib/sunburst";
+  import { createSunburst, sunburstBranches, sunburstEmphasis, sunburstNavigationTarget } from "$lib/sunburst";
 
   const chartInteractionKeys = new Set([
     "Enter",
@@ -1911,6 +1911,7 @@
                         data-color={segment.colorIndex}
                         data-selected={activeEntry?.id === segment.item.id}
                         data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
+                        data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}
                       />
                     </g>
                   {:else}
@@ -1920,6 +1921,7 @@
                       data-branch-id={segment.branchId}
                       data-color={segment.colorIndex}
                       data-branch-selected={activeBranch !== undefined && activeBranch.id === segment.branchId}
+                      data-emphasis={sunburstEmphasis(segment, activeEntry?.id ?? null, activeBranch?.id ?? null)}
                     />
                   {/if}
                 {/each}

@@ -711,7 +711,8 @@ body {
 .sunburst path { fill: var(--branch-color); stroke: var(--chart-stroke); stroke-width: 0.75; transition: opacity 160ms ease, filter 160ms ease; }
 .sunburst path[data-depth="1"] { fill: color-mix(in srgb, var(--branch-color) 76%, var(--quiet-surface)); }
 .sunburst path[data-depth="2"] { fill: color-mix(in srgb, var(--branch-color) 52%, var(--quiet-surface)); }
-.sunburst:has(path[data-branch-selected="true"]) path:not([data-branch-selected="true"]) { opacity: 0.24; }
+.sunburst path[data-emphasis="context"] { opacity: 0.5; }
+.sunburst path[data-emphasis="dimmed"] { opacity: 0.24; }
 .sunburst path[data-selected="true"] { filter: brightness(1.035); }
 .sunburst g:focus-visible path { stroke: var(--foreground); stroke-width: 2; }
 .chart-center { position: absolute; width: 42%; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
