@@ -265,7 +265,7 @@ describe("production style sources", () => {
     expect(explorer).toContain("flex: 1");
     expect(explorer).toContain("min-height: 214px");
     expect(explorer).toContain(
-      "grid-template-columns: var(--chart-width, clamp(320px, 32vw, 520px)) 1px minmax(0, 1fr)",
+      "grid-template-columns: var(--chart-width, clamp(340px, 40vw, 1040px)) 1px minmax(0, 1fr)",
     );
     expect(explorer).not.toContain("590px");
     expect(explorer).not.toContain("border:");

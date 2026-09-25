@@ -1899,9 +1899,10 @@
 
           <div class="sunburst-wrap">
             {#if sunburstSegments.length > 0}
+              <!-- The outer ring spans 22–318; keep four SVG units for focus strokes. -->
               <svg
                 class="sunburst"
-                viewBox="0 0 340 340"
+                viewBox="18 18 304 304"
                 role="group"
                 aria-busy={isResultBusy}
                 aria-label={`Storage map for ${directoryView.displayName} by ${formatMetric(sizeMetric).toLowerCase()}`}

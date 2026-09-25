@@ -4,14 +4,15 @@ import { explorerSplit, explorerSplitKey } from "./explorer-layout";
 describe("explorer divider bounds", () => {
   test("preserves the default desktop split and room for the list", () => {
     const split = explorerSplit(832, 880);
-    expect(split.width).toBe(320);
+    expect(split.width).toBe(352);
     expect(split.min).toBe(320);
     expect(split.max).toBe(511);
     expect(explorerSplit(832, 880, 800).width).toBe(511);
     expect(explorerSplit(832, 880, 100).width).toBe(320);
     expect(explorerSplit(1536, 1600, 900).width).toBe(900);
     expect(explorerSplit(1536, 1600, 1200).width).toBe(1040);
-    expect(explorerSplit(2512, 2560).width).toBe(520);
+    expect(explorerSplit(2512, 2560).width).toBe(1024);
+    expect(explorerSplit(3096, 3200).width).toBe(1040);
   });
 
   test("keeps compact panes usable at the supported minimum", () => {
@@ -28,7 +29,7 @@ describe("explorer divider bounds", () => {
     expect(explorerSplit(832, 880, preferred).width).toBe(preferred);
     expect(explorerSplit(588, 620, preferred).width).toBe(287);
     expect(explorerSplit(832, 880, preferred).width).toBe(preferred);
-    expect(explorerSplit(1200, 1280).width).toBe(409.6);
+    expect(explorerSplit(1200, 1280).width).toBe(512);
   });
 
   test("handles the stacked breakpoint and pre-measurement width", () => {
