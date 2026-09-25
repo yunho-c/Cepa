@@ -263,14 +263,13 @@ describe("production style sources", () => {
     );
     expect(explorer).not.toContain("590px");
     expect(explorer).not.toContain("border:");
-    expect(explorer).not.toContain("border-radius:");
+    expect(explorer).toContain("border-radius: 16px");
     expect(explorer).not.toContain("box-shadow:");
     expect(explorer).not.toContain("background:");
     expect(chartPane).not.toContain("border-right:");
     expect(stylesheet).toContain(".explorer-divider {");
     expect(chartPane).toContain("background: var(--quiet-surface)");
     expect(directoryPane).toContain("background: var(--card)");
-    expect(stylesheet).not.toContain(".explorer { border-radius:");
     expect(stylesheet).not.toContain(".result-summary");
   });
 

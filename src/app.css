@@ -675,6 +675,7 @@ body {
 .chart-back[aria-disabled="true"] { cursor: wait; opacity: 0.5; }
 
 .explorer {
+  border-radius: 16px;
   height: calc(var(--content-height) - 192px);
   min-height: 370px;
   display: grid;

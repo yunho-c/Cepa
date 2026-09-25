@@ -320,7 +320,9 @@ The coordinated explorer must also work at the real window geometry, not only in
 a wide browser preview. Cepa's 880 by 620 first-launch window keeps the radial map
 and ranked list side by side throughout the native window's supported width range.
 Keep this primary analysis surface flat within the application window: the
-explorer has no outer border, corner radius, shadow, or shared card background.
+explorer has no outer border, shadow, or shared card background. Clip its contents
+to a 16-pixel outer corner radius, rounding the map's left corners and the list's
+right corners while keeping the internal divider straight.
 The chart retains its quiet surface, the ranked list retains its brighter card
 surface, and their single internal divider preserves the coordinated two-pane
 structure without making the explorer look like a nested window. At wider
