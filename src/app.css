@@ -199,8 +199,8 @@ body {
     var(--background);
 }
 
-/* A single reserved strip keeps every view below native window controls. */
-:root[data-window-chrome] { --titlebar-height: 40px; }
+/* The drag strip and each view's top padding leave room for native controls. */
+:root[data-window-chrome] { --titlebar-height: 20px; }
 .app-shell { min-height: var(--content-height); padding-top: var(--titlebar-height); box-sizing: content-box; }
 .window-titlebar {
   position: fixed;
@@ -230,8 +230,8 @@ body {
 .window-controls button:focus-visible { outline: 2px solid var(--ring); outline-offset: -4px; }
 .window-controls button[aria-disabled="true"] { cursor: wait; }
 .window-controls .window-close:hover { background: #c42b1c; color: white; }
-.window-titlebar[data-platform="linux"] .window-controls { gap: 4px; padding: 6px 10px; }
-.window-titlebar[data-platform="linux"] .window-controls button { width: 28px; border-radius: 50%; }
+.window-titlebar[data-platform="linux"] .window-controls { gap: 4px; padding: 0 10px; }
+.window-titlebar[data-platform="linux"] .window-controls button { width: 20px; border-radius: 50%; }
 .window-action-error {
   position: absolute;
   right: 12px;
@@ -614,7 +614,7 @@ body {
 .scan-facts dd { order: -1; margin: 0; font-size: 16px; font-weight: 620; font-variant-numeric: tabular-nums; }
 .scan-fact-exception dd { color: var(--coverage-foreground); }
 
-.results-view { width: 100%; max-width: none; height: var(--content-height); margin: 0; padding: 18px clamp(24px, 4vw, 52px) 52px; display: flex; flex-direction: column; }
+.results-view { --result-gutter: clamp(24px, 4vw, 52px); width: 100%; max-width: none; height: var(--content-height); margin: 0; padding: 18px var(--result-gutter) var(--result-gutter); display: flex; flex-direction: column; }
 /* Let the explorer use the space left by the actual header and recovery content. */
 .results-view > :not(.explorer) { flex-shrink: 0; }
 .results-heading {
@@ -829,7 +829,7 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1000px) {
-  .results-view { padding: 14px 24px 40px; }
+  .results-view { --result-gutter: 24px; padding-top: 14px; }
   .chart-pane { padding: 22px 18px 18px; }
   .directory-pane { padding: 16px 17px 14px; }
 }
@@ -861,12 +861,11 @@ body {
   .lede { font-size: 15px; }
   .scan-root[data-slot="button"] { grid-template-columns: 34px minmax(0, 1fr) 14px; }
   .scan-root-capacity { display: none; }
-  .scan-view,
-  .results-view { padding-left: 16px; padding-right: 16px; }
+  .scan-view { padding-left: 16px; padding-right: 16px; }
   .scan-view { padding-top: 34px; }
   .scan-total { margin-top: 40px; }
   .scan-facts div { min-width: 0; flex: 1; padding-inline: 14px; }
-  .results-view { padding-top: 18px; }
+  .results-view { --result-gutter: 16px; padding-top: 18px; }
   .chart-pane { min-height: 390px; padding: 22px 16px 18px; }
   .directory-pane { padding: 18px 14px 14px; }
   .section-heading { align-items: center; }
@@ -891,7 +890,6 @@ body {
        (min-width: 721px) and (max-height: 560px) {
   .results-view {
     padding-top: 12px;
-    padding-bottom: 20px;
   }
   .result-navigation,
   .result-actions { height: 28px; }

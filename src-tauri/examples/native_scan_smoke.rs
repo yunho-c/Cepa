@@ -508,7 +508,7 @@ void (async () => {{
     const titlebar = document.querySelector('.window-titlebar');
     const windowChromePresent = titlebar !== null
       && titlebar.querySelector('[data-tauri-drag-region]') !== null
-      && titlebar.getBoundingClientRect().height === 40;
+      && titlebar.getBoundingClientRect().height === 20;
     const titlebarContentClear = windowChromePresent
       && document.querySelector('.results-view').getBoundingClientRect().top
         >= titlebar.getBoundingClientRect().bottom;

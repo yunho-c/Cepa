@@ -396,9 +396,13 @@ may use the pane as an internal scroll container only when their disclosed
 details exceed it; keep Try again, Clear search, and the collapsed Search
 details affordance visible in the ordinary compact state. Browser previews
 below 560 pixels may retain taller stacked-state minima.
-The desktop shell uses a 40-pixel integrated title bar. macOS retains native
-traffic lights through Tauri's overlay title bar; Windows and Linux remove
-decorations before startup placement and use accessible webview window controls.
+The desktop shell reserves a 20-pixel integrated drag strip. macOS retains native
+traffic lights through Tauri's overlay title bar with the established 20-pixel
+vertical inset. Do not halve that native inset with the CSS strip: Tauri changes
+the native button container height, and a 10-pixel inset clips the controls.
+The native buttons extend into the view's empty top padding; keep them clear of
+the header actions. Windows and Linux remove decorations before startup placement
+and use accessible webview window controls.
 Keep the drag region separate from buttons, retain double-click maximize, and
 derive view heights from the remaining content height so controls never overlap
 the application. Window controls are inert during the folder-drop overlay.
