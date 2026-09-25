@@ -5,15 +5,6 @@ const LIST_NAVIGATION_KEYS = new Set([
   "End",
 ]);
 
-export type ListNavigationAction = "open" | "reveal";
-
-export function listNavigationActionTarget(
-  preferredAction: ListNavigationAction,
-  revealAvailable: boolean,
-): ListNavigationAction {
-  return preferredAction === "reveal" && revealAvailable ? "reveal" : "open";
-}
-
 export function listNavigationTarget(
   ids: readonly number[],
   currentId: number | null,

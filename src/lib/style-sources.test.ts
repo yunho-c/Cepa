@@ -42,24 +42,20 @@ describe("production style sources", () => {
   test("keeps pending explorer actions focused with guarded aria-disabled state", async () => {
     const component = await Bun.file(new URL("../App.svelte", import.meta.url)).text();
     const storageStart = component.indexOf('class="storage-item"');
-    const revealStart = component.indexOf('class="reveal-item"');
+    const menu = await Bun.file(new URL("./components/item-context-menu.svelte", import.meta.url)).text();
     const storageButton = component.slice(
       storageStart,
-      component.indexOf("</button>", storageStart),
-    );
-    const revealButton = component.slice(
-      revealStart,
-      component.indexOf("</button>", revealStart),
+      component.indexOf("</ItemContextMenu>", storageStart),
     );
 
     expect(storageStart).toBeGreaterThan(-1);
-    expect(revealStart).toBeGreaterThan(-1);
     expect(storageButton).toContain("aria-disabled={isResultBusy}");
     expect(storageButton).not.toMatch(/^\s*disabled=/m);
-    expect(revealButton).toContain(
-      "aria-disabled={isResultBusy || revealingNodeId !== null}",
-    );
-    expect(revealButton).not.toMatch(/^\s*disabled=/m);
+    expect(component).not.toContain('class="reveal-item"');
+    expect(menu).toContain("aria-disabled={busy || revealing}");
+    expect(menu).toContain("if (busy || revealing || !canReveal) return;");
+    expect(menu).toContain("disabled: _disabled");
+    expect(menu).toContain("event.preventDefault();");
   });
 
   test("keeps pending cancellation actions focused with guarded aria-disabled state", async () => {

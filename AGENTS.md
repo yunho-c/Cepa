@@ -227,21 +227,26 @@ directory transition rendered a segment or row beneath a stationary cursor.
 This keeps a newly completed view anchored on its current directory until the
 user deliberately explores it. Keyboard focus must continue to preview its item
 immediately, and a pointer-leave event must not erase an item that still owns
-keyboard focus. Drive chart emphasis, row emphasis, and the row Reveal
-affordance from that same selected-entry state; raw CSS `:hover` must not
+keyboard focus. Drive chart emphasis, row emphasis, and the row context menu
+from that same selected-entry state; raw CSS `:hover` must not
 reintroduce a visual preview that disagrees with the coordinated map/list state.
 List rows use `content-visibility: auto` with a 61-pixel intrinsic block size so
 offscreen work can be skipped while every row remains in the DOM and reachable
 through focus, find, and scrolling. File inspection realigns a list-origin
 selection after both the initial and final inspector layouts; chart-origin
 inspection must not scroll the page.
-The list's primary and Reveal controls use roving row focus so a completed view
-contributes at most two sequential Tab stops rather than one for every retained
-control. Up/Down and Home/End preserve the action kind while moving; a row
-without Reveal falls back to its primary control without forgetting the Reveal
-intent, so moving again can return to Reveal. Preserve the associated screen-
-reader instructions and recover focus ownership when search results or the
-current directory change. Do not make all 500 rows and actions tabbable.
+The list's primary controls use roving row focus so a completed view contributes
+one sequential Tab stop rather than one for every retained row. Up/Down and
+Home/End move between rows. Reveal lives in a shadcn-svelte context menu opened
+by right-click, Shift+F10, or the Menu key; symlinks keep their existing exclusion.
+Keep the menu anchored to its selected row, retain the focused menu item with
+guarded `aria-disabled` while Reveal is pending, and reject repeat activation.
+Success closes the menu and restores row focus; failure closes it without taking
+focus from the contextual error. Escape dismisses the menu and restores row
+focus. A menu must close when its view becomes busy or its row disappears.
+Preserve the associated screen-reader instructions and recover focus ownership
+when search results or the current directory change. Do not make all 500 rows
+tabbable or restore a separate per-row Reveal button.
 Pending directory navigation and Reveal must not native-disable the control that
 owns focus. Keep chart segments, list, breadcrumb, Up, and recovery actions
 focusable with guarded `aria-disabled` state while their request is live; reject
@@ -250,7 +255,7 @@ settles. Desktop-shortcut and native-menu Up can begin while focus is elsewhere;
 move focus to the visible Up control before starting that request so it owns the
 pending interval, then move to the destination heading on success.
 Successful navigation moves focus to the visible directory-pane heading, while
-Reveal success leaves focus on its original action. The hidden `Storage map for`
+Reveal success returns focus to its originating row. The hidden `Storage map for`
 heading labels the chart but must never own transition focus; sighted keyboard
 users need a visible destination when the directory changes. Preserve the
 restrained pending opacity and wait cursor without dropping focus to the document
@@ -337,13 +342,14 @@ must stay collapsed, and the early terminal event must not register as an
 unhandled page rejection. Its optional second fixture then starts a bounded long
 scan, activates Stop, requires the cancelled notice to own focus, and verifies that
 the landing scan entry points remain available. Preserve its one chart Tab
-stop, at most two list Tab stops, bounded initial and logical chart nodes, clean
+stop, one list Tab stop, bounded initial and logical chart nodes, clean
 page-error capture, no horizontal overflow, backend disclosure, and state-file
 cleanup. After the matching search, it runs a real zero-match search and
 requires both the message panel and Clear action to remain fully inside the
 compact directory pane. It also exercises chart
-arrow/Home movement, list arrow movement for both the primary and Reveal action
-kinds, and Enter activation of a chart folder. It then returns Home, verifies
+arrow/Home movement, list arrow movement, keyboard opening and dismissal of the
+row context menu with focus restoration, and Enter activation of a chart folder.
+It then returns Home, verifies
 landing focus and rejection of the exact completed scan ID, and completes a
 second scan in the same process with scan-heading and result-heading focus
 restored for both successful scans. Derive that
@@ -453,7 +459,7 @@ If navigation, metric switching, or Reveal fails, keep the raw cause in the
 collapsed `Error details`, preserve the current result, and retain only the
 scan-local opaque node/metric intent needed for Try again. A successful retry
 must restore focus to the opened view, the selected metric inside a reopened
-Details popover, or the original Reveal control rather than removing the focused
+Details popover, or the originating row for Reveal rather than removing the focused
 recovery button without a successor.
 The radial-C app identity has one vector source at `public/cepa-icon.svg`. The
 in-app mark mirrors that geometry, while `just icons` regenerates the native

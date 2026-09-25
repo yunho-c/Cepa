@@ -12,7 +12,6 @@
     Folder,
     FolderDown,
     FolderOpen,
-    FolderSearch,
     Info,
     Link2,
     Search,
@@ -26,14 +25,11 @@
   import type { AppStatus } from "$lib/app-shell";
   import CepaMark from "$lib/components/cepa-mark.svelte";
   import WindowTitlebar from "$lib/components/window-titlebar.svelte";
+  import ItemContextMenu from "$lib/components/item-context-menu.svelte";
   import ScanRootPicker from "$lib/components/scan-root-picker.svelte";
   import { isCurrentCompletedScanRequest } from "$lib/completed-scan-request";
   import { droppedItemName, folderDropAction } from "$lib/folder-drop";
-  import {
-    listNavigationActionTarget,
-    listNavigationTarget,
-    type ListNavigationAction,
-  } from "$lib/list-navigation";
+  import { listNavigationTarget } from "$lib/list-navigation";
   import { inspectorAnnouncement } from "$lib/inspector-announcement";
   import {
     navigationRecoveryMessage,
@@ -158,8 +154,7 @@
   let chartFocusId: number | null = $state(null);
   let itemListElement: HTMLDivElement | undefined = $state();
   let listFocusId: number | null = $state(null);
-  let listFocusAction: ListNavigationAction = "open";
-  let preservingListFocusAction = false;
+  let contextMenuEntry: ScanItem | null = $state(null);
   let stateNotice: HTMLDivElement | undefined = $state();
   let scanActionNotice: HTMLDivElement | undefined = $state();
   let navigationNotice: HTMLDivElement | undefined = $state();
@@ -268,7 +263,7 @@
   });
   // Deliberate pointer movement may temporarily supersede keyboard focus. When
   // the pointer leaves, focus resumes ownership before the clicked inspection.
-  const activeEntry = $derived(pointerEntry ?? focusedEntry ?? inspectedEntry);
+  const activeEntry = $derived(contextMenuEntry ?? pointerEntry ?? focusedEntry ?? inspectedEntry);
   const viewBytes = $derived(view ? metricBytes(view, sizeMetric) : 0);
   const parentId = $derived(view?.breadcrumbs.at(-2)?.id ?? null);
   const canEstimateSavings = $derived(
@@ -334,34 +329,31 @@
     event: KeyboardEvent,
     itemId: number,
   ) {
-    if (
-      isResultBusy ||
-      (listFocusAction === "reveal" && revealingNodeId !== null)
-    ) return;
+    if (isResultBusy || revealingNodeId !== null) return;
     const targetId = listNavigationTarget(visibleItemIds, itemId, event.key);
     if (targetId === null) return;
 
     event.preventDefault();
     listFocusId = targetId;
     await tick();
-    const targetItem = visibleItems.find((item) => item.id === targetId);
-    const targetAction = listNavigationActionTarget(
-      listFocusAction,
-      targetItem !== undefined && targetItem.kind !== "symlink",
-    );
-    const target = itemListElement?.querySelector<HTMLElement>(
-      `[data-list-${targetAction}-id="${targetId}"]`,
-    );
-    preservingListFocusAction = true;
-    target?.focus();
-    preservingListFocusAction = false;
+    itemListElement?.querySelector<HTMLElement>(
+      `[data-list-open-id="${targetId}"]`,
+    )?.focus();
   }
 
-  function handleListFocus(item: ScanItem, action: ListNavigationAction) {
+  function handleListFocus(item: ScanItem) {
     listFocusId = item.id;
     focusedEntry = item;
     pointerEntry = null;
-    if (!preservingListFocusAction) listFocusAction = action;
+  }
+
+  function handleItemMenuChange(item: ScanItem, open: boolean) {
+    if (open) {
+      contextMenuEntry = item;
+      handleListFocus(item);
+    } else if (contextMenuEntry?.id === item.id) {
+      contextMenuEntry = null;
+    }
   }
 
   function clearFocusedEntry(itemId: number | null) {
@@ -1348,7 +1340,7 @@
     await tick();
     (
       itemListElement?.querySelector<HTMLElement>(
-        `[data-list-reveal-id="${nodeId}"]`,
+        `[data-list-open-id="${nodeId}"]`,
       ) ?? viewHeading
     )?.focus();
   }
@@ -1363,6 +1355,7 @@
   function invalidateCompletedScanRequests() {
     // Backend scan IDs authorize each command; these frontend generations also
     // prevent an older completion from mutating a newer UI lifecycle.
+    contextMenuEntry = null;
     navigationSequence += 1;
     isNavigating = false;
     navigationRetryInFlight = false;
@@ -2141,7 +2134,7 @@
             </div>
           {:else if visibleItems.length > 0}
             <p id="directory-list-navigation-help" class="sr-only">
-              Use the Up and Down Arrow keys to move between items. Home and End jump to the first and last item. Press Enter to open a folder or show file details. When available, Tab once for the Reveal action.
+              Use the Up and Down Arrow keys to move between items. Home and End jump to the first and last item. Press Enter to open a folder or show file details. For files and folders, press Shift+F10 or the Menu key for actions.
             </p>
             <div
               class="item-list"
@@ -2159,15 +2152,19 @@
                   data-selected={activeEntry?.id === item.id}
                   data-inspected={inspectedEntry?.id === item.id}
                 >
-                  <button
-                    type="button"
+                  <ItemContextMenu
+                    canReveal={item.kind !== "symlink"}
+                    busy={isResultBusy || isSearching || dropOverlayVisible}
+                    revealing={revealingNodeId !== null}
+                    onreveal={() => revealItem(item.id)}
+                    onmenuopenchange={(open) => handleItemMenuChange(item, open)}
                     class="storage-item"
                     tabindex={listFocusId === item.id ? 0 : -1}
                     data-list-open-id={item.id}
                     aria-disabled={isResultBusy}
                     onclick={(event) => activateEntry(item, event.currentTarget)}
                     onpointermove={() => previewEntry(item)}
-                    onfocus={() => handleListFocus(item, "open")}
+                    onfocus={() => handleListFocus(item)}
                     onmouseleave={() => clearPointerEntry(item.id)}
                     onblur={() => clearFocusedEntry(item.id)}
                     onkeydown={(event) => handleListNavigation(event, item.id)}
@@ -2192,27 +2189,7 @@
                       <strong>{formatBytes(metricBytes(item, sizeMetric))}</strong>
                       <span>{formatPercent(metricBytes(item, sizeMetric), viewBytes)}</span>
                     </span>
-                    {#if item.kind === "directory"}<ChevronRight class="item-chevron" />{/if}
-                  </button>
-                  {#if item.kind !== "symlink"}
-                    <button
-                      type="button"
-                      class="reveal-item"
-                      tabindex={listFocusId === item.id ? 0 : -1}
-                      data-list-reveal-id={item.id}
-                      aria-disabled={isResultBusy || revealingNodeId !== null}
-                      aria-label={`Reveal ${item.name} in the system file manager`}
-                      title="Reveal in file manager"
-                      onclick={() => revealItem(item.id)}
-                      onpointermove={() => previewEntry(item)}
-                      onfocus={() => handleListFocus(item, "reveal")}
-                      onmouseleave={() => clearPointerEntry(item.id)}
-                      onblur={() => clearFocusedEntry(item.id)}
-                      onkeydown={(event) => handleListNavigation(event, item.id)}
-                    >
-                      <FolderSearch />
-                    </button>
-                  {/if}
+                  </ItemContextMenu>
                 </div>
               {/each}
             </div>

@@ -251,9 +251,9 @@ fn validate_report(report: &Value, expected_discarded_scan_id: u64) -> bool {
         && report["chartHomeMoved"].as_bool() == Some(true)
         && report["listTabStops"]
             .as_u64()
-            .is_some_and(|count| count <= 2)
+            .is_some_and(|count| count == 1)
         && report["listArrowMoved"].as_bool() == Some(true)
-        && report["revealArrowPreserved"].as_bool() == Some(true)
+        && report["contextMenuKeyboardAccessible"].as_bool() == Some(true)
         && report["horizontalOverflow"].as_bool() == Some(false)
         && report["pageErrors"].as_array().is_some_and(Vec::is_empty)
         && report["logicalMetricSelected"].as_bool() == Some(true)
@@ -526,7 +526,7 @@ void (async () => {{
       chartCenter?.getAttribute('aria-hidden') === 'true'
       && !chartCenter.hasAttribute('aria-live');
     const chartTabStops = document.querySelectorAll('[data-chart-node-id][tabindex="0"]').length;
-    const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"], .reveal-item[tabindex="0"]').length;
+    const listTabStops = document.querySelectorAll('.storage-item[tabindex="0"]').length;
     const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
     const scanDetailsTrigger = document.querySelector('.result-info-action');
     const scanDetailsPresent = scanDetailsTrigger !== null;
@@ -584,16 +584,33 @@ void (async () => {{
     const chartHomeMoved = chartHomeTarget?.dataset.chartNodeId === chartNodes[0].dataset.chartNodeId;
 
     const openButtons = [...document.querySelectorAll('.storage-item')];
-    const revealButtons = [...document.querySelectorAll('.reveal-item')];
-    if (openButtons.length < 2 || revealButtons.length < 2) {{
-      throw new Error('The directory list needs two open and Reveal keyboard targets.');
+    if (openButtons.length < 2) {{
+      throw new Error('The directory list needs two keyboard targets.');
     }}
     openButtons[0].focus();
     const listArrowTarget = await press(openButtons[0], 'ArrowDown');
     const listArrowMoved = listArrowTarget?.dataset.listOpenId === openButtons[1].dataset.listOpenId;
-    revealButtons[0].focus();
-    const revealArrowTarget = await press(revealButtons[0], 'ArrowDown');
-    const revealArrowPreserved = revealArrowTarget?.dataset.listRevealId === revealButtons[1].dataset.listRevealId;
+    const menuTrigger = openButtons.find((button) => button.getAttribute('aria-haspopup') === 'menu');
+    if (!menuTrigger) throw new Error('The directory list needs a context menu target.');
+    menuTrigger.focus();
+    await press(menuTrigger, 'ContextMenu');
+    const rowMenu = await waitFor(() => document.querySelector('.item-context-menu'), 'row context menu');
+    const revealAction = rowMenu.querySelector('[role="menuitem"]');
+    await press(rowMenu, 'ArrowDown');
+    const revealMenuFocused = document.activeElement === revealAction;
+    await press(revealAction, 'Escape');
+    await waitFor(() => document.querySelector('.item-context-menu') === null, 'closed row context menu');
+    await waitFor(() => document.activeElement === menuTrigger, 'context menu return focus');
+    const expectedRevealLabel = /Mac/i.test(navigator.platform)
+      ? 'Reveal in Finder'
+      : /Win/i.test(navigator.platform)
+        ? 'Show in File Explorer'
+        : 'Show in file manager';
+    const contextMenuKeyboardAccessible =
+      revealMenuFocused
+      && revealAction.textContent?.trim() === expectedRevealLabel
+      && document.activeElement === menuTrigger
+      && document.querySelector('.reveal-item') === null;
 
     const navigationStartedAt = performance.now();
     phase('navigating');
@@ -788,7 +805,7 @@ void (async () => {{
       chartHomeMoved,
       listTabStops,
       listArrowMoved,
-      revealArrowPreserved,
+      contextMenuKeyboardAccessible,
       horizontalOverflow,
       logicalMetricSelected: logicalMetricWasSelected,
       metricDetailsStayedOpen,
@@ -884,9 +901,9 @@ mod tests {
             "logicalChartTabStops": 1,
             "chartArrowMoved": true,
             "chartHomeMoved": true,
-            "listTabStops": 2,
+            "listTabStops": 1,
             "listArrowMoved": true,
-            "revealArrowPreserved": true,
+            "contextMenuKeyboardAccessible": true,
             "horizontalOverflow": false,
             "pageErrors": [],
             "logicalMetricSelected": true,
@@ -943,7 +960,7 @@ mod tests {
         assert!(!validate_report(&overlapping_titlebar, 2));
 
         let mut broken_keyboard = complete.clone();
-        broken_keyboard["revealArrowPreserved"] = false.into();
+        broken_keyboard["contextMenuKeyboardAccessible"] = false.into();
         assert!(!validate_report(&broken_keyboard, 2));
 
         let mut broad_inspector_live_region = complete.clone();
